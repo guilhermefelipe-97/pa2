@@ -1,0 +1,92 @@
+rules_version = '2';
+
+// NaÁrea — integridade garantida no servidor (Integridade = prioridade 7).
+// Toda regra aqui tem teste em firebase/tests/.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // ---------- users ----------
+    function validProfile(data) {
+      return data.keys().hasOnly(['displayName', 'displayNameLower'])
+        && data.keys().hasAll(['displayName', 'displayNameLower'])
+        && data.displayName is string
+        && data.displayName.trim().size() > 0
+        && data.displayName == data.displayName.trim()
+        && data.displayName.size() <= 60
+        && data.displayNameLower == data.displayName.lower();
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if isOwner(uid) && validProfile(request.resource.data);
+      // Nome é imutável: reviews.authorName é desnormalizado e ficaria desatualizado.
+      allow update: if isOwner(uid)
+        && validProfile(request.resource.data)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['displayName', 'displayNameLower']);
+      allow delete: if false;
+
+      match /following/{targetUid} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && targetUid != uid
+          && exists(/databases/$(database)/documents/users/$(targetUid))
+          && request.resource.data.keys().hasOnly(['createdAt'])
+          && request.resource.data.createdAt == request.time;
+        allow delete: if isOwner(uid);
+        allow update: if false;
+      }
+    }
+
+    // ---------- places (somente seed/admin escreve) ----------
+    match /places/{placeId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // ---------- reviews ----------
+    function validScore(v) {
+      return v is int && v >= 1 && v <= 5;
+    }
+
+    function validCompanion(v) {
+      return v == null || v in ['sozinho', 'casal', 'amigos', 'familia', 'trabalho'];
+    }
+
+    function reviewKeys() {
+      return ['authorId', 'authorName', 'placeId', 'placeName',
+              'food', 'ambience', 'service', 'companion', 'createdAt'];
+    }
+
+    function validReview(data) {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let placePath = /databases/$(database)/documents/places/$(data.placeId);
+      return data.keys().hasOnly(reviewKeys())
+        && data.keys().hasAll(reviewKeys())
+        && data.authorId == request.auth.uid
+        && data.authorName == profile.data.displayName
+        && data.placeId is string
+        && exists(placePath)
+        && data.placeName == get(placePath).data.name
+        && validScore(data.food)
+        && validScore(data.ambience)
+        && validScore(data['service']) // 'service' é palavra reservada nas Rules
+        && validCompanion(data.companion)
+        && data.createdAt == request.time;
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validReview(request.resource.data);
+      // Editar/excluir fica para F03/F04.
+      allow update, delete: if false;
+    }
+  }
+}

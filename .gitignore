@@ -1,0 +1,17 @@
+# Node
+node_modules/
+
+# Firebase
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+*-debug.log
+
+# Segredos: chaves de service account NUNCA vão para o git
+service-account*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+firebase/seed/*.key.json
+.env
+.env.*

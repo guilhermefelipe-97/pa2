@@ -1,0 +1,22 @@
+[
+  { "id": "camaroes-potiguar-ponta-negra", "name": "Camarões Potiguar", "category": "Restaurante", "neighborhood": "Ponta Negra", "city": "Natal" },
+  { "id": "camaroes-petropolis", "name": "Camarões", "category": "Restaurante", "neighborhood": "Petrópolis", "city": "Natal" },
+  { "id": "mangai-natal", "name": "Mangai", "category": "Restaurante", "neighborhood": "Tirol", "city": "Natal" },
+  { "id": "tabua-de-carne-ponta-negra", "name": "Tábua de Carne", "category": "Restaurante", "neighborhood": "Ponta Negra", "city": "Natal" },
+  { "id": "farofa-dagua-ponta-negra", "name": "Farofa d'Água", "category": "Restaurante", "neighborhood": "Ponta Negra", "city": "Natal" },
+  { "id": "casa-de-taipa-ponta-negra", "name": "Casa de Taipa", "category": "Tapiocaria", "neighborhood": "Ponta Negra", "city": "Natal" },
+  { "id": "pacoca-de-pilao", "name": "Paçoca de Pilão", "category": "Restaurante", "neighborhood": "Ponta Negra", "city": "Natal" },
+  { "id": "coco-bambu-natal", "name": "Coco Bambu", "category": "Restaurante", "neighborhood": "Ponta Negra", "city": "Natal" },
+  { "id": "sal-e-brasa-natal", "name": "Sal e Brasa", "category": "Churrascaria", "neighborhood": "Lagoa Nova", "city": "Natal" },
+  { "id": "outback-midway", "name": "Outback Steakhouse (Midway Mall)", "category": "Restaurante", "neighborhood": "Tirol", "city": "Natal" },
+  { "id": "mercado-de-petropolis", "name": "Mercado de Petrópolis", "category": "Mercado / Bares", "neighborhood": "Petrópolis", "city": "Natal" },
+  { "id": "mercado-da-redinha", "name": "Mercado da Redinha", "category": "Mercado / Ginga com tapioca", "neighborhood": "Redinha", "city": "Natal" },
+  { "id": "buraco-da-catita", "name": "Buraco da Catita", "category": "Bar", "neighborhood": "Cidade Alta", "city": "Natal" },
+  { "id": "beco-da-lama", "name": "Beco da Lama", "category": "Bares", "neighborhood": "Cidade Alta", "city": "Natal" },
+  { "id": "chaplin-ponta-negra", "name": "Chaplin", "category": "Bar / Casa de show", "neighborhood": "Ponta Negra", "city": "Natal" },
+  { "id": "taverna-pub-ponta-negra", "name": "Taverna Pub", "category": "Bar", "neighborhood": "Ponta Negra", "city": "Natal" },
+  { "id": "cervejaria-ponta-negra", "name": "Cervejaria Ponta Negra", "category": "Cervejaria", "neighborhood": "Ponta Negra", "city": "Natal" },
+  { "id": "centro-de-turismo-natal", "name": "Centro de Turismo", "category": "Artesanato / Café", "neighborhood": "Petrópolis", "city": "Natal" },
+  { "id": "feirinha-ponta-negra", "name": "Feirinha de Artesanato de Ponta Negra", "category": "Feira", "neighborhood": "Ponta Negra", "city": "Natal" },
+  { "id": "praia-shopping-natal", "name": "Praia Shopping (Praça de alimentação)", "category": "Shopping / Alimentação", "neighborhood": "Ponta Negra", "city": "Natal" }
+]

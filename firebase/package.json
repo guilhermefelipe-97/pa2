@@ -1,0 +1,19 @@
+{
+  "name": "naarea-firebase",
+  "private": true,
+  "description": "Testes das Security Rules e seed do Firestore do NaÁrea",
+  "scripts": {
+    "test": "mocha --exit --timeout 20000 \"tests/**/*.test.js\"",
+    "test:emulator": "firebase emulators:exec --only firestore \"npm test\"",
+    "seed": "node seed/seed.js"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.0.0",
+    "firebase-tools": "^14.27.0",
+    "mocha": "^10.7.0"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}
