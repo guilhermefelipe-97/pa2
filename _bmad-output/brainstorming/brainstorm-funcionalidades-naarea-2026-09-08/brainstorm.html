@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NaÁrea — Sessão de Brainstorm de Funcionalidades</title>
+<style>
+/* ============================================================
+   NaÁrea — brainstorm de funcionalidades (08/09/2026)
+   Paleta quente de calçada brasileira: creme, tinta, coral,
+   verde-limão, amarelo de toldo, roxo de neon.
+   Cores explícitas em todo lugar: nada depende do tema do SO.
+   ============================================================ */
+:root{
+  --paper:#FFF5E9;
+  --paper-2:#FDEBD8;
+  --card:#FFFFFF;
+  --ink:#171310;
+  --ink-2:#4A403A;
+  --ink-3:#7B6E64;
+  --line:#E7D8C6;
+  --toni:#0F9D5C;
+  --toni-soft:#E2F6EC;
+  --paola:#E0452A;
+  --paola-soft:#FDE8E2;
+  --bianca:#7A45E8;
+  --bianca-soft:#EFE7FE;
+  --amarelo:#FFC53D;
+  --azul:#1F6FEB;
+  --noite:#120F1A;
+  --noite-2:#1C1729;
+  --neon:#5CF2C0;
+  --neon-2:#FF7A59;
+  --neon-3:#9C7BFF;
+  --radius:16px;
+  --shadow:0 2px 0 rgba(23,19,16,.06), 0 12px 30px -18px rgba(23,19,16,.5);
+  --mono:ui-monospace,"SFMono-Regular","Cascadia Mono","Consolas","Liberation Mono",monospace;
+  --sans:"Segoe UI",Roboto,"Helvetica Neue",Arial,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.55;
+  -webkit-text-size-adjust:100%;
+}
+img{max-width:100%}
+h1,h2,h3,h4{line-height:1.1;margin:0;letter-spacing:-.02em}
+p{margin:0}
+a{color:inherit}
+.wrap{width:min(1180px,92vw);margin-inline:auto}
+.eyebrow{
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink-3);
+}
+
+/* ---------- topo ---------- */
+header.hero{
+  position:relative;overflow:hidden;
+  background:
+    radial-gradient(1100px 520px at 82% -12%, rgba(255,197,61,.55), transparent 62%),
+    radial-gradient(760px 460px at 6% 4%, rgba(15,157,92,.22), transparent 60%),
+    linear-gradient(178deg,var(--paper-2),var(--paper) 72%);
+  border-bottom:2px solid var(--ink);
+  padding:clamp(2.4rem,6vw,4.6rem) 0 clamp(2rem,4vw,3rem);
+}
+header.hero::after{
+  content:"";position:absolute;inset:auto 0 0 0;height:10px;
+  background:repeating-linear-gradient(90deg,var(--toni) 0 44px,var(--amarelo) 44px 88px,var(--paola) 88px 132px,var(--bianca) 132px 176px);
+  opacity:.9;
+}
+.brandline{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.4rem}
+.pin{
+  display:inline-flex;align-items:center;gap:.45rem;background:var(--ink);color:var(--paper);
+  border-radius:999px;padding:.3rem .8rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
+}
+.pin.ghost{background:transparent;color:var(--ink-2);border:1.5px solid var(--ink);}
+h1.title{
+  font-size:clamp(2.7rem,8.4vw,6rem);
+  font-weight:800;letter-spacing:-.045em;margin:0 0 .4rem;
+}
+h1.title .na{color:var(--paola)}
+h1.title .area{
+  background:linear-gradient(180deg,transparent 62%,var(--amarelo) 62% 92%,transparent 92%);
+}
+.sub{max-width:60ch;font-size:clamp(1.02rem,2.1vw,1.28rem);color:var(--ink-2);margin-top:.9rem}
+.sub b{color:var(--ink)}
+.stats{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.9rem;margin-top:2.2rem;
+}
+.stat{
+  background:var(--card);border:2px solid var(--ink);border-radius:14px;padding:.85rem .95rem;
+  box-shadow:4px 4px 0 rgba(23,19,16,.9);
+}
+.stat b{display:block;font-size:clamp(1.7rem,4.4vw,2.5rem);font-weight:800;letter-spacing:-.04em;line-height:1}
+.stat span{font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.stat.t1 b{color:var(--toni)} .stat.t2 b{color:var(--bianca)} .stat.t3 b{color:var(--paola)} .stat.t4 b{color:var(--azul)}
+
+/* ---------- nav ---------- */
+nav.toc{
+  position:sticky;top:0;z-index:40;background:rgba(23,19,16,.97);color:var(--paper);
+  border-bottom:1px solid rgba(255,245,233,.18);
+}
+nav.toc .wrap{display:flex;gap:.35rem;overflow-x:auto;padding:.5rem 0;scrollbar-width:thin}
+nav.toc a{
+  white-space:nowrap;text-decoration:none;color:rgba(255,245,233,.78);
+  font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;
+  padding:.4rem .7rem;border-radius:999px;
+}
+nav.toc a:hover,nav.toc a:focus{background:rgba(255,245,233,.14);color:#fff}
+nav.toc a.hi{color:var(--amarelo)}
+
+/* ---------- seções ---------- */
+section{padding:clamp(3rem,7vw,5.4rem) 0}
+.sec-head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:1rem 1.6rem;margin-bottom:2.2rem}
+.sec-num{
+  font-family:var(--mono);font-size:clamp(2.4rem,6vw,3.6rem);font-weight:700;line-height:.8;
+  letter-spacing:-.06em;opacity:.28;
+}
+.sec-head h2{font-size:clamp(1.8rem,4.6vw,3rem);font-weight:800}
+.sec-head .lead{max-width:62ch;color:var(--ink-2);flex:1 1 320px;font-size:1rem}
+.kicker{display:inline-block;font-family:var(--mono);font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;padding:.24rem .6rem;border-radius:6px;margin-bottom:.5rem}
+
+/* ---------- personas ---------- */
+#personas{background:var(--paper)}
+.personas{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.2rem}
+.persona{
+  position:relative;border:2px solid var(--ink);border-radius:20px;background:var(--card);
+  padding:1.3rem 1.3rem 1.4rem;box-shadow:6px 6px 0 var(--pc);
+}
+.persona .av{
+  width:64px;height:64px;border-radius:50%;display:grid;place-items:center;
+  font-weight:800;font-size:1.5rem;color:#fff;background:var(--pc);border:2px solid var(--ink);
+  margin-bottom:.8rem;letter-spacing:-.02em;
+}
+.persona h3{font-size:1.5rem;margin-bottom:.15rem}
+.persona .role{font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--pc);margin-bottom:.7rem}
+.persona p{color:var(--ink-2);font-size:.95rem}
+.persona .need{
+  margin-top:.9rem;padding-top:.8rem;border-top:1.5px dashed var(--line);
+  font-size:.88rem;color:var(--ink);
+}
+.persona .need b{display:block;font-family:var(--mono);font-size:.64rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin-bottom:.2rem}
+.p-toni{--pc:var(--toni)} .p-paola{--pc:var(--paola)} .p-bianca{--pc:var(--bianca)}
+.tensao{
+  margin-top:1.4rem;border:2px solid var(--ink);border-radius:16px;background:linear-gradient(100deg,var(--amarelo),#FFE099);
+  padding:1.1rem 1.2rem;display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;
+}
+.tensao .tag{font-family:var(--mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;background:var(--ink);color:var(--amarelo);padding:.3rem .6rem;border-radius:6px;white-space:nowrap}
+.tensao p{font-size:1rem;font-weight:600;flex:1 1 340px}
+
+/* ============================================================
+   TÉCNICA 1 — YES AND BUILDING: elos empilhados
+   ============================================================ */
+#yesand{background:linear-gradient(180deg,var(--paper) 0%,#FFFBF4 100%);border-top:2px solid var(--ink);border-bottom:2px solid var(--ink)}
+.filtros{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.8rem}
+.filtro{
+  cursor:pointer;font-family:var(--mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;
+  border:2px solid var(--ink);background:var(--card);color:var(--ink);border-radius:999px;padding:.4rem .85rem;
+}
+.filtro[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.filtro.f-toni[aria-pressed="true"]{background:var(--toni);border-color:var(--toni);color:#fff}
+.filtro.f-paola[aria-pressed="true"]{background:var(--paola);border-color:var(--paola);color:#fff}
+.filtro.f-bianca[aria-pressed="true"]{background:var(--bianca);border-color:var(--bianca);color:#fff}
+
+.blococadeia{margin-bottom:2.6rem}
+.blococadeia.oculto{display:none}
+.cadeia-head{display:flex;flex-wrap:wrap;align-items:center;gap:.7rem;margin-bottom:1rem}
+.cadeia-head .dot{width:14px;height:14px;border-radius:50%;background:var(--cc);border:2px solid var(--ink)}
+.cadeia-head h3{font-size:1.25rem}
+.cadeia-head .who{font-family:var(--mono);font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:#fff;background:var(--cc);padding:.24rem .6rem;border-radius:6px}
+.medidor{flex:1 1 160px;min-width:120px;height:10px;background:var(--line);border-radius:999px;overflow:hidden;border:1px solid rgba(23,19,16,.2)}
+.medidor i{display:block;height:100%;background:var(--cc)}
+.medidor-lb{font-family:var(--mono);font-size:.68rem;color:var(--ink-3);white-space:nowrap}
+
+.cadeia{position:relative;counter-reset:elo;padding-left:clamp(2.2rem,5vw,3rem)}
+.cadeia::before{
+  content:"";position:absolute;left:clamp(.85rem,2.2vw,1.2rem);top:.6rem;bottom:2.2rem;width:3px;
+  background:repeating-linear-gradient(180deg,var(--cc) 0 9px,transparent 9px 17px);
+  border-radius:2px;opacity:.85;
+}
+.elo{
+  counter-increment:elo;position:relative;background:var(--card);border:1.5px solid var(--line);
+  border-left:5px solid var(--cc);border-radius:12px;padding:.75rem .95rem .8rem;margin-bottom:.55rem;
+  box-shadow:0 1px 0 rgba(23,19,16,.05);
+  transition:transform .18s ease, box-shadow .18s ease;
+}
+.elo:hover{transform:translateX(4px);box-shadow:0 8px 22px -14px rgba(23,19,16,.8)}
+.elo::before{
+  content:counter(elo,decimal-leading-zero);
+  position:absolute;left:calc(-1 * clamp(2.2rem,5vw,3rem));top:.62rem;
+  width:clamp(1.7rem,4.4vw,2.4rem);text-align:center;
+  font-family:var(--mono);font-size:.72rem;font-weight:700;color:var(--cc);
+  background:var(--paper);padding:.12rem 0;border-radius:6px;
+}
+.elo.semente{background:linear-gradient(90deg,var(--cs),var(--card) 70%);border-top:1.5px solid var(--cc);font-weight:600}
+.elo .ya{
+  display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--cc);border:1px solid var(--cc);border-radius:4px;padding:.02rem .32rem;margin-right:.45rem;vertical-align:1px;
+}
+.elo .semeia{
+  display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;
+  color:#fff;background:var(--ink);border-radius:4px;padding:.06rem .38rem;margin-right:.45rem;vertical-align:1px;
+}
+.elo em{font-style:normal;background:linear-gradient(180deg,transparent 60%,var(--cs) 60%);padding:0 .1em}
+.c-toni{--cc:var(--toni);--cs:var(--toni-soft)}
+.c-paola{--cc:var(--paola);--cs:var(--paola-soft)}
+.c-bianca{--cc:var(--bianca);--cs:var(--bianca-soft)}
+.cadeia-fim{
+  margin-left:clamp(2.2rem,5vw,3rem);margin-top:.2rem;display:inline-flex;align-items:center;gap:.5rem;
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+}
+.cadeia-fim b{color:var(--cc)}
+
+/* ============================================================
+   TÉCNICA 2 — TRANSPLANTE DE GÊNERO: bloco escuro, sala de cirurgia
+   ============================================================ */
+#transplante{
+  background:
+    radial-gradient(900px 500px at 88% 0%, rgba(156,123,255,.22), transparent 60%),
+    radial-gradient(700px 480px at 0% 90%, rgba(92,242,192,.14), transparent 62%),
+    var(--noite);
+  color:#F3EFE8;border-bottom:2px solid var(--ink);
+}
+#transplante .eyebrow,#transplante .sec-head .lead{color:#B6ADC6}
+#transplante .sec-num{color:#fff;opacity:.2}
+#transplante .sec-head h2{color:#fff}
+.transp-legenda{
+  display:flex;flex-wrap:wrap;gap:1rem;align-items:center;margin-bottom:2rem;
+  border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:.8rem 1rem;background:rgba(255,255,255,.04);
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;color:#CFC7DD;
+}
+.transp-legenda .doador{color:var(--neon-3)}
+.transp-legenda .receptor{color:var(--neon)}
+.orgaos{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.1rem}
+.orgao{
+  border:1px solid rgba(255,255,255,.14);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
+  padding:1rem 1.05rem 1.1rem;position:relative;overflow:hidden;
+}
+.orgao::before{
+  content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--gc);
+}
+.orgao-head{display:flex;align-items:center;gap:.65rem;margin-bottom:.35rem}
+.mono-chip{
+  width:38px;height:38px;flex:none;border-radius:10px;display:grid;place-items:center;
+  font-family:var(--mono);font-weight:700;font-size:.82rem;letter-spacing:-.02em;
+  color:var(--noite);background:var(--gc);
+}
+.orgao-head h3{font-size:1.02rem;color:#fff;letter-spacing:-.01em}
+.orgao-head .qtd{margin-left:auto;font-family:var(--mono);font-size:.68rem;color:#9C93AD}
+.sutura{
+  height:14px;margin:.55rem 0 .7rem;display:flex;align-items:center;gap:.4rem;
+  font-family:var(--mono);font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:#8B8299;
+}
+.sutura .fio{flex:1;height:1px;background:repeating-linear-gradient(90deg,var(--gc) 0 6px,transparent 6px 12px);opacity:.8}
+.enxerto{
+  border-left:2px solid var(--gc);padding:.42rem 0 .42rem .7rem;margin-bottom:.5rem;
+  font-size:.93rem;color:#E6E1F0;
+}
+.enxerto:last-child{margin-bottom:0}
+.enxerto.rejeitada{
+  border-left-color:#FF5A5A;color:#C9A8A8;
+}
+.enxerto.rejeitada .selo{
+  display:inline-block;font-family:var(--mono);font-size:.58rem;letter-spacing:.18em;text-transform:uppercase;
+  color:#FF7070;border:1px solid #FF7070;border-radius:4px;padding:0 .32rem;margin-right:.4rem;transform:rotate(-2deg);
+}
+.enxerto.ouro{border-left-color:var(--amarelo)}
+.enxerto.ouro .selo{
+  display:inline-block;font-family:var(--mono);font-size:.58rem;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--noite);background:var(--amarelo);border-radius:4px;padding:0 .34rem;margin-right:.4rem;font-weight:700;
+}
+.doacoes{margin-top:2.2rem;border-top:1px solid rgba(255,255,255,.14);padding-top:1.4rem}
+.doacoes h4{color:#fff;font-size:.95rem;margin-bottom:.15rem}
+.doacoes p{color:#A79EB8;font-size:.85rem;margin-bottom:1rem}
+.barras{display:grid;gap:.32rem}
+.barra{display:grid;grid-template-columns:minmax(120px,190px) 1fr auto;gap:.7rem;align-items:center;font-size:.8rem}
+.barra span{color:#CFC7DD;font-family:var(--mono);font-size:.7rem;text-align:right;letter-spacing:.02em}
+.barra i{display:block;height:12px;border-radius:3px;background:var(--gc)}
+.barra b{font-family:var(--mono);font-size:.7rem;color:#8B8299}
+
+/* ============================================================
+   TÉCNICA 3 — RITUAL NATIVO: comandas / azulejo
+   ============================================================ */
+#ritual{
+  background:
+    linear-gradient(180deg,#FFFBF3,#FFF2E0),
+    repeating-linear-gradient(45deg,rgba(31,111,235,.05) 0 12px,transparent 12px 24px);
+  border-bottom:2px solid var(--ink);
+}
+#ritual .sec-num{color:var(--azul)}
+.azulejo{
+  height:26px;margin-bottom:2rem;border-radius:8px;border:1.5px solid var(--ink);
+  background:
+    repeating-linear-gradient(45deg,rgba(31,111,235,.85) 0 10px,transparent 10px 20px),
+    repeating-linear-gradient(-45deg,rgba(15,157,92,.6) 0 10px,transparent 10px 20px),
+    #FFF;
+}
+.comandas{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:1rem}
+.comanda{
+  position:relative;background:#FFFDF8;border:1.5px solid var(--ink);border-radius:10px;
+  padding:.85rem .9rem 1rem;box-shadow:3px 3px 0 rgba(23,19,16,.14);
+  transition:transform .16s ease;
+}
+.comanda:hover{transform:translateY(-3px) rotate(-.35deg)}
+.comanda::before{
+  content:"";position:absolute;left:.6rem;right:.6rem;top:2.4rem;height:1px;
+  background:repeating-linear-gradient(90deg,var(--ink) 0 4px,transparent 4px 8px);opacity:.35;
+}
+.comanda .n{
+  font-family:var(--mono);font-size:.64rem;letter-spacing:.16em;color:var(--ink-3);
+  display:flex;justify-content:space-between;align-items:center;margin-bottom:.28rem;
+}
+.comanda .n em{font-style:normal;color:var(--azul);border:1px solid var(--azul);border-radius:4px;padding:0 .3rem;font-size:.58rem;letter-spacing:.14em;text-transform:uppercase}
+.comanda h3{font-size:1.02rem;margin:0 0 .8rem;letter-spacing:-.015em}
+.comanda p{font-size:.9rem;color:var(--ink-2)}
+.comanda .exig{
+  display:block;font-family:var(--mono);font-size:.58rem;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:.2rem;
+}
+.comanda.fosso{background:linear-gradient(180deg,#FFF7E2,#FFFDF8);border-color:var(--ink);box-shadow:3px 3px 0 var(--amarelo)}
+.comanda.fosso h3::after{
+  content:"fosso";float:right;font-family:var(--mono);font-size:.54rem;letter-spacing:.16em;text-transform:uppercase;
+  background:var(--ink);color:var(--amarelo);border-radius:4px;padding:.1rem .35rem;margin-left:.4rem;
+}
+.fosso-box{
+  margin-top:2.4rem;border:2px solid var(--ink);border-radius:20px;background:var(--card);overflow:hidden;
+  box-shadow:8px 8px 0 rgba(31,111,235,.22);
+}
+.fosso-box header{background:var(--ink);color:var(--paper);padding:1rem 1.2rem}
+.fosso-box header h3{font-size:1.2rem;color:#fff}
+.fosso-box header p{font-size:.85rem;color:#C9BEB2;margin-top:.25rem;max-width:70ch}
+.grade{display:grid;grid-template-columns:1fr 92px 92px}
+.grade > div{padding:.6rem .9rem;border-bottom:1px solid var(--line);font-size:.9rem;display:flex;align-items:center}
+.grade .cab{background:var(--paper-2);font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);justify-content:center;text-align:center}
+.grade .cab:first-child{justify-content:flex-start;text-align:left}
+.grade .mk{justify-content:center}
+.grade > div:nth-last-child(-n+3){border-bottom:none}
+svg.mark{width:20px;height:20px;display:block}
+
+/* ============================================================
+   SÍNTESE — clímax
+   ============================================================ */
+#sintese{
+  background:
+    radial-gradient(1000px 600px at 10% 0%, rgba(224,69,42,.28), transparent 58%),
+    radial-gradient(900px 620px at 92% 30%, rgba(122,69,232,.3), transparent 58%),
+    linear-gradient(180deg,#1A1410 0%, #120F1A 60%, #0E0C16 100%);
+  color:#F6F1EA;
+}
+#sintese .sec-head h2{color:#fff;font-size:clamp(2.1rem,6vw,4rem)}
+#sintese .sec-num{color:var(--amarelo);opacity:.55}
+#sintese .sec-head .lead{color:#C6BCB2}
+#sintese .eyebrow{color:var(--amarelo)}
+.insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:1.2rem;margin-bottom:3rem}
+.insight{
+  position:relative;border:1px solid rgba(255,255,255,.18);border-radius:20px;
+  background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.025));
+  padding:1.3rem 1.3rem 1.4rem;backdrop-filter:blur(2px);
+}
+.insight .num{
+  font-family:var(--mono);font-size:.7rem;letter-spacing:.2em;color:var(--amarelo);display:block;margin-bottom:.5rem;
+}
+.insight h3{font-size:1.32rem;color:#fff;margin-bottom:.55rem;letter-spacing:-.02em}
+.insight p{color:#DCD3CB;font-size:.96rem}
+.insight p + p{margin-top:.6rem}
+.insight strong{color:#fff}
+.insight.destaque{grid-column:1/-1;border-color:rgba(255,197,61,.5);background:linear-gradient(120deg,rgba(255,197,61,.16),rgba(255,255,255,.03))}
+.insight.risco{border-color:rgba(255,122,89,.55);background:linear-gradient(120deg,rgba(255,122,89,.16),rgba(255,255,255,.03))}
+.insight.risco .num{color:var(--neon-2)}
+.mega{
+  font-size:clamp(1.6rem,5.2vw,3rem);font-weight:800;letter-spacing:-.045em;line-height:1.05;color:#fff;margin:.4rem 0 .7rem;
+}
+.mega s{color:#8E8378;text-decoration-thickness:3px}
+.mega .gt{color:var(--amarelo)}
+.split{
+  display:grid;grid-template-columns:1fr auto 1fr;gap:.7rem;align-items:stretch;margin:.9rem 0 .2rem;
+}
+.split .lado{border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:.65rem .75rem}
+.split .lado b{display:block;font-family:var(--mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;margin-bottom:.3rem}
+.split .lado.sinal{border-color:var(--neon);background:rgba(92,242,192,.1)}
+.split .lado.sinal b{color:var(--neon)}
+.split .lado.pub{border-color:var(--neon-3);background:rgba(156,123,255,.1)}
+.split .lado.pub b{color:var(--neon-3)}
+.split .lado ul{margin:0;padding-left:1.05rem;font-size:.84rem;color:#D8CFC7}
+.split .corte{display:grid;place-items:center;font-family:var(--mono);color:var(--amarelo);font-size:1.3rem}
+figure.conv{margin:.8rem 0 0}
+figure.conv svg{width:100%;height:auto;display:block}
+figcaption{font-family:var(--mono);font-size:.64rem;letter-spacing:.14em;text-transform:uppercase;color:#A2978C;margin-top:.4rem}
+
+/* objetivos */
+.obj-head{margin:0 0 1.4rem}
+.obj-head h3{font-size:clamp(1.5rem,4vw,2.2rem);color:#fff}
+.obj-head p{color:#C6BCB2;max-width:64ch;margin-top:.4rem}
+.objetivos{display:grid;gap:1.1rem}
+.obj{
+  display:grid;grid-template-columns:auto 1fr;gap:1rem 1.4rem;align-items:start;
+  border:2px solid var(--oc);border-radius:22px;padding:1.4rem 1.4rem 1.5rem;
+  background:linear-gradient(100deg,var(--ob),rgba(255,255,255,.03));
+}
+.obj .big{
+  font-size:clamp(2.6rem,9vw,4.6rem);font-weight:800;line-height:.82;letter-spacing:-.06em;color:var(--oc);
+  font-family:var(--mono);
+}
+.obj h4{font-size:clamp(1.25rem,3.4vw,1.85rem);color:#fff;margin-bottom:.15rem}
+.obj .nome{font-family:var(--mono);font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--oc);display:block;margin-bottom:.45rem}
+.obj p{color:#E2D9D1;font-size:1.02rem}
+.obj .metrica{
+  margin-top:.9rem;border-top:1px dashed rgba(255,255,255,.28);padding-top:.7rem;
+  font-size:.9rem;color:#CFC5BC;
+}
+.obj .metrica b{font-family:var(--mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:var(--oc);display:block;margin-bottom:.2rem}
+.o1{--oc:var(--toni);--ob:rgba(15,157,92,.16)}
+.o2{--oc:var(--amarelo);--ob:rgba(255,197,61,.16)}
+.o3{--oc:var(--neon-2);--ob:rgba(255,122,89,.16)}
+
+/* rodapé */
+footer{background:var(--ink);color:#C9BEB2;padding:2.4rem 0 3rem;font-size:.85rem}
+footer .wrap{display:flex;flex-wrap:wrap;gap:1rem 2rem;justify-content:space-between;align-items:center}
+footer b{color:var(--paper)}
+footer .mono{font-family:var(--mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:#8B8078}
+
+/* animação de entrada */
+.rv{opacity:0;transform:translateY(14px);transition:opacity .5s ease,transform .5s ease}
+.rv.on{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){
+  .rv{opacity:1;transform:none;transition:none}
+  html{scroll-behavior:auto}
+  .elo:hover,.comanda:hover{transform:none}
+}
+@media (max-width:640px){
+  .grade{grid-template-columns:1fr 62px 62px}
+  .split{grid-template-columns:1fr}
+  .split .corte{padding:.2rem 0}
+  .obj{grid-template-columns:1fr}
+  .barra{grid-template-columns:110px 1fr auto}
+}
+@media print{
+  nav.toc{display:none}
+  .rv{opacity:1;transform:none}
+  body{background:#fff}
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="brandline">
+      <span class="pin">Lean Inception · Fase 3</span>
+      <span class="pin ghost">Brainstorm de funcionalidades</span>
+      <span class="pin ghost">08 · 09 · 2026</span>
+      <span class="pin ghost">Modo autônomo</span>
+    </div>
+    <h1 class="title"><span class="na">Na</span><span class="area">Área</span></h1>
+    <p class="eyebrow">Onde ir hoje, decidido por gente de verdade</p>
+    <p class="sub">Uma sessão inteira gastando ideia em cima de <b>três pessoas</b>: o Toni, que corre de manhã e não tem tempo de escrever review; a Paola, que é dona do lugar e por isso não pode se avaliar; e a Bianca, que quer sair sem virar produtora de conteúdo. Três técnicas, <b>144 ideias</b>, e no fim uma pergunta única: <b>como colher sinal de qualidade de quem não quer publicar nada?</b></p>
+    <div class="stats">
+      <div class="stat t1"><b>144</b><span>ideias geradas</span></div>
+      <div class="stat t2"><b>3</b><span>técnicas aplicadas</span></div>
+      <div class="stat t3"><b>6</b><span>insights de síntese</span></div>
+      <div class="stat t4"><b>3</b><span>objetivos do produto</span></div>
+      <div class="stat"><b>1</b><span>ideia rejeitada em sessão</span></div>
+    </div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Índice da sessão">
+  <div class="wrap">
+    <a href="#personas">Personas</a>
+    <a href="#yesand">01 · Yes And Building</a>
+    <a href="#transplante">02 · Transplante de Gênero</a>
+    <a href="#ritual">03 · Ritual Nativo</a>
+    <a href="#sintese" class="hi">Síntese</a>
+    <a href="#objetivos" class="hi">Objetivos do Produto</a>
+  </div>
+</nav>
+
+<!-- ===================== PERSONAS ===================== -->
+<section id="personas">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">00</div>
+      <div>
+        <span class="eyebrow">Âncoras da sessão</span>
+        <h2>Três pessoas seguram o brainstorm</h2>
+      </div>
+      <p class="lead">Toda ideia da primeira técnica nasceu de uma dessas três cabeças. As duas técnicas seguintes voltaram nelas para checar se a ideia servia para alguém real.</p>
+    </div>
+
+    <div class="personas">
+      <article class="persona p-toni rv">
+        <div class="av">T</div>
+        <h3>Toni</h3>
+        <div class="role">Consumidor · rotina</div>
+        <p>Corre de manhã, come fora quase todo dia e busca comida de verdade. Confia mais no que os contatos dele fizeram do que em nota de estranho. Não tem tempo para escrever avaliação longa.</p>
+        <div class="need"><b>Puxa as cadeias</b>confiança da rede · dieta e comida saudável · corrida e rotas</div>
+      </article>
+      <article class="persona p-paola rv">
+        <div class="av">P</div>
+        <h3>Paola</h3>
+        <div class="role">Dona de estabelecimento · receita</div>
+        <p>É a outra ponta do mercado: quer visibilidade, compra Destaque, e é de onde vem o dinheiro do produto. Só que ela não pode avaliar o próprio negócio — e é justamente aí que mora a tensão produtiva da sessão.</p>
+        <div class="need"><b>Puxa a cadeia</b>Painel do Estabelecimento</div>
+      </article>
+      <article class="persona p-bianca rv">
+        <div class="av">B</div>
+        <h3>Bianca</h3>
+        <div class="role">Consumidora · silenciosa</div>
+        <p>Consome muito e produz pouco, por escolha. Salva, copia lista de quem ela segue, decide rápido com o grupo — e não quer que o app cobre publicação dela nunca.</p>
+        <div class="need"><b>Puxa a cadeia</b>consumir sem produzir</div>
+      </article>
+    </div>
+
+    <div class="tensao rv">
+      <span class="tag">Insight de abertura</span>
+      <p>Toni e Bianca são consumidores; Paola é a outra ponta do mercado — dona de estabelecimento e fonte de receita do Destaque. A tensão produtiva: <b>ela quer visibilidade, mas não pode avaliar o próprio negócio.</b></p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TÉCNICA 1 ===================== -->
+<section id="yesand">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">01</div>
+      <div>
+        <span class="kicker" style="background:var(--toni-soft);color:var(--toni)">Colaborativa</span>
+        <h2>Yes And Building</h2>
+      </div>
+      <p class="lead">Nada de julgar ideia no meio do caminho: cada elo aceita o anterior e empilha mais um andar. Cinco cadeias, agrupadas nas três personas — a semente abre, e o <b>“yes, and”</b> vai puxando até a ideia virar outra coisa.</p>
+    </div>
+
+    <div class="filtros" role="group" aria-label="Filtrar cadeias por persona">
+      <button class="filtro" data-p="todos" aria-pressed="true">Todas as cadeias</button>
+      <button class="filtro f-toni" data-p="toni" aria-pressed="false">Toni · 30 elos</button>
+      <button class="filtro f-paola" data-p="paola" aria-pressed="false">Paola · 24 elos</button>
+      <button class="filtro f-bianca" data-p="bianca" aria-pressed="false">Bianca · 20 elos</button>
+    </div>
+
+    <!-- Cadeia A -->
+    <div class="blococadeia c-toni rv" data-p="toni">
+      <div class="cadeia-head">
+        <span class="dot"></span>
+        <span class="who">Toni</span>
+        <h3>Cadeia A — confiança da rede</h3>
+        <div class="medidor"><i style="width:41.6%"></i></div>
+        <span class="medidor-lb">10 elos</span>
+      </div>
+      <div class="cadeia">
+        <div class="elo semente"><span class="semeia">semente</span>Feed <em>“Amigos foram aqui”</em>: só mostra locais onde ao menos 1 contato do Toni avaliou.</div>
+        <div class="elo"><span class="ya">yes, and</span>o card mostra <em>quem</em> foi (foto e nome), não só a nota agregada.</div>
+        <div class="elo"><span class="ya">yes, and</span>com vários contatos, mostra “3 dos seus contatos” e abre os 3 comentários lado a lado.</div>
+        <div class="elo"><span class="ya">yes, and</span>contatos ordenados por afinidade de gosto, não por ordem alfabética.</div>
+        <div class="elo"><span class="ya">yes, and</span>afinidade calculada por sobreposição de avaliações — avaliaram os mesmos lugares e concordaram.</div>
+        <div class="elo"><span class="ya">yes, and</span>“% de match de gosto” visível no perfil de qualquer usuário.</div>
+        <div class="elo"><span class="ya">yes, and</span>o match é <em>por categoria</em> — 92% em comida saudável, 30% em balada.</div>
+        <div class="elo"><span class="ya">yes, and</span>seguir alguém só numa categoria (“seguir o Rafa só para corrida”).</div>
+        <div class="elo"><span class="ya">yes, and</span>o feed ganha abas por categoria, espelhando essa segmentação.</div>
+        <div class="elo"><span class="ya">yes, and</span>quando o match é alto mas a pessoa não é contato, o app sugere <em>“gêmeo de gosto”</em> para seguir.</div>
+      </div>
+      <div class="cadeia-fim">chegou em → <b>fonte de confiança explícita no card</b></div>
+    </div>
+
+    <!-- Cadeia A2 -->
+    <div class="blococadeia c-toni rv" data-p="toni">
+      <div class="cadeia-head">
+        <span class="dot"></span>
+        <span class="who">Toni</span>
+        <h3>Cadeia A2 — dieta e comida saudável</h3>
+        <div class="medidor"><i style="width:41.6%"></i></div>
+        <span class="medidor-lb">10 elos</span>
+      </div>
+      <div class="cadeia">
+        <div class="elo semente"><span class="semeia">semente</span>Tags de perfil alimentar: caseiro, low carb, sem glúten, vegetariano, marmita fit, integral.</div>
+        <div class="elo"><span class="ya">yes, and</span>tags vêm dos usuários que avaliaram (<em>crowd-tagging</em>), nunca do dono — protege da manipulação.</div>
+        <div class="elo"><span class="ya">yes, and</span>tag só entra no card do local depois de N usuários distintos confirmarem.</div>
+        <div class="elo"><span class="ya">yes, and</span>o Toni fixa tags no perfil (“meu perfil alimentar”) e o feed inteiro passa a respeitar.</div>
+        <div class="elo"><span class="ya">yes, and</span>filtro negativo também — “esconder fast food”, “esconder frito”.</div>
+        <div class="elo"><span class="ya">yes, and</span>cada <em>prato</em> pode ser avaliado individualmente, não só o restaurante.</div>
+        <div class="elo"><span class="ya">yes, and</span>prato avaliado vira item buscável — “quem serve o melhor bowl de frango na região”.</div>
+        <div class="elo"><span class="ya">yes, and</span>a foto entra no card do prato, não numa galeria solta do local.</div>
+        <div class="elo"><span class="ya">yes, and</span>marcar “comi isso” no prato sem escrever avaliação — sinal leve, de baixa fricção.</div>
+        <div class="elo"><span class="ya">yes, and</span>info nutricional declarada pelo local fica marcada como “informado pelo estabelecimento”, visualmente distinta da info da comunidade.</div>
+      </div>
+      <div class="cadeia-fim">chegou em → <b>o prato como objeto avaliável</b></div>
+    </div>
+
+    <!-- Cadeia A3 -->
+    <div class="blococadeia c-toni rv" data-p="toni">
+      <div class="cadeia-head">
+        <span class="dot"></span>
+        <span class="who">Toni</span>
+        <h3>Cadeia A3 — corrida</h3>
+        <div class="medidor"><i style="width:41.6%"></i></div>
+        <span class="medidor-lb">10 elos</span>
+      </div>
+      <div class="cadeia">
+        <div class="elo semente"><span class="semeia">semente</span>Categoria “Lugares para atividade”: parque, orla, pista, ciclovia, escadaria, trilha urbana.</div>
+        <div class="elo"><span class="ya">yes, and</span>avaliação de rota tem campos próprios — iluminação, segurança percebida, piso, sombra, bebedouro, banheiro.</div>
+        <div class="elo"><span class="ya">yes, and</span>toda avaliação de rota carrega o <em>horário</em> em que foi feita — “avaliado às 6h” vale diferente de “às 22h”.</div>
+        <div class="elo"><span class="ya">yes, and</span>o app mostra por padrão a avaliação do horário em que você pretende ir.</div>
+        <div class="elo"><span class="ya">yes, and</span>“quem dos seus contatos corre aqui, e em que horário” — matching por faixa de horário.</div>
+        <div class="elo"><span class="ya">yes, and</span>botão “vou correr aqui amanhã 6h” — intenção pública para os contatos, não check-in de presença.</div>
+        <div class="elo"><span class="ya">yes, and</span>a intenção vira convite leve; quem topar aparece na mesma marcação.</div>
+        <div class="elo"><span class="ya">yes, and</span>passado o horário, o app pergunta “rolou?” e converte a intenção em avaliação com 1 toque.</div>
+        <div class="elo"><span class="ya">yes, and</span>rotas ganham combo — correr no parque X e café no lugar Y depois, sugerido porque contatos fizeram os dois.</div>
+        <div class="elo"><span class="ya">yes, and</span>o combo vira objeto de primeira classe do app — <em>“roteiro”</em>, sequência de 2 a 4 locais com ordem e horário.</div>
+      </div>
+      <div class="cadeia-fim">chegou em → <b>avaliação carimbada com hora + o roteiro</b></div>
+    </div>
+
+    <!-- Cadeia B -->
+    <div class="blococadeia c-paola rv" data-p="paola">
+      <div class="cadeia-head">
+        <span class="dot"></span>
+        <span class="who">Paola</span>
+        <h3>Cadeia B — Painel do Estabelecimento</h3>
+        <div class="medidor"><i style="width:100%"></i></div>
+        <span class="medidor-lb">24 elos · a cadeia mais longa</span>
+      </div>
+      <div class="cadeia">
+        <div class="elo semente"><span class="semeia">semente</span>Painel do Estabelecimento — perfil de dono separado do perfil de consumidor, com verificação de titularidade.</div>
+        <div class="elo"><span class="ya">yes, and</span>a avaliação do consumidor é decomposta em 3 eixos — <em>comida, ambiente, atendimento</em> — não uma nota única.</div>
+        <div class="elo"><span class="ya">yes, and</span>o painel mostra os 3 eixos em série temporal, para a Paola ver queda e correlacionar com evento interno.</div>
+        <div class="elo"><span class="ya">yes, and</span>a Paola marca eventos internos no gráfico (“troquei a equipe da noite em julho”) — anotação privada dela.</div>
+        <div class="elo"><span class="ya">yes, and</span>análise de texto extrai temas recorrentes dos comentários: demora, porção pequena, música alta, estacionamento.</div>
+        <div class="elo"><span class="ya">yes, and</span>tema recorrente vira alerta quando cresce acima do próprio histórico do local.</div>
+        <div class="elo"><span class="ya">yes, and</span>o alerta chega como push acionável, não só um gráfico que ela precisa lembrar de abrir.</div>
+        <div class="elo"><span class="ya">yes, and</span>a Paola responde publicamente ao comentário, marcada como <em>“resposta do estabelecimento”</em> — nunca conta como avaliação (guardrail da Fase 1).</div>
+        <div class="elo"><span class="ya">yes, and</span>responder não muda a nota, mas alimenta um <em>“índice de responsividade”</em> público.</div>
+        <div class="elo"><span class="ya">yes, and</span>comparativo anônimo com a categoria e o bairro — “seu atendimento está 0,4 acima da média dos italianos da região”.</div>
+        <div class="elo"><span class="ya">yes, and</span>o comparativo nunca revela concorrente nominal — só agregado, para não virar arma competitiva.</div>
+        <div class="elo"><span class="ya">yes, and</span>a Paola compra Destaque e o painel mostra o funil — impressões, visitas ao perfil, salvamentos, avaliações novas.</div>
+        <div class="elo"><span class="ya">yes, and</span>o Destaque nunca altera nota nem a ordem do feed de amigos — vive num slot patrocinado separado e rotulado.</div>
+        <div class="elo"><span class="ya">yes, and</span>se a nota cair abaixo de um piso, o Destaque é <em>suspenso automaticamente</em> — o app não vende visibilidade para lugar ruim.</div>
+        <div class="elo"><span class="ya">yes, and</span>a Paola responde em privado com cupom de recuperação para quem avaliou mal — fora do feed.</div>
+        <div class="elo"><span class="ya">yes, and</span>o cupom não pode ser condicionado a mudar ou apagar a avaliação — o app bloqueia e registra a tentativa no log de auditoria.</div>
+        <div class="elo"><span class="ya">yes, and</span>“quem são meus clientes” em agregado — faixa etária, bairro de origem, horário de pico, perfis de gosto dominantes.</div>
+        <div class="elo"><span class="ya">yes, and</span>ela vê quais tags a comunidade colou no local dela, inclusive as inesperadas (“bom para trabalhar”, “aceita pet”).</div>
+        <div class="elo"><span class="ya">yes, and</span>tag inesperada vira oportunidade — o painel sugere “você é visto como lugar de trabalhar; sinalize tomada e wifi”.</div>
+        <div class="elo"><span class="ya">yes, and</span>a Paola declara amenidades (wifi, tomada, pet, acessibilidade, kids) mas a comunidade confirma ou contesta cada uma.</div>
+        <div class="elo"><span class="ya">yes, and</span>amenidade contestada aparece com marca de divergência, não some — <em>transparência acima de reputação</em>.</div>
+        <div class="elo"><span class="ya">yes, and</span>“modo chef” no painel — só o eixo comida, prato a prato, com ranking dos mais e menos elogiados.</div>
+        <div class="elo"><span class="ya">yes, and</span>prato consistentemente mal avaliado dispara sugestão de revisão de cardápio.</div>
+        <div class="elo"><span class="ya">yes, and</span>relatório mensal exportável em PDF para reunião de equipe.</div>
+      </div>
+      <div class="cadeia-fim">chegou em → <b>reputação por responder e corrigir, com freio na monetização</b></div>
+    </div>
+
+    <!-- Cadeia C -->
+    <div class="blococadeia c-bianca rv" data-p="bianca">
+      <div class="cadeia-head">
+        <span class="dot"></span>
+        <span class="who">Bianca</span>
+        <h3>Cadeia C — consumir sem produzir</h3>
+        <div class="medidor"><i style="width:83.3%"></i></div>
+        <span class="medidor-lb">20 elos</span>
+      </div>
+      <div class="cadeia">
+        <div class="elo semente"><span class="semeia">semente</span>Botão <em>“Quero ir”</em> — salvar sem avaliar, fricção zero, privado por padrão.</div>
+        <div class="elo"><span class="ya">yes, and</span>listas nomeadas: “Sábado com as meninas”, “Date”, “Quando meus pais vierem”, “Pós-praia”.</div>
+        <div class="elo"><span class="ya">yes, and</span>a lista pode ser privada, compartilhada por link, ou pública.</div>
+        <div class="elo"><span class="ya">yes, and</span>a lista se auto-atualiza — lugar que fechou ou cuja nota caiu fica marcado, não some sozinho.</div>
+        <div class="elo"><span class="ya">yes, and</span><em>“modo decisão”</em> — abre a lista e o app recomenda 1 lugar dela considerando dia, hora, distância, clima e quem está junto.</div>
+        <div class="elo"><span class="ya">yes, and</span>modo decisão em 2 toques no máximo — amarrado à meta de usabilidade do RNF da Fase 2.</div>
+        <div class="elo"><span class="ya">yes, and</span>a Bianca importa a lista de alguém que segue (“copiar lista da Ju”).</div>
+        <div class="elo"><span class="ya">yes, and</span>copiar credita a autora — vira status social para quem cura, sem obrigar a Bianca a produzir.</div>
+        <div class="elo"><span class="ya">yes, and</span><em>“curador”</em> vira tipo de perfil, medido por quantas listas foram copiadas e efetivamente usadas.</div>
+        <div class="elo"><span class="ya">yes, and</span>a Bianca contribui passivamente — salvar, copiar, usar, abrir — e isso já alimenta o sinal de qualidade do local.</div>
+        <div class="elo"><span class="ya">yes, and</span>existe nível de <em>contribuição silenciosa</em>, distinto do nível de avaliador — o app reconhece os dois.</div>
+        <div class="elo"><span class="ya">yes, and</span>avaliação mínima válida — só emoji ou só estrela, sem texto obrigatório.</div>
+        <div class="elo"><span class="ya">yes, and</span>avaliação mínima pesa menos que avaliação com foto e texto — qualidade ponderada, não volume.</div>
+        <div class="elo"><span class="ya">yes, and</span>o app nunca cobra publicação (“você não avalia há 3 dias”) — <em>zero pressão de reciprocidade</em>.</div>
+        <div class="elo"><span class="ya">yes, and</span>“modo silencioso” no perfil — a Bianca aparece como seguidora mas suas atividades não vão para o feed dos outros.</div>
+        <div class="elo"><span class="ya">yes, and</span>mesmo em modo silencioso o voto dela conta no agregado — discrição no feed, identidade no dado (respeita o guardrail de não-anonimato).</div>
+        <div class="elo"><span class="ya">yes, and</span>“decisão em grupo” — a Bianca joga 3 opções num link e o grupo vota sem precisar instalar o app.</div>
+        <div class="elo"><span class="ya">yes, and</span>a votação expira em 2h para forçar decisão — o produto assume o papel de quem desempata.</div>
+        <div class="elo"><span class="ya">yes, and</span>quem escolheu o lugar ganha crédito se der certo — gamificação do <em>risco social de escolher</em>.</div>
+        <div class="elo"><span class="ya">yes, and</span>depois do rolê o app pergunta “valeu?” com uma única pergunta binária — a menor avaliação possível.</div>
+      </div>
+      <div class="cadeia-fim">chegou em → <b>contribuição sem publicação</b></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TÉCNICA 2 ===================== -->
+<section id="transplante">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">02</div>
+      <div>
+        <span class="kicker" style="background:rgba(156,123,255,.2);color:#C9B4FF">Inventada · espírito Creative</span>
+        <h2>Transplante de Gênero</h2>
+      </div>
+      <p class="lead">Pega a necessidade central de cada persona e reimplementa como se o NaÁrea pertencesse a <b>outro gênero de app</b>. A mecânica nativa do gênero doador resolve a necessidade melhor que a solução óbvia de “app de reviews”.</p>
+    </div>
+
+    <div class="transp-legenda">
+      <span><span class="doador">■</span> gênero doador</span>
+      <span>—— sutura ——</span>
+      <span><span class="receptor">■</span> órgão enxertado no NaÁrea</span>
+      <span style="margin-left:auto">19 doadores · 40 enxertos · 1 rejeição</span>
+    </div>
+
+    <div class="orgaos">
+
+      <article class="orgao rv" style="--gc:#FF6FA5">
+        <div class="orgao-head"><div class="mono-chip">NM</div><h3>Namoro</h3><span class="qtd">3</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Swipe de decisão</b> — 3 cards, arrasta pra descartar; o que sobrar é o destino de hoje.</div>
+        <div class="enxerto"><b>Match de rolê</b> — dois amigos marcam disponibilidade e o app só avisa quando os dois querem sair no mesmo dia.</div>
+        <div class="enxerto"><b>Perfil de gosto como bio</b> — o app mostra também o que você <em>não</em> come, não só o que você come.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#5CF2C0">
+        <div class="orgao-head"><div class="mono-chip">SM</div><h3>Streaming musical</h3><span class="qtd">4</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Playlist de lugares</b> — a lista da Bianca com capa, nome e ordem; não lista de texto.</div>
+        <div class="enxerto"><b>Descobertas da Semana</b> — 5 lugares novos toda segunda, gerados dos vizinhos de gosto.</div>
+        <div class="enxerto"><b>Retrospectiva do Ano</b> — onde você mais foi, quantos lugares novos, seu gênero dominante; compartilhável (faz a Bianca publicar sem sentir que produziu conteúdo).</div>
+        <div class="enxerto"><b>Rádio de bairro</b> — fluxo contínuo de locais de um bairro, para explorar sem ter que decidir.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#FFC53D">
+        <div class="orgao-head"><div class="mono-chip">AG</div><h3>Aprendizado gamificado</h3><span class="qtd">2</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Trilha de exploração do bairro</b> — 12 lugares; completa e desbloqueia título.</div>
+        <div class="enxerto"><b>Streak de descoberta</b> — semanas seguidas visitando ao menos 1 lugar novo. <em>Risco anotado na hora: pressiona a Bianca; precisa de opt-out.</em></div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#0FD98A">
+        <div class="orgao-head"><div class="mono-chip">FS</div><h3>Fitness social</h3><span class="qtd">3</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Segmentos</b> — a rota de corrida do Toni vira segmento com histórico e quem dos contatos já fez.</div>
+        <div class="enxerto"><b>Kudos</b> — reação de 1 toque na avaliação do outro, sem precisar comentar.</div>
+        <div class="enxerto"><b>Mapa de calor</b> de onde os contatos do Toni realmente vão — não de onde estão os anúncios.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#7FD1FF">
+        <div class="orgao-head"><div class="mono-chip">BX</div><h3>Banco / extrato</h3><span class="qtd">3</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Extrato de rolê</b> — histórico mensal de lugares e faixa de gasto reportada pelos usuários.</div>
+        <div class="enxerto"><b>Preço vindo do usuário</b> (“gastei ~R$60 por pessoa”), não do dono — resistente a cardápio desatualizado.</div>
+        <div class="enxerto"><b>Limite de rolê</b> — a Bianca define um teto de gasto e o feed filtra por isso.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#FF8A8A">
+        <div class="orgao-head"><div class="mono-chip">PM</div><h3>Prontuário médico</h3><span class="qtd">3</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto ouro"><span class="selo">virou insight</span><b>Ficha do local</b> — timeline de mudanças do estabelecimento: trocou de chef, reformou, mudou de endereço.</div>
+        <div class="enxerto"><b>Alergias e restrições</b> como campo crítico do perfil — o app avisa <em>antes</em> de recomendar.</div>
+        <div class="enxerto"><b>Segunda opinião</b> — quando a nota da sua rede diverge muito do público geral, o app avisa explicitamente.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#C9B4FF">
+        <div class="orgao-head"><div class="mono-chip">RP</div><h3>RPG / quest</h3><span class="qtd">2</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Missões de bairro</b> — “avalie 3 lugares sem foto na sua rua”: dirige contribuição para onde falta dado.</div>
+        <div class="enxerto"><b>Classes derivadas do comportamento real</b> — o Toni é Explorador Saudável, a Bianca é Curadora, a Paola é Anfitriã.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#B8C7D9">
+        <div class="orgao-head"><div class="mono-chip">EC</div><h3>Enciclopédia colaborativa</h3><span class="qtd">2</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Histórico de edições</b> do local público e reversível — quem mudou o horário e quando.</div>
+        <div class="enxerto"><b>Selo “precisa de confirmação”</b> em informação que ninguém da comunidade validou.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#6EE7A8">
+        <div class="orgao-head"><div class="mono-chip">MG</div><h3>Mensageria</h3><span class="qtd">2</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>“Manda no grupo”</b> — qualquer local vira card compartilhável bonito fora do app, com deep link.</div>
+        <div class="enxerto"><b>Enquete de rolê nativa</b> dentro do compartilhamento.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#FF7A59">
+        <div class="orgao-head"><div class="mono-chip">SV</div><h3>Streaming de vídeo</h3><span class="qtd">2</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>“Por que você foi no X”</b> — explicabilidade da recomendação sempre visível no card.</div>
+        <div class="enxerto"><b>“Continuar de onde parou”</b> — lugares que você abriu e não decidiu voltam ao topo.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#E4A0FF">
+        <div class="orgao-head"><div class="mono-chip">HP</div><h3>Hospedagem</h3><span class="qtd">2</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto rejeitada"><span class="selo">rejeitada</span><b>Avaliação de mão dupla</b> (o local avalia o cliente) — fere o tom descontraído e cria medo de avaliar.</div>
+        <div class="enxerto"><b>“O que esperar”</b> — resumo de 3 linhas gerado dos comentários no topo do card, para decidir em 2 toques.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#4ADE80">
+        <div class="orgao-head"><div class="mono-chip">NV</div><h3>Navegação / trânsito</h3><span class="qtd">3</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Alertas em tempo real da comunidade</b> — “fila de 40min agora”, “cozinha fechou”, “tem ao vivo hoje”.</div>
+        <div class="enxerto"><b>Alerta expira sozinho</b> em horas — informação perecível não polui o histórico do local.</div>
+        <div class="enxerto"><b>“Está aberto agora?”</b> confirmado por quem está lá, não pelo horário cadastrado.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#FF9EC4">
+        <div class="orgao-head"><div class="mono-chip">BV</div><h3>Boards visuais</h3><span class="qtd">2</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Lista como grid de fotos reais</b>, não lista de nomes.</div>
+        <div class="enxerto"><b>Salvar a partir da foto</b> e não do local — “quero <em>esse prato</em>”.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#9BB8FF">
+        <div class="orgao-head"><div class="mono-chip">RF</div><h3>Rede profissional</h3><span class="qtd">1</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Endosso de atributo</b> aplicado a local — “selo da galera: bom para trabalhar”, sem o tom sério.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#FFD166">
+        <div class="orgao-head"><div class="mono-chip">LJ</div><h3>Loja de jogos</h3><span class="qtd">2</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto ouro"><span class="selo">achado da sessão</span><b>“Horas jogadas” vira “vezes que voltou”</b> — recorrência como sinal de qualidade mais forte que a nota.</div>
+        <div class="enxerto ouro"><span class="selo">virou insight</span><b>“Avaliações recentes vs todas”</b> — o card separa os últimos 3 meses do histórico total, para captar decadência.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#8FE388">
+        <div class="orgao-head"><div class="mono-chip">CF</div><h3>Rede social / close friends</h3><span class="qtd">1</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>“Círculo”</b> — subgrupo de contatos cuja avaliação pesa mais no seu feed.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#FFB4A2">
+        <div class="orgao-head"><div class="mono-chip">DL</div><h3>Delivery</h3><span class="qtd">1</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Pedido e reserva ficam de fora</b> (guardrail da Fase 1) — mas existe “abrir no app do parceiro”, com link externo rotulado.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#A0E7E5">
+        <div class="orgao-head"><div class="mono-chip">GF</div><h3>Galeria de fotos</h3><span class="qtd">1</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Detecção pela galeria</b> — o app percebe que você esteve em um lugar e sugere avaliar, sem publicar nada sozinho.</div>
+      </article>
+
+      <article class="orgao rv" style="--gc:#D4A5FF">
+        <div class="orgao-head"><div class="mono-chip">PC</div><h3>Podcast</h3><span class="qtd">1</span></div>
+        <div class="sutura"><span class="fio"></span>transplante<span class="fio"></span></div>
+        <div class="enxerto"><b>Áudio-avaliação de 15 segundos</b> — menos fricção que texto, mais rica que estrela.</div>
+      </article>
+
+    </div>
+
+    <div class="doacoes rv">
+      <h4>Quem doou mais órgão</h4>
+      <p>Enxertos por gênero doador — os gêneros de consumo contínuo (música, namoro, fitness, extrato, trânsito) foram os mais férteis.</p>
+      <div class="barras">
+        <div class="barra" style="--gc:#5CF2C0"><span>Streaming musical</span><i style="width:100%"></i><b>4</b></div>
+        <div class="barra" style="--gc:#FF6FA5"><span>Namoro</span><i style="width:75%"></i><b>3</b></div>
+        <div class="barra" style="--gc:#0FD98A"><span>Fitness social</span><i style="width:75%"></i><b>3</b></div>
+        <div class="barra" style="--gc:#7FD1FF"><span>Banco / extrato</span><i style="width:75%"></i><b>3</b></div>
+        <div class="barra" style="--gc:#FF8A8A"><span>Prontuário médico</span><i style="width:75%"></i><b>3</b></div>
+        <div class="barra" style="--gc:#4ADE80"><span>Navegação / trânsito</span><i style="width:75%"></i><b>3</b></div>
+        <div class="barra" style="--gc:#FFC53D"><span>Aprend. gamificado</span><i style="width:50%"></i><b>2</b></div>
+        <div class="barra" style="--gc:#C9B4FF"><span>RPG / quest</span><i style="width:50%"></i><b>2</b></div>
+        <div class="barra" style="--gc:#B8C7D9"><span>Enciclopédia colab.</span><i style="width:50%"></i><b>2</b></div>
+        <div class="barra" style="--gc:#6EE7A8"><span>Mensageria</span><i style="width:50%"></i><b>2</b></div>
+        <div class="barra" style="--gc:#FF7A59"><span>Streaming de vídeo</span><i style="width:50%"></i><b>2</b></div>
+        <div class="barra" style="--gc:#E4A0FF"><span>Hospedagem</span><i style="width:50%"></i><b>2</b></div>
+        <div class="barra" style="--gc:#FF9EC4"><span>Boards visuais</span><i style="width:50%"></i><b>2</b></div>
+        <div class="barra" style="--gc:#FFD166"><span>Loja de jogos</span><i style="width:50%"></i><b>2</b></div>
+        <div class="barra" style="--gc:#9BB8FF"><span>Rede profissional</span><i style="width:25%"></i><b>1</b></div>
+        <div class="barra" style="--gc:#8FE388"><span>Close friends</span><i style="width:25%"></i><b>1</b></div>
+        <div class="barra" style="--gc:#FFB4A2"><span>Delivery</span><i style="width:25%"></i><b>1</b></div>
+        <div class="barra" style="--gc:#A0E7E5"><span>Galeria de fotos</span><i style="width:25%"></i><b>1</b></div>
+        <div class="barra" style="--gc:#D4A5FF"><span>Podcast</span><i style="width:25%"></i><b>1</b></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TÉCNICA 3 ===================== -->
+<section id="ritual">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">03</div>
+      <div>
+        <span class="kicker" style="background:rgba(31,111,235,.12);color:var(--azul)">Inventada · espírito Cultural</span>
+        <h2>Ritual Nativo</h2>
+      </div>
+      <p class="lead">Inventariar rituais sociais brasileiros de comer e sair, e derivar de cada um a <b>exigência de produto</b> que apps importados — Yelp, Google Maps, Foursquare — nunca modelaram. Cada comanda abaixo é um ritual e o que ele cobra do NaÁrea.</p>
+    </div>
+
+    <div class="azulejo" aria-hidden="true"></div>
+
+    <div class="comandas">
+
+      <article class="comanda fosso rv"><div class="n"><span>01</span><em>ritual</em></div><h3>Rachar a conta</h3><p><span class="exig">exigência</span>O app estima o valor por pessoa a partir das faixas reportadas — <b>antes</b> de ir.</p></article>
+
+      <article class="comanda fosso rv"><div class="n"><span>02</span><em>ritual</em></div><h3>Couvert e taxa de 10%</h3><p><span class="exig">exigência</span>Campos explícitos “cobra couvert?” e “taxa incluída?”, confirmados pela comunidade — reclamação clássica brasileira.</p></article>
+
+      <article class="comanda fosso rv"><div class="n"><span>03</span><em>ritual</em></div><h3>Rodízio</h3><p><span class="exig">exigência</span>Categoria própria com campos de rodízio: variedade, reposição, e a que horas a carne boa passa.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>04</span><em>ritual</em></div><h3>Happy hour de sexta</h3><p><span class="exig">exigência</span>O feed muda de cara na sexta às 17h — contexto temporal como filtro nativo.</p></article>
+
+      <article class="comanda fosso rv"><div class="n"><span>05</span><em>ritual</em></div><h3>Almoço executivo · PF</h3><p><span class="exig">exigência</span>Busca por “PF até R$30 perto do trabalho”, com janela de almoço embutida.</p></article>
+
+      <article class="comanda fosso rv"><div class="n"><span>06</span><em>ritual</em></div><h3>Marmita e quentinha</h3><p><span class="exig">exigência</span>Categoria de comida caseira e marmiteria, que os apps importados não modelam — atende direto a necessidade do Toni.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>07</span><em>ritual</em></div><h3>Almoço de domingo em família</h3><p><span class="exig">exigência</span>Filtros “cabe família grande”, “tem espaço pra criança”, “aceita chegar às 14h”.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>08</span><em>ritual</em></div><h3>Niver no bar</h3><p><span class="exig">exigência</span>“Reserva mesa grande?” e “deixa levar bolo?” — pergunta brasileira que nenhum app gringo faz.</p></article>
+
+      <article class="comanda fosso rv"><div class="n"><span>09</span><em>ritual</em></div><h3>A fila</h3><p><span class="exig">exigência</span>Tempo de fila reportado em tempo real <b>e</b> faixa histórica por horário.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>10</span><em>ritual</em></div><h3>O “vou dar uma passada”</h3><p><span class="exig">exigência</span>Modo “estou na rua agora” — raio de 300m, aberto agora, decide em 1 toque.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>11</span><em>ritual</em></div><h3>A resenha · o pós-jogo</h3><p><span class="exig">exigência</span>“Resenha” como formato de post coletivo: várias pessoas contribuem para uma única avaliação do rolê.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>12</span><em>ritual</em></div><h3>Padaria da esquina</h3><p><span class="exig">exigência</span>Categoria com campos próprios: pão quente que horas, tá na chapa, mesinha na calçada.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>13</span><em>ritual</em></div><h3>O cafezinho</h3><p><span class="exig">exigência</span>“Só um café” como intenção rápida, distinta de “vou comer”.</p></article>
+
+      <article class="comanda fosso rv"><div class="n"><span>14</span><em>ritual</em></div><h3>Feira livre de domingo</h3><p><span class="exig">exigência</span>Feiras como locais com dia da semana e não endereço fixo — o app precisa modelar <b>local intermitente</b>.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>15</span><em>ritual</em></div><h3>Churrasco</h3><p><span class="exig">exigência</span>Espaço de churrasco para alugar, com avaliação de estrutura.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>16</span><em>ritual</em></div><h3>Farofa da praia e o carrinho</h3><p><span class="exig">exigência</span>Ambulantes e barracas como locais legítimos e avaliáveis, identificados por ponto e não por CNPJ.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>17</span><em>ritual</em></div><h3>A indicação do porteiro e do motorista</h3><p><span class="exig">exigência</span>“Sabedoria local” — perfis verificados de moradores do bairro com peso próprio no modo viagem.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>18</span><em>ritual</em></div><h3>Dinheiro e PIX</h3><p><span class="exig">exigência</span>Formas de pagamento aceitas como campo confirmado pela comunidade.</p></article>
+
+      <article class="comanda fosso rv"><div class="n"><span>19</span><em>ritual</em></div><h3>Insegurança urbana</h3><p><span class="exig">exigência</span>“Segurança do trajeto” como eixo separado da qualidade do local — crítico no Brasil, ausente nos apps gringos.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>20</span><em>ritual</em></div><h3>Chuva de verão</h3><p><span class="exig">exigência</span>Filtro “tem cobertura” e reordenação do feed quando chove.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>21</span><em>ritual</em></div><h3>Sustentabilidade da galera</h3><p><span class="exig">exigência</span>Selos comunitários locais: “leva teu copo”, “não usa canudo”.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>22</span><em>ritual</em></div><h3>Dia de jogo</h3><p><span class="exig">exigência</span>“Vai passar o jogo?” com telão, som ligado e lotação esperada.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>23</span><em>ritual</em></div><h3>Forró, pagode de quinta, samba</h3><p><span class="exig">exigência</span>Agenda de atração ao vivo informada pelo local e <b>confirmada por quem foi</b>.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>24</span><em>ritual</em></div><h3>Interior x capital</h3><p><span class="exig">exigência</span>“Modo cidade pequena” — com poucos usuários o app degrada para a sabedoria de quem mora lá, não para tela vazia.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>25</span><em>ritual</em></div><h3>A família toda no zap</h3><p><span class="exig">exigência</span>Compartilhamento que funciona para quem <b>não</b> tem o app — card com preview rico e link.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>26</span><em>ritual</em></div><h3>Comida da vó</h3><p><span class="exig">exigência</span>Tag “comida de vó” como categoria afetiva real, não um genérico “comfort food”.</p></article>
+
+      <article class="comanda fosso rv"><div class="n"><span>27</span><em>ritual</em></div><h3>Self-service por quilo</h3><p><span class="exig">exigência</span>Categoria com campos próprios — preço do quilo, horário que reabastece, variedade de salada. Direto na necessidade do Toni.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>28</span><em>ritual</em></div><h3>O “fecho a conta”</h3><p><span class="exig">exigência</span>Sinalização de fechamento antecipado da cozinha, informada pela comunidade.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>29</span><em>ritual</em></div><h3>Academia e pós-treino</h3><p><span class="exig">exigência</span>Combo treino + refeição, encaixando o ritual matinal do Toni.</p></article>
+
+      <article class="comanda rv"><div class="n"><span>30</span><em>ritual</em></div><h3>A espera do Uber</h3><p><span class="exig">exigência</span>“Quanto tempo pra sair daqui” — facilidade de transporte como atributo do local à noite.</p></article>
+
+    </div>
+
+    <div class="fosso-box rv">
+      <header>
+        <h3>O fosso cultural</h3>
+        <p>Nove exigências que Yelp e Google Maps estruturalmente não modelam. É o diferencial competitivo defensável que saiu desta técnica — e o mais difícil de um concorrente global copiar sem reescrever o modelo de dados.</p>
+      </header>
+      <div class="grade">
+        <div class="cab">Exigência nascida do ritual</div>
+        <div class="cab">NaÁrea</div>
+        <div class="cab">Yelp / Maps</div>
+
+        <div>Couvert declarado e confirmado</div><div class="mk" data-ok></div><div class="mk" data-no></div>
+        <div>Taxa de 10% explícita</div><div class="mk" data-ok></div><div class="mk" data-no></div>
+        <div>Estimativa de rachar a conta antes de ir</div><div class="mk" data-ok></div><div class="mk" data-no></div>
+        <div>Fila em tempo real + faixa histórica</div><div class="mk" data-ok></div><div class="mk" data-no></div>
+        <div>PF com janela de almoço e teto de preço</div><div class="mk" data-ok></div><div class="mk" data-no></div>
+        <div>Marmita e quentinha como categoria</div><div class="mk" data-ok></div><div class="mk" data-no></div>
+        <div>Self-service por quilo com campos próprios</div><div class="mk" data-ok></div><div class="mk" data-no></div>
+        <div>Segurança do trajeto como eixo separado</div><div class="mk" data-ok></div><div class="mk" data-no></div>
+        <div>Local intermitente (feira com dia, sem endereço fixo)</div><div class="mk" data-ok></div><div class="mk" data-no></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SÍNTESE ===================== -->
+<section id="sintese">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">★</div>
+      <div>
+        <span class="eyebrow">O clímax da sessão</span>
+        <h2>Síntese</h2>
+      </div>
+      <p class="lead">Seis achados que atravessaram as três técnicas. Um deles ficou grande o bastante para virar princípio de produto; outro é um risco que precisa ficar escrito para não ser esquecido no MVP.</p>
+    </div>
+
+    <div class="insights">
+
+      <div class="insight destaque rv">
+        <span class="num">Insight 01 · a tensão central</span>
+        <h3>Separar SINAL de PUBLICAÇÃO</h3>
+        <p>O NaÁrea precisa de dado de qualidade (avaliações), mas <strong>2 das 3 personas não querem produzir conteúdo público</strong> — a Bianca por escolha, o Toni por falta de tempo. A saída achada na sessão: salvar, copiar lista, voltar ao lugar e usar o modo decisão <strong>já são contribuição válida</strong>.</p>
+        <div class="split">
+          <div class="lado sinal">
+            <b>Sinal — colhido sem pedir</b>
+            <ul><li>salvar em lista</li><li>copiar lista de outra pessoa</li><li>voltar ao mesmo lugar</li><li>abrir e usar o modo decisão</li></ul>
+          </div>
+          <div class="corte">✂</div>
+          <div class="lado pub">
+            <b>Publicação — opcional, nunca cobrada</b>
+            <ul><li>avaliação com texto e foto</li><li>comentário público</li><li>resenha coletiva</li><li>áudio de 15 segundos</li></ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="insight rv">
+        <span class="num">Insight 02 · achado mais forte</span>
+        <div class="mega">recorrência <span class="gt">&gt;</span> <s>nota</s></div>
+        <p>Veio do transplante de <strong>Loja de Jogos</strong>: quantas vezes a pessoa <strong>voltou</strong> é um sinal de qualidade mais honesto e mais difícil de manipular que a estrela — e é coletado sem pedir nada ao usuário.</p>
+      </div>
+
+      <div class="insight rv">
+        <span class="num">Insight 03 · convergência</span>
+        <h3>Avaliação sem carimbo mente</h3>
+        <p>Três ideias que são a mesma vestida de trajes diferentes: <strong>avaliação com horário</strong> (corrida do Toni), <strong>avaliações recentes vs todas</strong> (Loja de Jogos) e <strong>ficha do local / timeline</strong> (Prontuário). Unificar num único conceito de <strong>Avaliação Contextual</strong>.</p>
+        <figure class="conv">
+          <svg viewBox="0 0 620 210" role="img" aria-label="Três ideias convergindo no conceito de Avaliação Contextual">
+            <defs>
+              <marker id="pt" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                <path d="M0,0 L7,3.5 L0,7 z" fill="#FFC53D"/>
+              </marker>
+            </defs>
+            <path d="M170,32 C280,32 300,95 380,105" fill="none" stroke="#5CF2C0" stroke-width="2.4" marker-end="url(#pt)"/>
+            <path d="M170,105 C280,105 300,105 380,105" fill="none" stroke="#9C7BFF" stroke-width="2.4" marker-end="url(#pt)"/>
+            <path d="M170,178 C280,178 300,115 380,105" fill="none" stroke="#FF7A59" stroke-width="2.4" marker-end="url(#pt)"/>
+            <g font-family="ui-monospace,Consolas,monospace" font-size="12" fill="#E8E1D8">
+              <text x="8" y="28">avaliação com horário</text>
+              <text x="8" y="43" fill="#8E8378">cadeia A3 · corrida</text>
+              <text x="8" y="101">recentes vs todas</text>
+              <text x="8" y="116" fill="#8E8378">transplante · loja de jogos</text>
+              <text x="8" y="174">ficha do local / timeline</text>
+              <text x="8" y="189" fill="#8E8378">transplante · prontuário</text>
+            </g>
+            <rect x="392" y="72" width="218" height="66" rx="14" fill="rgba(255,197,61,.16)" stroke="#FFC53D" stroke-width="2"/>
+            <text x="501" y="100" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="11" fill="#FFC53D" letter-spacing="2">CONCEITO ÚNICO</text>
+            <text x="501" y="123" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="700" fill="#FFFFFF">Avaliação Contextual</text>
+          </svg>
+          <figcaption>três traços, um destino</figcaption>
+        </figure>
+      </div>
+
+      <div class="insight rv">
+        <span class="num">Insight 04 · a ponta do mercado</span>
+        <h3>O caminho legítimo da Paola é responder e corrigir</h3>
+        <p>O painel resolve sozinho a tensão “ela quer visibilidade mas não pode se avaliar”: a rota dela para reputação passa a ser <strong>responder e corrigir</strong>, medida pelo <strong>índice de responsividade</strong>.</p>
+        <p>E a monetização ganha um freio embutido: <strong>Destaque suspenso automaticamente se a nota cai</strong>.</p>
+      </div>
+
+      <div class="insight rv">
+        <span class="num">Insight 05 · defensabilidade</span>
+        <h3>O Ritual Nativo abriu o fosso</h3>
+        <p>Foi a técnica que gerou mais diferencial competitivo defensável. <strong>Couvert, taxa de 10%, rachar a conta, fila, PF, marmita, por quilo, segurança do trajeto e local intermitente (feira)</strong> são coisas que Yelp e Google Maps estruturalmente não modelam. É o fosso cultural do produto.</p>
+      </div>
+
+      <div class="insight risco rv">
+        <span class="num">Insight 06 · risco identificado</span>
+        <h3>Gamificar descoberta, nunca publicação</h3>
+        <p>Streak e gamificação de publicação (transplante de Aprendizado Gamificado) <strong>contradizem frontalmente a Bianca</strong>. Manter apenas gamificação de <strong>descoberta</strong> e de <strong>curadoria</strong> — nunca de publicação obrigatória.</p>
+      </div>
+
+    </div>
+
+    <div id="objetivos" class="obj-head rv">
+      <span class="eyebrow">Saída da Fase 3</span>
+      <h3>Os 3 Objetivos do Produto</h3>
+      <p>Cada objetivo carrega a métrica com que ele vai ser cobrado. Juntos, eles fecham o triângulo: em quem confiar, quão rápido decidir, e como o outro lado do mercado ganha sem corromper o dado.</p>
+    </div>
+
+    <div class="objetivos">
+      <article class="obj o1 rv">
+        <div class="big">01</div>
+        <div>
+          <span class="nome">Confiança</span>
+          <h4>Decisão baseada em pessoas reais e rastreáveis</h4>
+          <p>Fazer com que a decisão de onde ir seja tomada com base em pessoas reais e rastreáveis, <strong>nunca em nota anônima ou paga</strong>.</p>
+          <div class="metrica"><b>Métrica</b>% de decisões originadas de card com fonte de confiança explícita — amigo, gêmeo de gosto, morador local.</div>
+        </div>
+      </article>
+
+      <article class="obj o2 rv">
+        <div class="big">02</div>
+        <div>
+          <span class="nome">Decisão rápida</span>
+          <h4>Do app aberto ao lugar escolhido em 2 toques</h4>
+          <p>Levar o usuário da abertura do app a uma decisão de lugar em <strong>até 2 toques e menos de 30 segundos</strong>, sem exigir produção de conteúdo.</p>
+          <div class="metrica"><b>Métrica</b>Taxa de sessões que terminam em decisão, e tempo mediano até a decisão.</div>
+        </div>
+      </article>
+
+      <article class="obj o3 rv">
+        <div class="big">03</div>
+        <div>
+          <span class="nome">Ciclo saudável dos dois lados</span>
+          <h4>Reputação para o estabelecimento sem corromper a avaliação</h4>
+          <p>Dar ao estabelecimento um canal legítimo de reputação — <strong>responder e corrigir, nunca se auto-avaliar</strong> — que alimente a monetização sem corromper a avaliação.</p>
+          <div class="metrica"><b>Métrica</b>Índice de responsividade médio, e taxa de Destaques suspensos por queda de nota.</div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <b>NaÁrea</b> · brainstorm de funcionalidades ancorado em 3 personas<br>
+      <span class="mono">Lean Inception — Fase 3 · sessão autônoma · 08/09/2026 · status: concluída</span>
+    </div>
+    <div class="mono">
+      Técnicas: Yes And Building (colaborativa) · Transplante de Gênero (inventada, Creative) · Ritual Nativo (inventada, Cultural)<br>
+      Guardrails da Fase 1 e RNFs da Fase 2 valeram como filtro de ideias durante toda a sessão.
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  // marcas de check e x na grade do fosso cultural
+  var ok = '<svg class="mark" viewBox="0 0 24 24" aria-label="sim" role="img"><circle cx="12" cy="12" r="10" fill="#0F9D5C"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var no = '<svg class="mark" viewBox="0 0 24 24" aria-label="não" role="img"><circle cx="12" cy="12" r="10" fill="none" stroke="#C9B7A4" stroke-width="2"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#C9B7A4" stroke-width="2.2" stroke-linecap="round"/></svg>';
+  document.querySelectorAll('.mk[data-ok]').forEach(function(el){ el.innerHTML = ok; });
+  document.querySelectorAll('.mk[data-no]').forEach(function(el){ el.innerHTML = no; });
+
+  // filtro de cadeias por persona
+  var botoes = document.querySelectorAll('.filtro');
+  var blocos = document.querySelectorAll('.blococadeia');
+  botoes.forEach(function(b){
+    b.addEventListener('click', function(){
+      var alvo = b.dataset.p;
+      botoes.forEach(function(o){ o.setAttribute('aria-pressed', String(o === b)); });
+      blocos.forEach(function(bl){
+        bl.classList.toggle('oculto', alvo !== 'todos' && bl.dataset.p !== alvo);
+      });
+    });
+  });
+
+  // entrada suave
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function(ents){
+      ents.forEach(function(e){
+        if (e.isIntersecting){ e.target.classList.add('on'); io.unobserve(e.target); }
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
+    document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
+  } else {
+    document.querySelectorAll('.rv').forEach(function(el){ el.classList.add('on'); });
+  }
+})();
+</script>
+</body>
+</html>
