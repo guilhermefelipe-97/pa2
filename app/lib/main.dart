@@ -14,6 +14,7 @@ import 'data/repositories/auth_repository.dart';
 import 'data/repositories/place_repository.dart';
 import 'data/repositories/review_repository.dart';
 import 'data/repositories/user_repository.dart';
+import 'firebase_config.dart';
 import 'firebase_options.dart';
 import 'routing/router.dart';
 
@@ -24,7 +25,9 @@ const bool useEmulator = bool.fromEnvironment('USE_EMULATOR');
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    await Firebase.initializeApp(
+      options: firebaseOptionsFor(DefaultFirebaseOptions.currentPlatform, useEmulator: useEmulator),
+    );
   } on Object catch (e) {
     // Ex.: lib/firebase_options.dart ainda é o placeholder. Mostra a instrução
     // em vez de travar com erro não tratado antes do runApp.
