@@ -52,6 +52,22 @@ Depois, na raiz do repositório:
 
 ## 2. Rodar o app
 
+### Atalho no Windows (PowerShell)
+
+Scripts em `../scripts/` que funcionam de qualquer pasta:
+
+```powershell
+# Terminal 1 — emuladores (deixe aberto)
+powershell -ExecutionPolicy Bypass -File scripts\emuladores.ps1
+# Terminal 2 — locais de Natal no emulador + app no Chrome
+powershell -ExecutionPolicy Bypass -File scripts\seed-emulador.ps1
+powershell -ExecutionPolicy Bypass -File scripts\app-emulador.ps1
+```
+
+> No PowerShell, `--only auth,firestore` sem aspas vira array e a CLI responde
+> "No emulators to start". Use `--only "auth,firestore"` (os scripts já fazem isso).
+
+
 Contra o projeto real:
 
 ```bash
