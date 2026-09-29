@@ -67,6 +67,7 @@ beforeEach(async () => {
       ambience: 4,
       service: 4,
       companion: null,
+      comment: null,
       createdAt: Timestamp.now(),
     });
   });
@@ -86,6 +87,7 @@ function validReview(overrides = {}) {
     ambience: 4,
     service: 3,
     companion: 'amigos',
+    comment: null,
     createdAt: serverTimestamp(),
     ...overrides,
   };
@@ -240,7 +242,7 @@ describe('reviews', () => {
     await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ createdAt: Timestamp.now() })));
   });
 
-  it('não aceita campo extra (ex.: nota agregada, período, texto)', async () => {
+  it('não aceita campo extra (ex.: nota agregada, período, texto fora de comment)', async () => {
     await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ overall: 5 })));
     await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ dayPeriod: 'noite' })));
     await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ text: 'top' })));
@@ -254,6 +256,39 @@ describe('reviews', () => {
     const data = validReview();
     delete data.companion;
     await assertFails(addDoc(collection(alice(), 'reviews'), data));
+  });
+
+  it('comment null é aceito (comentário é opcional)', async () => {
+    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ comment: null })));
+  });
+
+  it('comment de 1 a 280 caracteres é aceito', async () => {
+    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'a' })));
+    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'Camarão top, fila grande.' })));
+    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'x'.repeat(280) })));
+    // size() conta unidades UTF-16 (igual a String.length no Dart): acento = 1.
+    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'ã'.repeat(280) })));
+  });
+
+  it('comment vazio, acima de 280 ou não-string é negado', async () => {
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: '' })));
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'x'.repeat(281) })));
+    // emoji fora do BMP = 2 unidades UTF-16: 141 emojis = 282.
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: '😀'.repeat(141) })));
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: 42 })));
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: true })));
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: ['a'] })));
+  });
+
+  it('comment é chave obrigatória (null quando não informado): chaves exatas = 10', async () => {
+    const data = validReview();
+    delete data.comment;
+    await assertFails(addDoc(collection(alice(), 'reviews'), data));
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'ok', extra: 1 })));
+  });
+
+  it('comentário é imutável como a avaliação (nem o autor edita)', async () => {
+    await assertFails(updateDoc(doc(alice(), 'reviews/existing'), { comment: 'editado' }));
   });
 
   it('local precisa existir e placeName bater com o local', async () => {

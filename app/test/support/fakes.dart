@@ -126,9 +126,11 @@ class FakePlaceRepository implements PlaceRepository {
 
   final List<Place> places;
   bool fail = false;
+  int listCalls = 0;
 
   @override
   Future<List<Place>> listPlaces() async {
+    listCalls++;
     if (fail) throw Exception('network');
     return places;
   }
@@ -154,6 +156,7 @@ class FakeReviewRepository implements ReviewRepository {
       placeName: review.placeName,
       scores: review.scores,
       companion: review.companion,
+      comment: review.comment,
       createdAt: clock(),
     ));
   }

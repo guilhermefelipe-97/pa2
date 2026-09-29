@@ -32,12 +32,21 @@ class FirestorePlaceRepository implements PlaceRepository {
       return v is String ? v : '';
     }
 
+    String? nonEmpty(String key) {
+      final v = optional(key).trim();
+      return v.isEmpty ? null : v;
+    }
+
     return Place(
       id: id,
       name: name,
       category: optional('category'),
       neighborhood: optional('neighborhood'),
       city: optional('city'),
+      photoUrl: nonEmpty('photoUrl'),
+      photoAuthor: nonEmpty('photoAuthor'),
+      photoLicense: nonEmpty('photoLicense'),
+      photoIllustrative: data['photoIllustrative'] == true,
     );
   }
 }

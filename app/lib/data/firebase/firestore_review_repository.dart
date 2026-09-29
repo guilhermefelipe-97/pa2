@@ -20,8 +20,9 @@ class FirestoreReviewRepository implements ReviewRepository {
 
   @override
   Future<void> createReview(NewReview review) {
-    // Schema exato validado pelas Rules (hasOnly/hasAll). O período do dia NÃO
-    // é gravado; createdAt é sempre o timestamp do servidor.
+    // Schema exato (10 chaves) validado pelas Rules (hasOnly/hasAll). O período
+    // do dia NÃO é gravado; createdAt é sempre o timestamp do servidor.
+    // `comment` já vem normalizado (aparado; null quando não há).
     return _reviews.add({
       'authorId': review.authorId,
       'authorName': review.authorName,
@@ -31,6 +32,7 @@ class FirestoreReviewRepository implements ReviewRepository {
       'ambience': review.scores.ambience,
       'service': review.scores.service,
       'companion': review.companion?.value,
+      'comment': review.comment,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
@@ -94,6 +96,9 @@ class FirestoreReviewRepository implements ReviewRepository {
           service: (d['service'] as num).toInt(),
         ),
         companion: Companion.fromValue(d['companion'] as String?),
+        // Normaliza na leitura: avaliações da Onda 1 não têm a chave, e vazio
+        // ou só espaços vira null (a UI nunca mostra citação vazia).
+        comment: Review.normalizeComment(d['comment'] is String ? d['comment'] as String : null),
         createdAt: ts.toDate(),
       );
     } on Object {

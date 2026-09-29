@@ -17,6 +17,7 @@ import 'data/repositories/user_repository.dart';
 import 'firebase_config.dart';
 import 'firebase_options.dart';
 import 'routing/router.dart';
+import 'ui/core/theme.dart';
 
 /// `flutter run --dart-define=USE_EMULATOR=true` usa os emuladores locais
 /// (auth :9099, firestore :8080) em vez do projeto real.
@@ -71,10 +72,8 @@ class NaAreaApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'NaÁrea',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFE85D3F)),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
+      themeMode: ThemeMode.light,
       routerConfig: router,
     );
   }

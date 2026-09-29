@@ -28,5 +28,7 @@ void main() {
     expect(go(Routes.signUp, signedIn: true), Routes.feed);
     expect(go(Routes.people, signedIn: true), isNull);
     expect(go(Routes.feed, signedIn: true), isNull);
+    expect(go(Routes.placeDetail('x'), signedIn: true), isNull);
+    expect(go(Routes.placeDetail('x')), Routes.login);
   });
 }

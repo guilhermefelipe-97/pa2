@@ -3,12 +3,14 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../data/repositories/auth_repository.dart';
+import '../domain/feed.dart';
 import '../domain/models/place.dart';
 import '../ui/auth/auth_view.dart';
 import '../ui/auth/auth_view_model.dart';
 import '../ui/core/view_model_host.dart';
 import '../ui/feed/feed_view.dart';
 import '../ui/feed/feed_view_model.dart';
+import '../ui/place/place_detail_view.dart';
 import '../ui/people/people_view.dart';
 import '../ui/people/people_view_model.dart';
 import '../ui/review/place_picker_view.dart';
@@ -68,9 +70,16 @@ GoRouter buildRouter(AuthRepository auth) {
             authRepository: context.read(),
             userRepository: context.read(),
             reviewRepository: context.read(),
+            placeRepository: context.read(),
           ),
           builder: (context, vm) => FeedView(viewModel: vm),
         ),
+      ),
+      GoRoute(
+        path: Routes.placeDetailPattern,
+        // Sem o FeedItem (ex.: link aberto direto / reload na web) volta ao feed.
+        redirect: (context, state) => state.extra is FeedItem ? null : Routes.feed,
+        builder: (context, state) => PlaceDetailView(item: state.extra! as FeedItem),
       ),
       GoRoute(
         path: Routes.people,

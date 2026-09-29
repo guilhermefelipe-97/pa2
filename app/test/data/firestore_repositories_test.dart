@@ -10,13 +10,14 @@ import 'package:naarea/domain/models/scores.dart';
 
 import '../support/builders.dart';
 
-NewReview _newReview({Companion? companion}) => NewReview(
+NewReview _newReview({Companion? companion, String? comment}) => NewReview(
       authorId: 'alice',
       authorName: 'Alice',
       placeId: 'mangai',
       placeName: 'Mangai',
       scores: Scores(food: 5, ambience: 4, service: 3),
       companion: companion,
+      comment: comment,
     );
 
 Future<void> _addReview(
@@ -24,6 +25,8 @@ Future<void> _addReview(
   required String authorId,
   required DateTime createdAt,
   String placeId = 'p',
+  Object? comment,
+  bool omitComment = false,
 }) {
   return db.collection('reviews').add({
     'authorId': authorId,
@@ -34,13 +37,14 @@ Future<void> _addReview(
     'ambience': 4,
     'service': 4,
     'companion': null,
+    if (!omitComment) 'comment': comment,
     'createdAt': Timestamp.fromDate(createdAt),
   });
 }
 
 void main() {
   group('FirestoreReviewRepository.createReview', () {
-    test('grava exatamente as 9 chaves que as Rules exigem', () async {
+    test('grava exatamente as 10 chaves que as Rules exigem', () async {
       final db = FakeFirebaseFirestore();
       await FirestoreReviewRepository(db).createReview(_newReview(companion: Companion.amigos));
 
@@ -49,7 +53,7 @@ void main() {
       final data = docs.single.data();
       expect(data.keys.toSet(), {
         'authorId', 'authorName', 'placeId', 'placeName',
-        'food', 'ambience', 'service', 'companion', 'createdAt',
+        'food', 'ambience', 'service', 'companion', 'comment', 'createdAt',
       });
       expect(data['authorId'], 'alice');
       expect(data['authorName'], 'Alice');
@@ -67,6 +71,21 @@ void main() {
       final data = (await db.collection('reviews').get()).docs.single.data();
       expect(data.containsKey('companion'), isTrue);
       expect(data['companion'], isNull);
+    });
+
+    test('sem comentário: chave comment presente com null', () async {
+      final db = FakeFirebaseFirestore();
+      await FirestoreReviewRepository(db).createReview(_newReview(comment: '   '));
+      final data = (await db.collection('reviews').get()).docs.single.data();
+      expect(data.containsKey('comment'), isTrue);
+      expect(data['comment'], isNull);
+    });
+
+    test('comentário é gravado aparado', () async {
+      final db = FakeFirebaseFirestore();
+      await FirestoreReviewRepository(db).createReview(_newReview(comment: '  Fila grande, valeu a pena. '));
+      final data = (await db.collection('reviews').get()).docs.single.data();
+      expect(data['comment'], 'Fila grande, valeu a pena.');
     });
   });
 
@@ -112,6 +131,18 @@ void main() {
       // v0 do dia 1 é descartado: o lote 1 pode ter avaliações daquela época
       // que não vieram.
       expect(result.map((r) => r.createdAt.toUtc().day), [14, 13, 13, 12]);
+    });
+
+    test('lê comment normalizado; doc antigo sem a chave ou tipo errado vira null', () async {
+      final db = FakeFirebaseFirestore();
+      await _addReview(db, authorId: 'a', createdAt: DateTime.utc(2026, 9, 3), comment: 'Top!');
+      await _addReview(db, authorId: 'a', createdAt: DateTime.utc(2026, 9, 2), comment: 7);
+      await _addReview(db, authorId: 'a', createdAt: DateTime.utc(2026, 9, 1), omitComment: true);
+      await _addReview(db, authorId: 'a', createdAt: DateTime.utc(2026, 8, 31), comment: '   ');
+      await _addReview(db, authorId: 'a', createdAt: DateTime.utc(2026, 8, 30), comment: '  Bom  ');
+      final result = await FirestoreReviewRepository(db).fetchReviewsByAuthors(['a']);
+      expect(result.map((r) => r.comment), ['Top!', null, null, null, 'Bom'],
+          reason: 'normaliza na leitura: só espaços vira null, pontas aparadas');
     });
 
     test('documento fora do schema é ignorado', () async {
@@ -179,6 +210,38 @@ void main() {
       final parcial = places.firstWhere((p) => p.id == 'parcial');
       expect(parcial.category, '');
       expect(parcial.neighborhood, '');
+    });
+
+    test('lê photoUrl; ausente, vazio ou não-string vira null', () async {
+      final db = FakeFirebaseFirestore();
+      await db.doc('places/com').set({'name': 'A', 'photoUrl': 'https://upload.wikimedia.org/x.jpg'});
+      await db.doc('places/sem').set({'name': 'B'});
+      await db.doc('places/vazio').set({'name': 'C', 'photoUrl': '  '});
+      await db.doc('places/numero').set({'name': 'D', 'photoUrl': 3});
+      final byId = {for (final p in await FirestorePlaceRepository(db).listPlaces()) p.id: p};
+      expect(byId['com']!.photoUrl, 'https://upload.wikimedia.org/x.jpg');
+      expect(byId['sem']!.photoUrl, isNull);
+      expect(byId['vazio']!.photoUrl, isNull);
+      expect(byId['numero']!.photoUrl, isNull);
+    });
+
+    test('lê crédito da foto (autor, licença, ilustrativa) de forma tolerante', () async {
+      final db = FakeFirebaseFirestore();
+      await db.doc('places/a').set({
+        'name': 'A',
+        'photoUrl': 'https://upload.wikimedia.org/a.jpg',
+        'photoAuthor': ' Beraldo Leal ',
+        'photoLicense': 'CC BY 2.0',
+        'photoIllustrative': true,
+      });
+      await db.doc('places/b').set({'name': 'B', 'photoAuthor': 3, 'photoIllustrative': 'sim'});
+      final byId = {for (final p in await FirestorePlaceRepository(db).listPlaces()) p.id: p};
+      expect(byId['a']!.photoAuthor, 'Beraldo Leal');
+      expect(byId['a']!.photoLicense, 'CC BY 2.0');
+      expect(byId['a']!.photoIllustrative, isTrue);
+      expect(byId['b']!.photoAuthor, isNull);
+      expect(byId['b']!.photoLicense, isNull);
+      expect(byId['b']!.photoIllustrative, isFalse);
     });
   });
 }

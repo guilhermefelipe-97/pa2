@@ -23,3 +23,11 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-onda-1-fundacao-avaliacao-feed.md`
   summary: Tela "Minhas avaliações" para o usuário conferir o que publicou.
   evidence: O feed exclui o próprio uid por desenho (F05), então o autor não vê a avaliação que acabou de enviar.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-feed-rico-fotos-comentario-visual.md`
+  summary: Empacotar as fontes Fredoka/Nunito como assets (sem download em runtime) e registrar as licenças OFL.
+  evidence: google_fonts baixa as fontes do Google no primeiro uso — sem internet cai na fonte do sistema e há requisição a terceiro (LGPD).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-feed-rico-fotos-comentario-visual.md`
+  summary: Atualizar periodicamente o tempo relativo ("agora", "há 5 min") e ao voltar o app para primeiro plano.
+  evidence: `now` é capturado por build; o texto congela até outro rebuild.

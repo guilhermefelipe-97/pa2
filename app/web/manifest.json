@@ -1,11 +1,11 @@
 {
-    "name": "naarea",
-    "short_name": "naarea",
+    "name": "NaÁrea",
+    "short_name": "NaÁrea",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFF4E6",
+    "theme_color": "#D9482B",
+    "description": "Descubra lugares em Natal/RN pelas avaliações de quem você segue.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

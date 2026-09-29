@@ -7,7 +7,7 @@ import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart';
 import '../core/safe_change_notifier.dart';
 
-/// Avaliação em 3 eixos (F01) com contexto (F02).
+/// Avaliação em 3 eixos (F01) com contexto (F02) e comentário opcional.
 class ReviewViewModel extends SafeChangeNotifier {
   ReviewViewModel({
     required this.place,
@@ -29,11 +29,18 @@ class ReviewViewModel extends SafeChangeNotifier {
   int? _ambience;
   int? _service;
   Companion? _companion;
+  String _comment = '';
 
   int? get food => _food;
   int? get ambience => _ambience;
   int? get service => _service;
   Companion? get companion => _companion;
+
+  /// Texto como digitado (é aparado só no envio).
+  String get comment => _comment;
+
+  /// Acima de 280 unidades UTF-16 depois do trim (mesma conta das Rules).
+  bool get commentTooLong => !Review.isCommentWithinLimit(_comment);
 
   bool _isSubmitting = false;
   bool get isSubmitting => _isSubmitting;
@@ -41,12 +48,13 @@ class ReviewViewModel extends SafeChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  /// Os 3 eixos são obrigatórios; companhia é opcional.
+  /// Os 3 eixos são obrigatórios; companhia e comentário são opcionais.
   bool get canSubmit =>
       !_isSubmitting &&
       Scores.isValid(_food) &&
       Scores.isValid(_ambience) &&
-      Scores.isValid(_service);
+      Scores.isValid(_service) &&
+      !commentTooLong;
 
   void setFood(int value) => _set(() => _food = _clamp(value));
   void setAmbience(int value) => _set(() => _ambience = _clamp(value));
@@ -55,6 +63,8 @@ class ReviewViewModel extends SafeChangeNotifier {
   /// Tocar de novo na companhia selecionada desmarca.
   void toggleCompanion(Companion value) =>
       _set(() => _companion = _companion == value ? null : value);
+
+  void setComment(String value) => _set(() => _comment = value);
 
   int? _clamp(int v) => Scores.isValid(v) ? v : null;
 
@@ -86,6 +96,7 @@ class ReviewViewModel extends SafeChangeNotifier {
         placeName: place.name,
         scores: Scores(food: _food!, ambience: _ambience!, service: _service!),
         companion: _companion,
+        comment: _comment, // NewReview normaliza: trim, vazio → null
       ));
       return true;
     } on Object {

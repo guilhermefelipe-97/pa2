@@ -1,4 +1,5 @@
 import 'package:naarea/domain/models/companion.dart';
+import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/domain/models/review.dart';
 import 'package:naarea/domain/models/scores.dart';
 
@@ -13,6 +14,7 @@ Review review({
   DateTime? createdAt,
   Scores? scores,
   Companion? companion,
+  String? comment,
 }) {
   _seq++;
   return Review(
@@ -23,6 +25,31 @@ Review review({
     placeName: placeName ?? 'Local $placeId',
     scores: scores ?? Scores(food: 4, ambience: 3, service: 5),
     companion: companion,
+    comment: comment,
     createdAt: createdAt ?? DateTime.utc(2026, 9, 1, 15),
+  );
+}
+
+Place place({
+  String id = 'p1',
+  String? name,
+  String category = 'Restaurante',
+  String neighborhood = 'Ponta Negra',
+  String city = 'Natal',
+  String? photoUrl,
+  String? photoAuthor,
+  String? photoLicense,
+  bool photoIllustrative = false,
+}) {
+  return Place(
+    id: id,
+    name: name ?? 'Local $id',
+    category: category,
+    neighborhood: neighborhood,
+    city: city,
+    photoUrl: photoUrl,
+    photoAuthor: photoAuthor,
+    photoLicense: photoLicense,
+    photoIllustrative: photoIllustrative,
   );
 }

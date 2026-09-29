@@ -151,6 +151,7 @@ void main() {
       authRepository: auth,
       userRepository: users,
       reviewRepository: reviews,
+      placeRepository: FakePlaceRepository(const []),
     );
     await feed.load();
     expect(feed.followsNobody, isTrue);

@@ -60,9 +60,15 @@ service cloud.firestore {
       return v == null || v in ['sozinho', 'casal', 'amigos', 'familia', 'trabalho'];
     }
 
+    // Comentário opcional do autor: chave sempre presente, null quando não há.
+    // Vazio é negado (o cliente grava null); imutável como a avaliação.
+    function validComment(v) {
+      return v == null || (v is string && v.size() >= 1 && v.size() <= 280);
+    }
+
     function reviewKeys() {
       return ['authorId', 'authorName', 'placeId', 'placeName',
-              'food', 'ambience', 'service', 'companion', 'createdAt'];
+              'food', 'ambience', 'service', 'companion', 'comment', 'createdAt'];
     }
 
     function validReview(data) {
@@ -79,6 +85,7 @@ service cloud.firestore {
         && validScore(data.ambience)
         && validScore(data['service']) // 'service' é palavra reservada nas Rules
         && validCompanion(data.companion)
+        && validComment(data.comment)
         && data.createdAt == request.time;
     }
 

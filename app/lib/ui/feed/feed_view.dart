@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/feed.dart';
-import '../../domain/models/review.dart';
 import '../../routing/routes.dart';
 import 'feed_view_model.dart';
+import 'widgets/feed_card.dart';
 
 class FeedView extends StatefulWidget {
   const FeedView({super.key, required this.viewModel});
@@ -43,18 +43,37 @@ class _FeedViewState extends State<FeedView> {
     if (!mounted) return;
     if (saved == true) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Avaliação enviada! Quem segue você já pode ver.')),
+        const SnackBar(
+          content: Text('Avaliação enviada! Quem segue você já pode ver.'),
+        ),
       );
     }
     widget.viewModel.load();
   }
 
+  void _openPlace(FeedItem item) {
+    context.push(Routes.placeDetail(item.placeId), extra: item);
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = widget.viewModel;
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Amigos foram aqui'),
+        titleSpacing: 20,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'NaÁrea',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            Text('Amigos foram aqui', style: theme.textTheme.bodySmall),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Pessoas',
@@ -81,51 +100,63 @@ class _FeedViewState extends State<FeedView> {
             return const Center(child: CircularProgressIndicator());
           }
           if (vm.errorMessage != null && vm.items.isEmpty) {
-            return _Message(
-              icon: Icons.wifi_off,
-              text: vm.errorMessage!,
-              actionLabel: 'Tentar de novo',
-              onAction: vm.load,
-            );
-          }
-          if (vm.followsNobody) {
-            return _Message(
-              icon: Icons.group_add,
-              text: 'Siga pessoas para ver onde elas foram.',
-              actionLabel: 'Encontrar pessoas',
-              onAction: _openPeople,
-            );
-          }
-          if (vm.items.isEmpty) {
-            return RefreshIndicator(
+            return _PullToRefresh(
               onRefresh: vm.load,
-              child: ListView(
-                children: const [
-                  SizedBox(height: 120),
-                  _Message(
-                    icon: Icons.restaurant,
-                    text: 'Quem você segue ainda não avaliou nenhum lugar.',
-                  ),
-                ],
+              child: _Message(
+                icon: Icons.wifi_off,
+                text: vm.errorMessage!,
+                actionLabel: 'Tentar de novo',
+                onAction: vm.load,
               ),
             );
           }
+          if (vm.followsNobody) {
+            return _PullToRefresh(
+              onRefresh: vm.load,
+              child: _Message(
+                icon: Icons.group_add,
+                text: 'Siga pessoas para ver onde elas foram.',
+                actionLabel: 'Encontrar pessoas',
+                onAction: _openPeople,
+              ),
+            );
+          }
+          if (vm.items.isEmpty) {
+            return _PullToRefresh(
+              onRefresh: vm.load,
+              child: const _Message(
+                icon: Icons.restaurant,
+                text: 'Quem você segue ainda não avaliou nenhum lugar.',
+              ),
+            );
+          }
+          final now = vm.now();
+          final offset = vm.errorMessage != null ? 1 : 0;
           return RefreshIndicator(
             onRefresh: vm.load,
             child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-              itemCount: vm.items.length + (vm.errorMessage != null ? 1 : 0),
+              // Pull-to-refresh funciona mesmo com poucos cards.
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+              itemCount: vm.items.length + offset,
               itemBuilder: (context, i) {
-                if (vm.errorMessage != null && i == 0) {
+                if (offset == 1 && i == 0) {
                   return MaterialBanner(
                     content: Text(vm.errorMessage!),
                     actions: [
-                      TextButton(onPressed: vm.load, child: const Text('Tentar de novo')),
+                      TextButton(
+                        onPressed: vm.load,
+                        child: const Text('Tentar de novo'),
+                      ),
                     ],
                   );
                 }
-                final offset = vm.errorMessage != null ? 1 : 0;
-                return _FeedCard(item: vm.items[i - offset]);
+                final item = vm.items[i - offset];
+                return FeedCard(
+                  item: item,
+                  now: now,
+                  onTap: () => _openPlace(item),
+                );
               },
             ),
           );
@@ -135,89 +166,28 @@ class _FeedViewState extends State<FeedView> {
   }
 }
 
-class _FeedCard extends StatelessWidget {
-  const _FeedCard({required this.item});
+/// Estado vazio/erro que também aceita puxar para atualizar.
+class _PullToRefresh extends StatelessWidget {
+  const _PullToRefresh({required this.onRefresh, required this.child});
 
-  final FeedItem item;
+  final Future<void> Function() onRefresh;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: LayoutBuilder(
+        builder: (context, constraints) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            Text(item.placeName,
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text(item.headline,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w600)),
-            const Divider(height: 24),
-            for (final r in item.reviews) _ReviewTile(review: r),
+            ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(child: child),
+            ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ReviewTile extends StatelessWidget {
-  const _ReviewTile({required this.review});
-
-  final Review review;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final details = [
-      review.dayPeriod.label,
-      if (review.companion != null) review.companion!.label,
-    ].join(' · ');
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(review.authorName, style: theme.textTheme.titleSmall),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              _ScoreChip(label: 'Comida', value: review.scores.food),
-              _ScoreChip(label: 'Ambiente', value: review.scores.ambience),
-              _ScoreChip(label: 'Atendimento', value: review.scores.service),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(details, style: theme.textTheme.bodySmall),
-        ],
-      ),
-    );
-  }
-}
-
-class _ScoreChip extends StatelessWidget {
-  const _ScoreChip({required this.label, required this.value});
-
-  final String label;
-  final int value;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: scheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Text('$label $value/5',
-          style: TextStyle(color: scheme.onSecondaryContainer, fontSize: 13)),
     );
   }
 }
@@ -237,21 +207,28 @@ class _Message extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 56, color: Theme.of(context).colorScheme.outline),
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 40,
+            backgroundColor: scheme.primaryContainer,
+            child: Icon(icon, size: 40, color: scheme.primary),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          if (actionLabel != null) ...[
             const SizedBox(height: 16),
-            Text(text, textAlign: TextAlign.center),
-            if (actionLabel != null) ...[
-              const SizedBox(height: 16),
-              FilledButton(onPressed: onAction, child: Text(actionLabel!)),
-            ],
+            FilledButton(onPressed: onAction, child: Text(actionLabel!)),
           ],
-        ),
+        ],
       ),
     );
   }

@@ -125,6 +125,7 @@ void main() {
       authRepository: FakeAuthRepository(uid: 'toni'),
       userRepository: users,
       reviewRepository: reviews,
+      placeRepository: FakePlaceRepository([_place]),
     );
     await feed.load();
     final r = feed.items.single.reviews.single;
@@ -132,5 +133,62 @@ void main() {
     expect(r.scores, Scores(food: 5, ambience: 4, service: 3));
     // clock do fake: 23:00Z = 20:00 em Natal
     expect(r.dayPeriod, DayPeriod.noite);
+  });
+
+  group('comentário (opcional)', () {
+    void fill() => vm
+      ..setFood(5)
+      ..setAmbience(4)
+      ..setService(3);
+
+    test('sem comentário envia normalmente com comment null', () async {
+      fill();
+      expect(vm.canSubmit, isTrue);
+      expect(await vm.submit(), isTrue);
+      expect(reviews.created.single.comment, isNull);
+    });
+
+    test('só espaços conta como sem comentário', () async {
+      fill();
+      vm.setComment('   ');
+      expect(await vm.submit(), isTrue);
+      expect(reviews.created.single.comment, isNull);
+    });
+
+    test('comentário é enviado aparado', () async {
+      fill();
+      vm.setComment('  Camarão no ponto, fila grande.  ');
+      expect(await vm.submit(), isTrue);
+      expect(reviews.created.single.comment, 'Camarão no ponto, fila grande.');
+    });
+
+    test('acima de 280 (contagem UTF-16, igual às Rules): Enviar desabilitado', () async {
+      fill();
+      vm.setComment('😀' * 141);
+      expect(vm.commentTooLong, isTrue);
+      expect(vm.canSubmit, isFalse);
+      expect(await vm.submit(), isFalse);
+      expect(reviews.created, isEmpty);
+
+      vm.setComment('x' * 280);
+      expect(vm.commentTooLong, isFalse);
+      expect(vm.canSubmit, isTrue);
+    });
+
+    test('AC: comentário aparece no card de quem segue', () async {
+      users.followingByUser['toni'] = {'bianca'};
+      fill();
+      vm.setComment('Vale cada centavo');
+      await vm.submit();
+
+      final feed = FeedViewModel(
+        authRepository: FakeAuthRepository(uid: 'toni'),
+        userRepository: users,
+        reviewRepository: reviews,
+        placeRepository: FakePlaceRepository([_place]),
+      );
+      await feed.load();
+      expect(feed.items.single.latestComment?.comment, 'Vale cada centavo');
+    });
   });
 }

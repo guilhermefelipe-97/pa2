@@ -9,6 +9,7 @@ import '../support/fakes.dart';
 void main() {
   late FakeUserRepository users;
   late FakeReviewRepository reviews;
+  late FakePlaceRepository places;
   late FeedViewModel vm;
 
   setUp(() {
@@ -17,10 +18,15 @@ void main() {
       ..addUser('a', 'Ana')
       ..addUser('b', 'Beto');
     reviews = FakeReviewRepository();
+    places = FakePlaceRepository([
+      place(id: 'x', name: 'Mangai', neighborhood: 'Tirol', photoUrl: 'https://f/x.jpg'),
+    ]);
     vm = FeedViewModel(
       authRepository: FakeAuthRepository(uid: 'me'),
       userRepository: users,
       reviewRepository: reviews,
+      placeRepository: places,
+      clock: () => DateTime.utc(2026, 9, 28, 15),
     );
   });
 
@@ -104,5 +110,45 @@ void main() {
     users.followingByUser['me'] = {'me', 'a'};
     await vm.load();
     expect(reviews.fetchCalls.single, ['a']);
+  });
+
+  test('cards trazem o Place (foto, bairro) vindo do PlaceRepository', () async {
+    users.followingByUser['me'] = {'a'};
+    reviews.stored.add(review(authorId: 'a', placeId: 'x', placeName: 'Mangai'));
+    await vm.load();
+    expect(vm.items.single.place.photoUrl, 'https://f/x.jpg');
+    expect(vm.items.single.place.neighborhood, 'Tirol');
+  });
+
+  test('locais são lidos uma vez só e reaproveitados nas recargas', () async {
+    users.followingByUser['me'] = {'a'};
+    reviews.stored.add(review(authorId: 'a', placeId: 'x'));
+    await vm.load();
+    await vm.load();
+    expect(places.listCalls, 1);
+  });
+
+  test('falha ao ler locais não derruba o feed: card com fallback e nova tentativa depois', () async {
+    users.followingByUser['me'] = {'a'};
+    reviews.stored.add(review(authorId: 'a', placeId: 'x', placeName: 'Mangai'));
+    places.fail = true;
+    await vm.load();
+    expect(vm.errorMessage, isNull);
+    expect(vm.items.single.placeName, 'Mangai');
+    expect(vm.items.single.place.photoUrl, isNull);
+
+    places.fail = false;
+    await vm.load();
+    expect(places.listCalls, 2);
+    expect(vm.items.single.place.photoUrl, 'https://f/x.jpg');
+  });
+
+  test('não segue ninguém: não lê locais', () async {
+    await vm.load();
+    expect(places.listCalls, 0);
+  });
+
+  test('now() usa o relógio injetado (tempo relativo testável)', () {
+    expect(vm.now(), DateTime.utc(2026, 9, 28, 15));
   });
 }

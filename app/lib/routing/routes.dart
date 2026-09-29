@@ -6,5 +6,9 @@ abstract final class Routes {
   static const people = '/pessoas';
   static const pickPlace = '/avaliar';
 
+  static const placeDetailPattern = '/local/:placeId';
+
   static String reviewFor(String placeId) => '/avaliar/$placeId';
+
+  static String placeDetail(String placeId) => '/local/${Uri.encodeComponent(placeId)}';
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/models/companion.dart';
+import '../../domain/models/review.dart';
 import 'review_view_model.dart';
 
 class ReviewView extends StatelessWidget {
@@ -61,6 +63,25 @@ class ReviewView extends StatelessWidget {
                       onSelected: vm.isSubmitting ? null : (_) => vm.toggleCompanion(c),
                     ),
                 ],
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                key: const Key('review-comment'),
+                enabled: !vm.isSubmitting,
+                onChanged: vm.setComment,
+                minLines: 2,
+                maxLines: 5,
+                maxLength: Review.maxCommentLength,
+                // O maxLength do Flutter conta grafemas; as Rules contam
+                // unidades UTF-16. Este formatter garante a conta das Rules.
+                inputFormatters: const [Utf16LengthLimitingFormatter(Review.maxCommentLength)],
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Conta pra galera como foi (opcional)',
+                  hintText: 'Ex.: camarão no ponto, fila grande no sábado',
+                  alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -134,6 +155,28 @@ class _AxisPicker extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Limita o texto a [maxLength] unidades UTF-16 (`String.length`), a mesma
+/// conta do `size()` das Security Rules. Não corta um emoji ao meio.
+class Utf16LengthLimitingFormatter extends TextInputFormatter {
+  const Utf16LengthLimitingFormatter(this.maxLength);
+
+  final int maxLength;
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final text = newValue.text;
+    if (text.length <= maxLength) return newValue;
+    var cut = maxLength;
+    final last = text.codeUnitAt(cut - 1);
+    if (last >= 0xD800 && last <= 0xDBFF) cut--; // high surrogate sem par
+    final truncated = text.substring(0, cut);
+    return TextEditingValue(
+      text: truncated,
+      selection: TextSelection.collapsed(offset: truncated.length),
     );
   }
 }
