@@ -7,11 +7,13 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import 'data/firebase/firebase_auth_repository.dart';
+import 'data/firebase/firestore_lists_repository.dart';
 import 'data/firebase/firestore_place_repository.dart';
 import 'data/firebase/firestore_review_repository.dart';
 import 'data/firebase/firestore_saved_repository.dart';
 import 'data/firebase/firestore_user_repository.dart';
 import 'data/repositories/auth_repository.dart';
+import 'data/repositories/lists_repository.dart';
 import 'data/repositories/place_repository.dart';
 import 'data/repositories/review_repository.dart';
 import 'data/repositories/saved_repository.dart';
@@ -20,6 +22,7 @@ import 'firebase_config.dart';
 import 'firebase_options.dart';
 import 'routing/router.dart';
 import 'ui/core/theme.dart';
+import 'ui/lists/lists_store.dart';
 import 'ui/saved/saved_places_store.dart';
 
 /// `flutter run --dart-define=USE_EMULATOR=true` usa os emuladores locais
@@ -74,6 +77,17 @@ Future<void> main() async {
           create: (context) => SavedPlacesStore(
             authRepository: authRepository,
             savedRepository: context.read(),
+          ),
+        ),
+        Provider<ListsRepository>(create: (_) => FirestoreListsRepository(db)),
+        // Listas nomeadas (F12): coerentes com o "Quero ir" (assume a remoção
+        // em batch do SavedPlacesStore).
+        ChangeNotifierProvider<ListsStore>(
+          lazy: false,
+          create: (context) => ListsStore(
+            authRepository: authRepository,
+            listsRepository: context.read(),
+            savedStore: context.read(),
           ),
         ),
       ],

@@ -56,6 +56,45 @@ service cloud.firestore {
         allow delete: if isOwner(uid);
         allow update: if false;
       }
+
+      // Listas nomeadas (F12): privadas, subconjunto do "Quero ir" (o app
+      // mantém a coerência; remover do Quero ir tira das listas num batch).
+      // Nome único sem caixa/acento e o máximo de 30 listas são do app.
+      match /lists/{listId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && validList(request.resource.data)
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time;
+        allow update: if isOwner(uid)
+          && validList(request.resource.data)
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if isOwner(uid);
+      }
+    }
+
+    function listKeys() {
+      return ['name', 'emoji', 'placeIds', 'createdAt', 'updatedAt'];
+    }
+
+    // MESMA lista de `listEmojis` em app/lib/domain/models/place_list.dart.
+    function listEmojis() {
+      return ['🎉', '🍕', '🍔', '🍣', '🍻', '☕', '🍰', '🌮', '🌊', '💑', '👯', '⭐'];
+    }
+
+    function validList(data) {
+      return data.keys().hasOnly(listKeys())
+        && data.keys().hasAll(listKeys())
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 40
+        && data.name == data.name.trim()
+        // O app colapsa espaços internos repetidos.
+        && !data.name.matches('.*\\s\\s.*')
+        && (data.emoji == null || data.emoji in listEmojis())
+        && data.placeIds is list
+        && data.placeIds.size() <= 200;
     }
 
     // ---------- places (somente seed/admin escreve) ----------

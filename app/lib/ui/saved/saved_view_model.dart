@@ -1,6 +1,8 @@
 import '../../data/repositories/place_repository.dart';
 import '../../domain/models/place.dart';
+import '../../domain/models/place_list.dart';
 import '../core/safe_change_notifier.dart';
+import '../lists/lists_store.dart';
 import 'saved_places_store.dart';
 
 /// Um item da aba "Quero ir".
@@ -9,16 +11,19 @@ typedef SavedItem = ({Place place, DateTime savedAt});
 /// Aba "Quero ir" (F11): os salvos do [SavedPlacesStore], do mais recente
 /// para o mais antigo, com os dados do local. Salvo que aponta para um local
 /// que sumiu do catálogo é omitido (e revalidado no "Tentar de novo" e ao
-/// puxar para atualizar).
+/// puxar para atualizar). Com o [ListsStore] (F12), chips filtram por lista.
 class SavedViewModel extends SafeChangeNotifier {
   SavedViewModel({
     required SavedPlacesStore store,
     required PlaceRepository placeRepository,
+    ListsStore? lists,
     DateTime Function()? clock,
   }) : _store = store,
        _places = placeRepository,
+       _lists = lists,
        _clock = clock ?? DateTime.now {
     _store.addListener(_onStoreChanged);
+    _lists?.addListener(notifyListeners);
     _onStoreChanged();
   }
 
@@ -27,7 +32,44 @@ class SavedViewModel extends SafeChangeNotifier {
 
   final SavedPlacesStore _store;
   final PlaceRepository _places;
+  final ListsStore? _lists;
   final DateTime Function() _clock;
+
+  ListsStore? get listsStore => _lists;
+
+  String? _selectedListId;
+
+  /// Listas para os chips (vazio sem listas ou antes de carregar).
+  List<PlaceList> get lists =>
+      _lists != null && _lists.isReady ? _lists.lists : const [];
+
+  /// Lista do chip ativo; `null` = "Todos". Lista que sumiu (excluída,
+  /// troca de usuário) volta para "Todos".
+  PlaceList? get selectedList {
+    final id = _selectedListId;
+    if (id == null) return null;
+    return _lists?.listById(id);
+  }
+
+  void selectList(String? listId) {
+    if (listId == _selectedListId) return;
+    _selectedListId = listId;
+    notifyListeners();
+  }
+
+  /// Cards visíveis da lista (salvos e resolvidos no catálogo): o número do
+  /// chip bate com o que aparece ao filtrar.
+  int countOf(PlaceList list) =>
+      _allItems.where((i) => list.contains(i.place.id)).length;
+
+  /// Cards visíveis em "Todos".
+  int get savedCount => _allItems.length;
+
+  /// Listas não carregaram (banner discreto acima dos cards).
+  bool get listsFailed => _lists?.hasError ?? false;
+
+  /// "Tentar de novo" do banner das listas.
+  Future<void> retryLists() => _lists?.reload() ?? Future.value();
 
   /// "Agora" para o "salvo há…" (injetável nos testes).
   DateTime now() => _clock();
@@ -44,11 +86,42 @@ class SavedViewModel extends SafeChangeNotifier {
   bool _fetching = false;
   bool get _placesFailed => _failedIds.isNotEmpty;
 
-  List<SavedItem> get items => [
+  /// Salvos do filtro ativo, do mais recente para o mais antigo.
+  List<SavedItem> get items {
+    final list = selectedList;
+    return [
+      for (final e in _store.entries)
+        if (list == null || list.contains(e.placeId))
+          if (_resolved[e.placeId] case final Place p)
+            (place: p, savedAt: e.savedAt),
+    ];
+  }
+
+  /// Todos os salvos resolvidos, sem filtro.
+  List<SavedItem> get _allItems => [
     for (final e in _store.entries)
       if (_resolved[e.placeId] case final Place p)
         (place: p, savedAt: e.savedAt),
   ];
+
+  /// Lista ativa com locais salvos ainda sem dados do catálogo (mostra
+  /// carregando, não "Nada nesta lista ainda").
+  bool get isListLoading {
+    final list = selectedList;
+    if (list == null || !_store.isReady || _placesFailed) return false;
+    return list.placeIds.any(
+      (id) => _store.isSaved(id) && !_resolved.containsKey(id),
+    );
+  }
+
+  /// Lista ativa sem nenhum local (salvo e resolvido).
+  bool get isListEmpty =>
+      selectedList != null &&
+      _store.isReady &&
+      items.isEmpty &&
+      !_placesFailed &&
+      !isLoading &&
+      !isListLoading;
 
   Set<String> get _unresolved => {
     for (final e in _store.entries)
@@ -58,7 +131,7 @@ class SavedViewModel extends SafeChangeNotifier {
   bool get isLoading =>
       (!_store.isReady && !_store.hasError) ||
       (_store.isReady &&
-          items.isEmpty &&
+          _allItems.isEmpty &&
           _unresolved.isNotEmpty &&
           !_placesFailed);
 
@@ -66,7 +139,10 @@ class SavedViewModel extends SafeChangeNotifier {
       _store.hasError || _placesFailed ? errorText : null;
 
   bool get isEmpty =>
-      _store.isReady && _unresolved.isEmpty && items.isEmpty && !_placesFailed;
+      _store.isReady &&
+      _unresolved.isEmpty &&
+      _allItems.isEmpty &&
+      !_placesFailed;
 
   /// "Tentar de novo" e puxar para atualizar: relê os salvos e revalida os
   /// locais dados como ausentes.
@@ -77,7 +153,7 @@ class SavedViewModel extends SafeChangeNotifier {
         if (e.value == null) e.key,
     ]);
     notifyListeners();
-    await _store.reload();
+    await Future.wait([_store.reload(), ?_lists?.reload()]);
     if (isDisposed) return;
     await _resolveMissing();
   }
@@ -125,6 +201,7 @@ class SavedViewModel extends SafeChangeNotifier {
   @override
   void dispose() {
     _store.removeListener(_onStoreChanged);
+    _lists?.removeListener(notifyListeners);
     super.dispose();
   }
 }

@@ -4,6 +4,7 @@ import 'package:naarea/domain/feed.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/routing/routes.dart';
 import 'package:naarea/ui/feed/feed_view.dart';
+import 'package:naarea/ui/lists/add_to_list_sheet.dart';
 import 'package:naarea/ui/people/people_view.dart';
 import 'package:naarea/ui/place/place_detail_view.dart';
 import 'package:naarea/ui/review/place_picker_view.dart';
@@ -407,6 +408,127 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       final app2 = await pumpApp(tester, places: [_mangai], saved: saved);
       app2.router.go(Routes.saved);
+      await tester.pumpAndSettle();
+      expect(find.byType(SavedCard), findsOneWidget);
+      expect(find.text('Mangai'), findsOneWidget);
+    });
+  });
+
+  group('AC listas nomeadas', () {
+    testWidgets(
+      'salvar no feed, "Adicionar a lista" na SnackBar, criar "Sábado com as '
+      'meninas": o chip aparece e filtra o local',
+      (tester) async {
+        final data = _anaFoiNoMangai();
+        final saved = FakeSavedRepository()
+          ..seed('me', 'antigo', DateTime.utc(2026, 9, 1));
+        final app = await pumpApp(
+          tester,
+          users: data.users,
+          reviews: data.reviews,
+          places: [
+            _mangai,
+            const Place(
+              id: 'antigo',
+              name: 'Beco da Lama',
+              category: 'Bar',
+              neighborhood: 'Cidade Alta',
+              city: 'Natal',
+            ),
+          ],
+          saved: saved,
+          clock: () => DateTime.utc(2026, 9, 28, 15),
+        );
+
+        await tester.tap(find.byKey(const Key('save-mangai')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 750));
+        expect(find.text('Salvo em Quero ir'), findsOneWidget);
+        expect(find.text('Desfazer'), findsOneWidget);
+        await tester.tap(find.text('Adicionar a lista'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddToListSheet), findsOneWidget);
+        await tester.tap(find.byKey(const Key('new-list')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const Key('list-name-field')),
+          '  Sábado com as meninas ',
+        );
+        await tester.tap(find.byKey(const Key('list-emoji-🎉')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('list-name-submit')));
+        await tester.pumpAndSettle();
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pumpAndSettle();
+
+        await tester.tap(_tab('Quero ir'));
+        await tester.pumpAndSettle();
+        final list = app.lists.byUser['me']!.values.single;
+        final chip = find.byKey(Key('list-chip-${list.id}'));
+        expect(
+          find.descendant(
+            of: chip,
+            matching: find.text('🎉 Sábado com as meninas · 1'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.byType(SavedCard), findsNWidgets(2));
+
+        await tester.tap(chip);
+        await tester.pumpAndSettle();
+        expect(find.byType(SavedCard), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(SavedCard),
+            matching: find.text('Mangai'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('app reaberto: as listas e seus locais continuam lá', (
+      tester,
+    ) async {
+      final saved = FakeSavedRepository();
+      final lists = FakeListsRepository(saved: saved);
+      final places = [
+        _mangai,
+        const Place(
+          id: 'antigo',
+          name: 'Beco da Lama',
+          category: 'Bar',
+          neighborhood: 'Cidade Alta',
+          city: 'Natal',
+        ),
+      ];
+      // Sessão 1: salva os dois e põe o Mangai numa lista nova.
+      final app1 = await pumpApp(
+        tester,
+        places: places,
+        saved: saved,
+        lists: lists,
+      );
+      final store = app1.listsStore(tester);
+      app1.store(tester).setSaved('antigo', true);
+      await store.create('Sábado', withPlace: 'mangai')!.done;
+      await tester.pumpAndSettle();
+
+      // Sessão 2: app novo, mesmo "servidor".
+      await tester.pumpWidget(const SizedBox());
+      final app2 = await pumpApp(
+        tester,
+        places: places,
+        saved: saved,
+        lists: lists,
+      );
+      app2.router.go(Routes.saved);
+      await tester.pumpAndSettle();
+      expect(find.byType(SavedCard), findsNWidgets(2));
+      final id = lists.byUser['me']!.keys.single;
+      expect(find.text('Sábado · 1'), findsOneWidget);
+      await tester.tap(find.byKey(Key('list-chip-$id')));
       await tester.pumpAndSettle();
       expect(find.byType(SavedCard), findsOneWidget);
       expect(find.text('Mangai'), findsOneWidget);

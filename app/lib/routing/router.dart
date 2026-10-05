@@ -10,6 +10,7 @@ import '../ui/core/app_shell.dart';
 import '../ui/core/view_model_host.dart';
 import '../ui/feed/feed_view.dart';
 import '../ui/feed/feed_view_model.dart';
+import '../ui/lists/lists_store.dart';
 import '../ui/place/place_detail_view.dart';
 import '../ui/place/place_detail_view_model.dart';
 import '../ui/people/people_view.dart';
@@ -99,6 +100,7 @@ GoRouter buildRouter(AuthRepository auth) {
                   create: (context) => SavedViewModel(
                     store: context.read(),
                     placeRepository: context.read(),
+                    lists: context.read<ListsStore?>(),
                   ),
                   builder: (context, vm) => SavedView(viewModel: vm),
                 ),

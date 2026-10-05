@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:naarea/data/repositories/auth_repository.dart';
+import 'package:naarea/data/repositories/lists_repository.dart';
 import 'package:naarea/data/repositories/place_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
 import 'package:naarea/data/repositories/saved_repository.dart';
@@ -9,6 +10,7 @@ import 'package:naarea/data/repositories/user_repository.dart';
 import 'package:naarea/domain/feed.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/routing/router.dart';
+import 'package:naarea/ui/lists/lists_store.dart';
 import 'package:naarea/ui/place/place_detail_view_model.dart';
 import 'package:naarea/ui/saved/saved_places_store.dart';
 import 'package:provider/provider.dart';
@@ -23,6 +25,7 @@ class TestApp {
     required this.reviews,
     required this.places,
     required this.saved,
+    required this.lists,
     required this.router,
   });
 
@@ -31,9 +34,15 @@ class TestApp {
   final FakeReviewRepository reviews;
   final FakePlaceRepository places;
   final FakeSavedRepository saved;
+  final FakeListsRepository lists;
   final GoRouter router;
 
   SavedPlacesStore store(WidgetTester tester) => Provider.of<SavedPlacesStore>(
+    tester.element(find.byType(Navigator).first),
+    listen: false,
+  );
+
+  ListsStore listsStore(WidgetTester tester) => Provider.of<ListsStore>(
     tester.element(find.byType(Navigator).first),
     listen: false,
   );
@@ -47,6 +56,7 @@ Future<TestApp> pumpApp(
   List<Place> places = const [],
   FakePlaceRepository? placeRepository,
   FakeSavedRepository? saved,
+  FakeListsRepository? lists,
   DateTime Function()? clock,
 }) async {
   final u = users ?? (FakeUserRepository()..addUser('me', 'Eu'));
@@ -54,6 +64,7 @@ Future<TestApp> pumpApp(
   final r = reviews ?? FakeReviewRepository();
   final p = placeRepository ?? FakePlaceRepository(places);
   final s = saved ?? FakeSavedRepository();
+  final l = lists ?? FakeListsRepository(saved: s);
   final router = buildRouter(auth);
   await tester.pumpWidget(
     MultiProvider(
@@ -71,6 +82,16 @@ Future<TestApp> pumpApp(
             clock: clock,
           ),
         ),
+        Provider<ListsRepository>.value(value: l),
+        ChangeNotifierProvider<ListsStore>(
+          lazy: false,
+          create: (context) => ListsStore(
+            authRepository: auth,
+            listsRepository: l,
+            savedStore: context.read(),
+            clock: clock,
+          ),
+        ),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -82,6 +103,7 @@ Future<TestApp> pumpApp(
     reviews: r,
     places: p,
     saved: s,
+    lists: l,
     router: router,
   );
 }

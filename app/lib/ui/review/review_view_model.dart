@@ -5,6 +5,7 @@ import '../../domain/models/companion.dart';
 import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart';
+import '../core/messages.dart';
 import '../core/safe_change_notifier.dart';
 
 /// Avaliação em 3 eixos (F01) com contexto (F02) e comentário opcional.
@@ -23,7 +24,7 @@ class ReviewViewModel extends SafeChangeNotifier {
   final UserRepository _users;
   final ReviewRepository _reviews;
 
-  static const String saveError = 'Não foi possível salvar';
+  static const String saveError = saveFailureMessage;
 
   int? _food;
   int? _ambience;

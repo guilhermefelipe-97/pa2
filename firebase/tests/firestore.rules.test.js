@@ -21,6 +21,9 @@ const {
   orderBy,
   limit,
   getDocs,
+  arrayUnion,
+  arrayRemove,
+  writeBatch,
 } = require('firebase/firestore');
 
 const PROJECT_ID = 'demo-naarea';
@@ -227,6 +230,154 @@ describe('users/{uid}/saved/{placeId} (Quero ir)', () => {
     await assertFails(getDoc(doc(anon(), 'users/alice/saved/camaroes')));
     await assertFails(deleteDoc(doc(bob(), 'users/alice/saved/camaroes')));
     await assertSucceeds(deleteDoc(doc(alice(), 'users/alice/saved/camaroes')));
+  });
+});
+
+describe('users/{uid}/lists/{listId} (listas nomeadas)', () => {
+  const LIST = 'users/alice/lists/sabado';
+
+  function newList(overrides = {}) {
+    return {
+      name: 'Sábado com as meninas',
+      emoji: '🎉',
+      placeIds: ['camaroes'],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      ...overrides,
+    };
+  }
+
+  async function seedList(data = {}) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), LIST), {
+        name: 'Sábado com as meninas',
+        emoji: '🎉',
+        placeIds: ['camaroes'],
+        createdAt: Timestamp.fromMillis(1000),
+        updatedAt: Timestamp.fromMillis(1000),
+        ...data,
+      });
+    });
+  }
+
+  it('dono cria com nome, emoji, placeIds e datas do servidor', async () => {
+    await assertSucceeds(setDoc(doc(alice(), LIST), newList()));
+  });
+
+  it('emoji é opcional (null) e placeIds pode começar vazio', async () => {
+    await assertSucceeds(setDoc(doc(alice(), LIST), newList({ emoji: null, placeIds: [] })));
+  });
+
+  it('outro usuário e anônimo não criam na minha conta', async () => {
+    await assertFails(setDoc(doc(bob(), LIST), newList()));
+    await assertFails(setDoc(doc(anon(), LIST), newList()));
+  });
+
+  it('chaves exatas: nem extra, nem faltando', async () => {
+    await assertFails(setDoc(doc(alice(), LIST), newList({ public: true })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ note: 'x' })));
+    const { emoji, ...noEmoji } = newList();
+    await assertFails(setDoc(doc(alice(), LIST), noEmoji));
+    const { updatedAt, ...noUpdated } = newList();
+    await assertFails(setDoc(doc(alice(), LIST), noUpdated));
+  });
+
+  it('nome: string de 1 a 40 caracteres, aparado', async () => {
+    await assertFails(setDoc(doc(alice(), LIST), newList({ name: '' })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ name: 'a'.repeat(41) })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ name: ' Sábado' })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ name: 'Sábado ' })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ name: 42 })));
+    await assertSucceeds(setDoc(doc(alice(), LIST), newList({ name: 'a'.repeat(40) })));
+  });
+
+  it('emoji: null ou um dos 12 fixos do app', async () => {
+    await assertFails(setDoc(doc(alice(), LIST), newList({ emoji: '' })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ emoji: 'abc' })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ emoji: '😀' })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ emoji: 'x'.repeat(9) })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ emoji: 7 })));
+    for (const e of ['🎉', '🍕', '🍔', '🍣', '🍻', '☕', '🍰', '🌮', '🌊', '💑', '👯', '⭐']) {
+      await assertSucceeds(setDoc(doc(alice(), 'users/alice/lists/e' + e.codePointAt(0)), newList({ emoji: e })));
+    }
+  });
+
+  it('nome sem espaços internos repetidos (normalizado pelo app)', async () => {
+    await assertFails(setDoc(doc(alice(), LIST), newList({ name: 'Sábado  com as meninas' })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ name: 'Sábado\t\tcom' })));
+    await assertSucceeds(setDoc(doc(alice(), LIST), newList({ name: 'Sábado com as meninas' })));
+  });
+
+  it('placeIds: lista de até 200', async () => {
+    await assertFails(setDoc(doc(alice(), LIST), newList({ placeIds: 'camaroes' })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ placeIds: { a: 1 } })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ placeIds: null })));
+    const many = Array.from({ length: 201 }, (_, i) => 'p' + i);
+    await assertFails(setDoc(doc(alice(), LIST), newList({ placeIds: many })));
+    await assertSucceeds(setDoc(doc(alice(), LIST), newList({ placeIds: many.slice(0, 200) })));
+  });
+
+  it('datas do servidor na criação', async () => {
+    await assertFails(setDoc(doc(alice(), LIST), newList({ createdAt: Timestamp.fromMillis(0) })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ updatedAt: Timestamp.fromMillis(0) })));
+  });
+
+  it('dono renomeia e mexe nos membros com updatedAt do servidor', async () => {
+    await seedList();
+    await assertSucceeds(updateDoc(doc(alice(), LIST), { name: 'Sábado', emoji: null, updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(alice(), LIST), { placeIds: arrayUnion('outro'), updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(alice(), LIST), { placeIds: arrayRemove('camaroes'), updatedAt: serverTimestamp() }));
+  });
+
+  it('update sem updatedAt do servidor é negado', async () => {
+    await seedList();
+    await assertFails(updateDoc(doc(alice(), LIST), { name: 'Sábado' }));
+    await assertFails(updateDoc(doc(alice(), LIST), { name: 'Sábado', updatedAt: Timestamp.fromMillis(5000) }));
+  });
+
+  it('createdAt é imutável', async () => {
+    await seedList();
+    await assertFails(updateDoc(doc(alice(), LIST), { createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(alice(), LIST), { createdAt: Timestamp.fromMillis(2000), updatedAt: serverTimestamp() }));
+  });
+
+  it('update valida nome, chaves e tamanho dos membros', async () => {
+    await seedList();
+    await assertFails(updateDoc(doc(alice(), LIST), { name: '', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(alice(), LIST), { name: 'a'.repeat(41), updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(alice(), LIST), { extra: 1, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(alice(), LIST), { placeIds: 'x', updatedAt: serverTimestamp() }));
+    await seedList({ placeIds: Array.from({ length: 200 }, (_, i) => 'p' + i) });
+    await assertFails(updateDoc(doc(alice(), LIST), { placeIds: arrayUnion('p200'), updatedAt: serverTimestamp() }));
+  });
+
+  it('terceiro não lê, não lista, não altera nem exclui', async () => {
+    await seedList();
+    await assertFails(getDoc(doc(bob(), LIST)));
+    await assertFails(getDocs(collection(bob(), 'users/alice/lists')));
+    await assertFails(getDoc(doc(anon(), LIST)));
+    await assertFails(updateDoc(doc(bob(), LIST), { name: 'Hack', updatedAt: serverTimestamp() }));
+    await assertFails(deleteDoc(doc(bob(), LIST)));
+  });
+
+  it('dono lê, lista e exclui', async () => {
+    await seedList();
+    await assertSucceeds(getDoc(doc(alice(), LIST)));
+    const mine = await assertSucceeds(getDocs(collection(alice(), 'users/alice/lists')));
+    if (mine.size !== 1) throw new Error('esperava 1 lista, veio ' + mine.size);
+    await assertSucceeds(deleteDoc(doc(alice(), LIST)));
+  });
+
+  it('remover do Quero ir e das listas num único batch', async () => {
+    await seedList();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users/alice/saved/camaroes'), { createdAt: Timestamp.now() });
+    });
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'users/alice/saved/camaroes'));
+    batch.update(doc(db, LIST), { placeIds: arrayRemove('camaroes'), updatedAt: serverTimestamp() });
+    await assertSucceeds(batch.commit());
   });
 });
 

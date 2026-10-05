@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../lists/add_to_list_sheet.dart';
+import '../lists/lists_store.dart';
 import '../saved/saved_places_store.dart';
+import 'messages.dart';
 
 /// Visual do marcador conforme o fundo.
 enum SaveButtonStyle {
@@ -30,7 +33,7 @@ class SaveButton extends StatelessWidget {
 
   static const savedMessage = 'Salvo em Quero ir';
   static const removedMessage = 'Removido de Quero ir';
-  static const failureMessage = 'Não foi possível salvar';
+  static const failureMessage = saveFailureMessage;
   static const saveLabel = 'Salvar em Quero ir';
   static const removeLabel = 'Remover de Quero ir';
 
@@ -66,7 +69,7 @@ class SaveButton extends StatelessWidget {
 
     final button = IconButton(
       key: Key('save-$placeId'),
-      onPressed: enabled ? () => _onPressed(context, store) : null,
+      onPressed: enabled ? () => _onPressed(context) : null,
       icon: icon,
       style: style == SaveButtonStyle.onImage
           ? IconButton.styleFrom(
@@ -82,44 +85,128 @@ class SaveButton extends StatelessWidget {
       toggled: saved,
       enabled: enabled,
       label: label,
-      onTap: enabled ? () => _onPressed(context, store) : null,
+      onTap: enabled ? () => _onPressed(context) : null,
       excludeSemantics: true,
       child: Tooltip(message: label, excludeFromSemantics: true, child: button),
     );
   }
 
-  Future<void> _onPressed(BuildContext context, SavedPlacesStore store) async {
+  void _onPressed(BuildContext context) {
+    QueroIrActions.toggle(context, placeId);
+  }
+}
+
+/// Fluxos do "Quero ir" compartilhados pelo marcador e pelo menu do card da
+/// aba: troca otimista, SnackBar com "Desfazer" (e "Adicionar a lista" ao
+/// salvar, F12), aviso de falha.
+abstract final class QueroIrActions {
+  static const addToListLabel = 'Adicionar a lista';
+  static const undoLabel = 'Desfazer';
+
+  /// "Removido de Quero ir" / "... e de 1 lista" / "... e de 2 listas".
+  static String removedMessageFor(int lists) => switch (lists) {
+    0 => SaveButton.removedMessage,
+    1 => '${SaveButton.removedMessage} e de 1 lista',
+    _ => '${SaveButton.removedMessage} e de $lists listas',
+  };
+
+  /// Inverte o estado de [placeId].
+  static Future<void> toggle(BuildContext context, String placeId) =>
+      _change(context, placeId, null);
+
+  /// Tira [placeId] do "Quero ir" (e de todas as listas, no mesmo batch).
+  static Future<void> remove(BuildContext context, String placeId) =>
+      _change(context, placeId, false);
+
+  static Future<void> _change(
+    BuildContext context,
+    String placeId,
+    bool? target,
+  ) async {
+    final store = context.read<SavedPlacesStore?>();
+    if (store == null) return;
+    final lists = context.read<ListsStore?>();
     final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final actionColor = Theme.of(context).colorScheme.inversePrimary;
     if (!store.isReady) {
       // Carga inicial falhou: tenta de novo antes de desistir.
       await store.reload();
       if (!store.isReady) {
-        _show(messenger, const SnackBar(content: Text(failureMessage)));
+        _show(messenger, const SnackBar(content: Text(saveFailureMessage)));
         return;
       }
     }
-    final change = store.toggle(placeId);
-    if (change == null) return;
+    final saved = target ?? !store.isSaved(placeId);
+    if (saved == store.isSaved(placeId)) return;
+    // Listas de onde o local sai junto (para a mensagem e o "Desfazer").
+    final fromLists = saved || lists == null
+        ? const <String>[]
+        : [for (final l in lists.listsContaining(placeId)) l.id];
+    final done = store.setSaved(placeId, saved);
+
     // Confirmação já no toque (otimista): offline o Future da escrita só
     // completa quando a rede voltar.
     var undone = false;
-    _show(
-      messenger,
-      SnackBar(
-        content: Text(change.saved ? savedMessage : removedMessage),
+    void undo() {
+      // Daqui em diante só o resultado do Desfazer é reportado.
+      undone = true;
+      if (!saved && lists != null) {
+        _reportRestore(messenger, lists.restore(placeId, fromLists));
+      } else {
+        _report(messenger, store.setSaved(placeId, !saved));
+      }
+    }
+
+    void undoFromContent() {
+      messenger.hideCurrentSnackBar();
+      undo();
+    }
+
+    final SnackBar bar;
+    if (saved && lists != null) {
+      bar = SnackBar(
+        content: Row(
+          children: [
+            const Expanded(child: Text(SaveButton.savedMessage)),
+            // "Adicionar a lista" é a action; o "Desfazer" fica no conteúdo,
+            // como botão acessível (rótulo, toque e foco de teclado).
+            Semantics(
+              container: true,
+              button: true,
+              label: undoLabel,
+              onTap: undoFromContent,
+              excludeSemantics: true,
+              child: TextButton(
+                key: const Key('snackbar-undo'),
+                style: TextButton.styleFrom(foregroundColor: actionColor),
+                onPressed: undoFromContent,
+                child: const Text(undoLabel),
+              ),
+            ),
+          ],
+        ),
         action: SnackBarAction(
-          label: 'Desfazer',
+          label: addToListLabel,
           onPressed: () {
-            // Daqui em diante só o resultado do Desfazer é reportado.
-            undone = true;
-            _report(messenger, store.setSaved(placeId, !change.saved));
+            if (navigator.mounted) {
+              showAddToListSheet(navigator.context, placeId);
+            }
           },
         ),
-      ),
-    );
-    final ok = await change.done;
+      );
+    } else {
+      bar = SnackBar(
+        content: Text(
+          saved ? SaveButton.savedMessage : removedMessageFor(fromLists.length),
+        ),
+        action: SnackBarAction(label: undoLabel, onPressed: undo),
+      );
+    }
+    _show(messenger, bar);
+    final ok = await done;
     if (!ok && !undone) {
-      _show(messenger, const SnackBar(content: Text(failureMessage)));
+      _show(messenger, const SnackBar(content: Text(saveFailureMessage)));
     }
   }
 
@@ -128,8 +215,20 @@ class SaveButton extends StatelessWidget {
     Future<bool> done,
   ) async {
     if (!await done) {
-      _show(messenger, const SnackBar(content: Text(failureMessage)));
+      _show(messenger, const SnackBar(content: Text(saveFailureMessage)));
     }
+  }
+
+  static Future<void> _reportRestore(
+    ScaffoldMessengerState messenger,
+    Future<RestoreResult> done,
+  ) async {
+    final message = switch (await done) {
+      RestoreResult.ok => null,
+      RestoreResult.savedFailed => saveFailureMessage,
+      RestoreResult.someListsFailed => restoreListsFailureMessage,
+    };
+    if (message != null) _show(messenger, SnackBar(content: Text(message)));
   }
 
   static void _show(ScaffoldMessengerState messenger, SnackBar bar) {

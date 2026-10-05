@@ -2,11 +2,13 @@
 import 'dart:async';
 
 import 'package:naarea/data/repositories/auth_repository.dart';
+import 'package:naarea/data/repositories/lists_repository.dart';
 import 'package:naarea/data/repositories/place_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
 import 'package:naarea/data/repositories/saved_repository.dart';
 import 'package:naarea/data/repositories/user_repository.dart';
 import 'package:naarea/domain/models/place.dart';
+import 'package:naarea/domain/models/place_list.dart';
 import 'package:naarea/domain/models/review.dart';
 import 'package:naarea/domain/models/user_profile.dart';
 import 'package:naarea/domain/search_tokens.dart';
@@ -146,6 +148,9 @@ class FakePlaceRepository implements PlaceRepository {
   /// Permite controlar quando/como cada busca responde (ex.: Completer).
   Future<List<Place>> Function(String query)? searchOverride;
 
+  /// Segura cada `getPlaces` até ser liberado.
+  Completer<void>? getGate;
+
   @override
   Future<List<Place>> search(String query) async {
     searchCalls.add(query);
@@ -176,6 +181,8 @@ class FakePlaceRepository implements PlaceRepository {
     final wanted = ids.toSet();
     getCalls.add(wanted);
     refreshMissingCalls.add(refreshMissing);
+    final gate = getGate;
+    if (gate != null) await gate.future;
     if (fail) throw Exception('network');
     return {
       for (final p in places)
@@ -314,4 +321,153 @@ class FakeSavedRepository implements SavedRepository {
   @override
   Future<void> remove({required String uid, required String placeId}) =>
       _write(placeId, 'remove', () => byUser[uid]?.remove(placeId));
+}
+
+class FakeListsRepository implements ListsRepository {
+  FakeListsRepository({this.saved});
+
+  /// Para o batch "remover de tudo" apagar o salvo junto.
+  final FakeSavedRepository? saved;
+
+  /// uid → (listId → lista).
+  final Map<String, Map<String, PlaceList>> byUser = {};
+  DateTime Function() clock = () => DateTime.utc(2026, 9, 28, 15);
+
+  Object? listError;
+  Object? writeError;
+
+  /// Falha só as escritas cujo rótulo (ex.: `add:a:mangai`) casar.
+  bool Function(String op)? failWhen;
+  int listCalls = 0;
+  int _ids = 0;
+  final List<String> writes = [];
+
+  /// Segura cada escrita até ser liberada.
+  Completer<void>? writeGate;
+
+  PlaceList seed(
+    String uid,
+    String id,
+    String name, {
+    String? emoji,
+    List<String> placeIds = const [],
+    DateTime? createdAt,
+  }) {
+    final list = PlaceList(
+      id: id,
+      name: name,
+      emoji: emoji,
+      placeIds: [...placeIds],
+      createdAt:
+          createdAt ??
+          DateTime.utc(
+            2026,
+            9,
+            1,
+          ).add(Duration(minutes: byUser[uid]?.length ?? 0)),
+    );
+    byUser.putIfAbsent(uid, () => {})[id] = list;
+    return list;
+  }
+
+  PlaceList? get(String uid, String id) => byUser[uid]?[id];
+
+  @override
+  String newListId(String uid) => 'list-${++_ids}';
+
+  @override
+  Future<List<PlaceList>> listLists(String uid) async {
+    listCalls++;
+    if (listError != null) throw listError!;
+    return [...(byUser[uid] ?? const <String, PlaceList>{}).values]
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  }
+
+  Future<void> _write(String op, void Function() apply) async {
+    writes.add(op);
+    final gate = writeGate;
+    if (gate != null) await gate.future;
+    if (writeError != null) throw writeError!;
+    if (failWhen?.call(op) ?? false) throw Exception('permission-denied');
+    apply();
+  }
+
+  PlaceList _existing(String uid, String listId) {
+    final l = byUser[uid]?[listId];
+    if (l == null) throw Exception('not-found: $listId');
+    return l;
+  }
+
+  @override
+  Future<void> createList({
+    required String uid,
+    required String listId,
+    required String name,
+    required String? emoji,
+    required List<String> placeIds,
+  }) => _write('create:$listId', () {
+    if (byUser[uid]?.containsKey(listId) ?? false) {
+      throw Exception('permission-denied: update');
+    }
+    byUser.putIfAbsent(uid, () => {})[listId] = PlaceList(
+      id: listId,
+      name: name,
+      emoji: emoji,
+      placeIds: [...placeIds],
+      createdAt: clock(),
+    );
+  });
+
+  @override
+  Future<void> updateList({
+    required String uid,
+    required String listId,
+    required String name,
+    required String? emoji,
+  }) => _write('update:$listId', () {
+    byUser[uid]![listId] = _existing(
+      uid,
+      listId,
+    ).copyWith(name: name, emoji: () => emoji);
+  });
+
+  @override
+  Future<void> deleteList({required String uid, required String listId}) =>
+      _write('delete:$listId', () => byUser[uid]?.remove(listId));
+
+  @override
+  Future<void> setMembership({
+    required String uid,
+    required String listId,
+    required String placeId,
+    required bool member,
+  }) => _write('${member ? 'add' : 'drop'}:$listId:$placeId', () {
+    final l = _existing(uid, listId);
+    final ids = [...l.placeIds]..remove(placeId);
+    if (member) ids.add(placeId);
+    if (ids.length > PlaceList.maxPlaces) throw Exception('permission-denied');
+    byUser[uid]![listId] = l.copyWith(placeIds: ids);
+  });
+
+  @override
+  Future<void> removeEverywhere({
+    required String uid,
+    required String placeId,
+    required Iterable<String> listIds,
+  }) {
+    final ids = listIds.toList();
+    return _write('removeEverywhere:$placeId:${ids.join(',')}', () {
+      // Batch: valida tudo antes de aplicar.
+      for (final id in ids) {
+        _existing(uid, id);
+      }
+      saved?.byUser[uid]?.remove(placeId);
+      for (final id in ids) {
+        final l = _existing(uid, id);
+        byUser[uid]![id] = l.copyWith(
+          placeIds: [...l.placeIds]..remove(placeId),
+        );
+      }
+    });
+  }
 }

@@ -11,6 +11,10 @@ enum SavedStatus { idle, loading, ready, error }
 /// Future da escrita (`false` = falhou e o otimismo foi revertido).
 typedef SaveChange = ({bool saved, Future<bool> done});
 
+/// Escrita que tira um local do "Quero ir" no servidor (ex.: o batch das
+/// listas, F12, que também o tira de todas as listas).
+typedef SavedRemover = Future<void> Function(String uid, String placeId);
+
 /// Fonte única do "Quero ir" (F11): ids salvos do usuário logado, carregados
 /// uma vez por sessão. Feed, detalhe, seletor e aba leem daqui, então o
 /// marcador fica consistente em todas as telas.
@@ -24,9 +28,11 @@ class SavedPlacesStore extends ChangeNotifier {
     required AuthRepository authRepository,
     required SavedRepository savedRepository,
     DateTime Function()? clock,
+    Duration waitTimeout = const Duration(seconds: 10),
   }) : _auth = authRepository,
        _repo = savedRepository,
-       _clock = clock ?? DateTime.now {
+       _clock = clock ?? DateTime.now,
+       _waitTimeout = waitTimeout {
     _auth.addListener(_onAuthChanged);
     _onAuthChanged();
   }
@@ -34,6 +40,9 @@ class SavedPlacesStore extends ChangeNotifier {
   final AuthRepository _auth;
   final SavedRepository _repo;
   final DateTime Function() _clock;
+
+  /// Quanto a recarga espera escritas em voo (offline elas não terminam).
+  final Duration _waitTimeout;
 
   String? _uid;
 
@@ -61,7 +70,18 @@ class SavedPlacesStore extends ChangeNotifier {
   Future<void>? _loading;
   bool _disposed = false;
 
+  /// Substitui o `remove` do repositório quando há listas (F12): remover do
+  /// "Quero ir" tira o local de todas as listas no mesmo batch.
+  SavedRemover? remover;
+
   bool isSaved(String placeId) => _entries.containsKey(placeId);
+
+  /// Há escrita (salvar/remover) de [placeId] em andamento.
+  bool hasPendingWrite(String placeId) => _workers.containsKey(placeId);
+
+  /// Remoção simples do salvo, sem listas (fallback do [remover]).
+  Future<void> removeOnly(String uid, String placeId) =>
+      _repo.remove(uid: uid, placeId: placeId);
 
   /// Salvos do mais recente para o mais antigo.
   List<({String placeId, DateTime savedAt})> get entries {
@@ -109,7 +129,12 @@ class SavedPlacesStore extends ChangeNotifier {
     }
     try {
       // Escritas em voo primeiro: a leitura já reflete o que elas fizeram.
-      if (_workers.isNotEmpty) await Future.wait(_workers.values.toList());
+      // Com limite: offline a escrita não termina e a recarga não pode travar.
+      if (_workers.isNotEmpty) {
+        await Future.wait(
+          _workers.values.toList(),
+        ).timeout(_waitTimeout, onTimeout: () => const []);
+      }
       if (generation != _generation) return;
       final list = await _repo.listSaved(uid);
       if (generation != _generation) return;
@@ -234,7 +259,12 @@ class SavedPlacesStore extends ChangeNotifier {
               }
             }
           } else {
-            await _repo.remove(uid: uid, placeId: placeId);
+            final remove = remover;
+            if (remove != null) {
+              await remove(uid, placeId);
+            } else {
+              await _repo.remove(uid: uid, placeId: placeId);
+            }
             if (generation == _generation) _confirmed.remove(placeId);
           }
         } on Object {
