@@ -49,6 +49,15 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
 
   DateTime now() => _clock();
 
+  /// Usuário logado (para marcar a própria foto como "Sua foto").
+  String? get currentUserId => _auth.currentUserId;
+
+  /// A avaliação é do usuário logado.
+  bool isOwn(Review r) {
+    final uid = _auth.currentUserId;
+    return uid != null && r.authorId == uid;
+  }
+
   Place? _place;
   Place? get place => _place;
 
@@ -156,5 +165,6 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     companion: r.companion,
     comment: r.comment,
     createdAt: r.createdAt,
+    hasPhoto: r.hasPhoto,
   );
 }

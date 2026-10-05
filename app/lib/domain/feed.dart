@@ -41,6 +41,21 @@ class FeedItem {
     return null;
   }
 
+  /// Avaliação mais recente que tem foto do autor (ou `null`): a foto dela
+  /// vira a capa do card, com crédito.
+  Review? get latestPhoto {
+    for (final r in reviews) {
+      if (r.hasPhoto) return r;
+    }
+    return null;
+  }
+
+  /// Avaliações com foto, da mais recente para a mais antiga.
+  List<Review> get photoReviews => [
+    for (final r in reviews)
+      if (r.hasPhoto) r,
+  ];
+
   /// Média de cada um dos 3 eixos entre as avaliações do card (3 números,
   /// nunca uma nota única).
   AxisAverages get averages => AxisAverages.of(reviews.map((r) => r.scores));

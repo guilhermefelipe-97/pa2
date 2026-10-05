@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Firebase e fotos dos locais (Image.network) no build release. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Foto da avaliação (G1, image_picker): a câmera abre por intent do
+         sistema e a galeria pelo seletor de fotos; nenhuma das duas precisa de
+         permissão. Não declarar CAMERA: declarada, o image_picker passa a
+         exigir o pedido em tempo de execução. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="NaÁrea"
         android:name="${applicationName}"

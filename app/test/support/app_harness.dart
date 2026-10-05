@@ -4,9 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:naarea/data/repositories/auth_repository.dart';
 import 'package:naarea/data/repositories/lists_repository.dart';
 import 'package:naarea/data/repositories/place_repository.dart';
+import 'package:naarea/data/repositories/review_photo_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
 import 'package:naarea/data/repositories/saved_repository.dart';
 import 'package:naarea/data/repositories/user_repository.dart';
+import 'package:naarea/data/services/photo_picker.dart';
 import 'package:naarea/domain/feed.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/routing/router.dart';
@@ -27,6 +29,8 @@ class TestApp {
     required this.saved,
     required this.lists,
     required this.router,
+    required this.photos,
+    required this.picker,
   });
 
   final FakeAuthRepository auth;
@@ -36,6 +40,8 @@ class TestApp {
   final FakeSavedRepository saved;
   final FakeListsRepository lists;
   final GoRouter router;
+  final FakeReviewPhotoRepository photos;
+  final FakePhotoPicker picker;
 
   SavedPlacesStore store(WidgetTester tester) => Provider.of<SavedPlacesStore>(
     tester.element(find.byType(Navigator).first),
@@ -57,6 +63,8 @@ Future<TestApp> pumpApp(
   FakePlaceRepository? placeRepository,
   FakeSavedRepository? saved,
   FakeListsRepository? lists,
+  FakeReviewPhotoRepository? photos,
+  FakePhotoPicker? picker,
   DateTime Function()? clock,
 }) async {
   final u = users ?? (FakeUserRepository()..addUser('me', 'Eu'));
@@ -65,6 +73,8 @@ Future<TestApp> pumpApp(
   final p = placeRepository ?? FakePlaceRepository(places);
   final s = saved ?? FakeSavedRepository();
   final l = lists ?? FakeListsRepository(saved: s);
+  final ph = photos ?? FakeReviewPhotoRepository(r.photos);
+  final pk = picker ?? FakePhotoPicker();
   final router = buildRouter(auth);
   await tester.pumpWidget(
     MultiProvider(
@@ -73,6 +83,8 @@ Future<TestApp> pumpApp(
         Provider<UserRepository>.value(value: u),
         Provider<PlaceRepository>.value(value: p),
         Provider<ReviewRepository>.value(value: r),
+        Provider<ReviewPhotoRepository>.value(value: ph),
+        Provider<PhotoPicker>.value(value: pk),
         Provider<SavedRepository>.value(value: s),
         ChangeNotifierProvider<SavedPlacesStore>(
           lazy: false,
@@ -105,6 +117,8 @@ Future<TestApp> pumpApp(
     saved: s,
     lists: l,
     router: router,
+    photos: ph,
+    picker: pk,
   );
 }
 

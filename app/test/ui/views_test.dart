@@ -54,6 +54,8 @@ void main() {
       authRepository: FakeAuthRepository(uid: 'me'),
       userRepository: users,
       reviewRepository: FakeReviewRepository(),
+      photoPicker: FakePhotoPicker(),
+      compress: (b) async => b,
     );
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
 
@@ -86,6 +88,8 @@ void main() {
       authRepository: FakeAuthRepository(uid: 'me'),
       userRepository: FakeUserRepository()..addUser('me', 'Eu'),
       reviewRepository: FakeReviewRepository(),
+      photoPicker: FakePhotoPicker(),
+      compress: (b) async => b,
     );
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
 

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,6 +31,8 @@ Future<void> _addReview(
   String placeId = 'p',
   Object? comment,
   bool omitComment = false,
+  Object? hasPhoto,
+  bool omitHasPhoto = true,
 }) {
   return db.collection('reviews').add({
     'authorId': authorId,
@@ -40,6 +44,7 @@ Future<void> _addReview(
     'service': 4,
     'companion': null,
     if (!omitComment) 'comment': comment,
+    if (!omitHasPhoto) 'hasPhoto': hasPhoto,
     'createdAt': Timestamp.fromDate(createdAt),
   });
 }
@@ -74,7 +79,7 @@ Future<void> _seedPlace(
 
 void main() {
   group('FirestoreReviewRepository.createReview', () {
-    test('grava exatamente as 10 chaves que as Rules exigem', () async {
+    test('grava exatamente as 11 chaves que as Rules exigem', () async {
       final db = FakeFirebaseFirestore();
       await FirestoreReviewRepository(
         db,
@@ -93,8 +98,10 @@ void main() {
         'service',
         'companion',
         'comment',
+        'hasPhoto',
         'createdAt',
       });
+      expect(data['hasPhoto'], isFalse);
       expect(data['authorId'], 'alice');
       expect(data['authorName'], 'Alice');
       expect(data['food'], 5);
@@ -122,6 +129,52 @@ void main() {
       expect(data.containsKey('comment'), isTrue);
       expect(data['comment'], isNull);
     });
+
+    test('sem foto: hasPhoto false e nenhum doc em reviewPhotos', () async {
+      final db = FakeFirebaseFirestore();
+      await FirestoreReviewRepository(db).createReview(_newReview());
+      final data = (await db.collection('reviews').get()).docs.single.data();
+      expect(data['hasPhoto'], isFalse);
+      expect((await db.collection('reviewPhotos').get()).docs, isEmpty);
+    });
+
+    test(
+      'com foto: review hasPhoto true + reviewPhotos/{mesmo id} com bytes',
+      () async {
+        final db = FakeFirebaseFirestore();
+        final jpeg = Uint8List.fromList([0xFF, 0xD8, 1, 2, 3]);
+        await FirestoreReviewRepository(
+          db,
+        ).createReview(_newReview(), photo: jpeg);
+        final review = (await db.collection('reviews').get()).docs.single;
+        expect(review.data()['hasPhoto'], isTrue);
+        final photos = (await db.collection('reviewPhotos').get()).docs;
+        expect(photos, hasLength(1));
+        expect(photos.single.id, review.id);
+        final photo = photos.single.data();
+        expect(photo.keys.toSet(), {'authorId', 'jpeg', 'createdAt'});
+        expect(photo['authorId'], 'alice');
+        expect((photo['jpeg'] as Blob).bytes, jpeg);
+        expect(photo['createdAt'], isA<Timestamp>());
+      },
+    );
+
+    test(
+      'foto vazia ou acima de 150.000 bytes nem chega ao Firestore',
+      () async {
+        final db = FakeFirebaseFirestore();
+        final repo = FirestoreReviewRepository(db);
+        expect(
+          () => repo.createReview(_newReview(), photo: Uint8List(150001)),
+          throwsArgumentError,
+        );
+        expect(
+          () => repo.createReview(_newReview(), photo: Uint8List(0)),
+          throwsArgumentError,
+        );
+        expect((await db.collection('reviews').get()).docs, isEmpty);
+      },
+    );
 
     test('comentário é gravado aparado', () async {
       final db = FakeFirebaseFirestore();
@@ -246,6 +299,43 @@ void main() {
           ['Top!', null, null, null, 'Bom'],
           reason: 'normaliza na leitura: só espaços vira null, pontas aparadas',
         );
+      },
+    );
+
+    test(
+      'lê hasPhoto; doc antigo sem a chave ou tipo errado = sem foto',
+      () async {
+        final db = FakeFirebaseFirestore();
+        await _addReview(
+          db,
+          authorId: 'a',
+          createdAt: DateTime.utc(2026, 9, 3),
+          omitHasPhoto: false,
+          hasPhoto: true,
+        );
+        await _addReview(
+          db,
+          authorId: 'a',
+          createdAt: DateTime.utc(2026, 9, 2),
+          omitHasPhoto: false,
+          hasPhoto: false,
+        );
+        await _addReview(
+          db,
+          authorId: 'a',
+          createdAt: DateTime.utc(2026, 9, 1),
+        );
+        await _addReview(
+          db,
+          authorId: 'a',
+          createdAt: DateTime.utc(2026, 8, 31),
+          omitHasPhoto: false,
+          hasPhoto: 'true',
+        );
+        final result = await FirestoreReviewRepository(
+          db,
+        ).fetchReviewsByAuthors(['a']);
+        expect(result.map((r) => r.hasPhoto), [true, false, false, false]);
       },
     );
 

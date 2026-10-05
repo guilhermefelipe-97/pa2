@@ -15,6 +15,7 @@ Review review({
   Scores? scores,
   Companion? companion,
   String? comment,
+  bool hasPhoto = false,
 }) {
   _seq++;
   return Review(
@@ -27,6 +28,7 @@ Review review({
     companion: companion,
     comment: comment,
     createdAt: createdAt ?? DateTime.utc(2026, 9, 1, 15),
+    hasPhoto: hasPhoto,
   );
 }
 

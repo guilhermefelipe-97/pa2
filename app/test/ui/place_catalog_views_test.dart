@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:naarea/data/repositories/auth_repository.dart';
 import 'package:naarea/data/repositories/place_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
+import 'package:naarea/data/services/photo_picker.dart';
 import 'package:naarea/data/repositories/user_repository.dart';
 import 'package:naarea/domain/feed.dart';
 import 'package:naarea/domain/models/place.dart';
@@ -179,6 +180,7 @@ void main() {
               value: FakePlaceRepository(_catalog),
             ),
             Provider<ReviewRepository>.value(value: FakeReviewRepository()),
+            Provider<PhotoPicker>.value(value: FakePhotoPicker()),
           ],
           child: MaterialApp.router(routerConfig: router),
         ),
@@ -212,6 +214,7 @@ void main() {
           Provider<UserRepository>.value(value: users),
           Provider<PlaceRepository>.value(value: FakePlaceRepository(_catalog)),
           Provider<ReviewRepository>.value(value: FakeReviewRepository()),
+          Provider<PhotoPicker>.value(value: FakePhotoPicker()),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),

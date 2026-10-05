@@ -163,6 +163,8 @@ GoRouter buildRouter(AuthRepository auth) {
                 authRepository: context.read(),
                 userRepository: context.read(),
                 reviewRepository: context.read(),
+                photoPicker: context.read(),
+                compress: compressPhotoInBackground,
               ),
               builder: (context, vm) => ReviewView(viewModel: vm),
             ),

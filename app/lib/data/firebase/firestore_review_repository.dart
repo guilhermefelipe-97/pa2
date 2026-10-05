@@ -1,8 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../domain/models/companion.dart';
 import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart';
+import '../../domain/photo_compression.dart';
 import '../chunk.dart';
 import '../repositories/review_repository.dart';
 
@@ -19,15 +22,28 @@ class FirestoreReviewRepository implements ReviewRepository {
   /// Limite por lote na consulta do feed.
   final int perBatchLimit;
 
+  /// Coleção das fotos (bytes no Firestore; id = id da avaliação).
+  static const String reviewPhotosCollection = 'reviewPhotos';
+
   CollectionReference<Map<String, dynamic>> get _reviews =>
       _db.collection('reviews');
 
   @override
-  Future<void> createReview(NewReview review) {
-    // Schema exato (10 chaves) validado pelas Rules (hasOnly/hasAll). O período
+  Future<void> createReview(NewReview review, {Uint8List? photo}) {
+    if (photo != null && (photo.isEmpty || photo.length > maxPhotoBytes)) {
+      throw ArgumentError.value(
+        photo.length,
+        'photo',
+        'precisa ter de 1 a $maxPhotoBytes bytes',
+      );
+    }
+    // Id gerado no cliente: a foto usa o mesmo id da avaliação.
+    final ref = _reviews.doc();
+    final batch = _db.batch();
+    // Schema exato (11 chaves) validado pelas Rules (hasOnly/hasAll). O período
     // do dia NÃO é gravado; createdAt é sempre o timestamp do servidor.
     // `comment` já vem normalizado (aparado; null quando não há).
-    return _reviews.add({
+    batch.set(ref, {
       'authorId': review.authorId,
       'authorName': review.authorName,
       'placeId': review.placeId,
@@ -37,8 +53,18 @@ class FirestoreReviewRepository implements ReviewRepository {
       'service': review.scores.service,
       'companion': review.companion?.value,
       'comment': review.comment,
+      'hasPhoto': photo != null,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    if (photo != null) {
+      // As Rules só aceitam a foto no mesmo batch da review nova do mesmo id.
+      batch.set(_db.collection(reviewPhotosCollection).doc(ref.id), {
+        'authorId': review.authorId,
+        'jpeg': Blob(photo),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    return batch.commit();
   }
 
   @override
@@ -138,6 +164,8 @@ class FirestoreReviewRepository implements ReviewRepository {
           d['comment'] is String ? d['comment'] as String : null,
         ),
         createdAt: ts.toDate(),
+        // Reviews anteriores ao G1 não têm a chave: sem foto.
+        hasPhoto: d['hasPhoto'] == true,
       );
     } on Object {
       // Documento fora do schema: ignora em vez de derrubar o feed.

@@ -63,3 +63,11 @@
 - source_spec: none
   summary: G1 Foto do local enviada por quem avaliou — opcional, comprimida no app (~80 KB) e gravada no Firestore (sem Storage/Blaze), exibida no card e no detalhe com crédito "foto de <nome>".
   evidence: Decidido em 2026-10-05: sem cartão não há API de fotos de locais; OSM não tem fotos. Sequência: G0 → F11 → F12 → G1 → F06 → F14 → F10.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-g1-foto-de-quem-avaliou.md`
+  summary: Excluir/denunciar foto de avaliação (autor apaga a própria foto; denúncia por terceiros) e fluxo de pedido de exclusão (LGPD).
+  evidence: `reviewPhotos` é imutável (update/delete negados) e legível por qualquer usuário logado; foto errada ou com rosto de terceiros não tem saída. Ficou como Ask First no G1.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-g1-foto-de-quem-avaliou.md`
+  summary: Documentar capacidade das fotos no Firestore (Spark: 1 GiB, 50 mil leituras/dia) com alerta de cota e plano de migração para Storage quando houver Blaze.
+  evidence: Cada foto ~≤150 KB e 1 leitura por sessão por usuário; algumas milhares de fotos esgotam o armazenamento gratuito.

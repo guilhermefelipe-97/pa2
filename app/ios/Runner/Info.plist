@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>O NaÁrea usa a câmera para você tirar uma foto do local ao avaliar. A foto é opcional.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O NaÁrea acessa suas fotos para você escolher uma imagem do local ao avaliar. A foto é opcional.</string>
 </dict>
 </plist>

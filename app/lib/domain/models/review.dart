@@ -14,6 +14,7 @@ class Review {
     required this.companion,
     required this.createdAt,
     this.comment,
+    this.hasPhoto = false,
   });
 
   final String id;
@@ -30,6 +31,10 @@ class Review {
 
   /// Timestamp do servidor.
   final DateTime createdAt;
+
+  /// Há uma foto do autor em `reviewPhotos/{id}` (G1). Avaliações antigas,
+  /// sem a chave, são tratadas como sem foto.
+  final bool hasPhoto;
 
   /// Derivado, nunca gravado.
   DayPeriod get dayPeriod => DayPeriod.fromTimestamp(createdAt);

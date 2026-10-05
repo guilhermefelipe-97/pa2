@@ -1,10 +1,15 @@
+import 'dart:typed_data';
+
 import '../../domain/models/review.dart';
 
 abstract class ReviewRepository {
   /// Limite do operador `whereIn` do Firestore.
   static const int whereInLimit = 30;
 
-  Future<void> createReview(NewReview review);
+  /// Grava a avaliação. Com [photo] (JPEG já recodificado, ≤ 150.000 bytes),
+  /// grava `reviews/{id}` com `hasPhoto: true` e `reviewPhotos/{id}` num único
+  /// batch: ou as duas, ou nenhuma.
+  Future<void> createReview(NewReview review, {Uint8List? photo});
 
   /// Avaliações dos [authorIds], mais recentes primeiro.
   Future<List<Review>> fetchReviewsByAuthors(List<String> authorIds);

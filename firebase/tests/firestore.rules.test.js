@@ -24,6 +24,7 @@ const {
   arrayUnion,
   arrayRemove,
   writeBatch,
+  Bytes,
 } = require('firebase/firestore');
 
 const PROJECT_ID = 'demo-naarea';
@@ -71,6 +72,7 @@ beforeEach(async () => {
       service: 4,
       companion: null,
       comment: null,
+      hasPhoto: false,
       createdAt: Timestamp.now(),
     });
   });
@@ -91,9 +93,36 @@ function validReview(overrides = {}) {
     service: 3,
     companion: 'amigos',
     comment: null,
+    hasPhoto: false,
     createdAt: serverTimestamp(),
     ...overrides,
   };
+}
+
+/// JPEG falso de [n] bytes (as Rules só olham tipo e tamanho).
+function jpegBytes(n) {
+  const arr = new Uint8Array(n);
+  if (n > 0) arr[0] = 0xff;
+  if (n > 1) arr[1] = 0xd8;
+  if (n > 2) arr[2] = 0xff;
+  return Bytes.fromUint8Array(arr);
+}
+
+function validPhoto(overrides = {}) {
+  return {
+    authorId: 'alice',
+    jpeg: jpegBytes(1000),
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+/// Avaliação com foto: review + reviewPhotos/{mesmo id} num único batch.
+function reviewWithPhotoBatch(db, { id = 'nova', review = {}, photo = {}, withReview = true, withPhoto = true } = {}) {
+  const batch = writeBatch(db);
+  if (withReview) batch.set(doc(db, 'reviews/' + id), validReview({ hasPhoto: true, ...review }));
+  if (withPhoto) batch.set(doc(db, 'reviewPhotos/' + id), validPhoto(photo));
+  return batch.commit();
 }
 
 describe('users/{uid}', () => {
@@ -498,11 +527,35 @@ describe('reviews', () => {
     await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: ['a'] })));
   });
 
-  it('comment é chave obrigatória (null quando não informado): chaves exatas = 10', async () => {
+  it('comment é chave obrigatória (null quando não informado): chaves permitidas = 11', async () => {
     const data = validReview();
     delete data.comment;
     await assertFails(addDoc(collection(alice(), 'reviews'), data));
     await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'ok', extra: 1 })));
+  });
+
+  it('janela de transição: review sem a chave hasPhoto continua aceita (= false)', async () => {
+    const data = validReview();
+    delete data.hasPhoto;
+    await assertSucceeds(addDoc(collection(alice(), 'reviews'), data));
+    // ...e não leva foto: a foto exige hasPhoto true na review.
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'reviews/semchave'), data);
+    batch.set(doc(db, 'reviewPhotos/semchave'), validPhoto());
+    await assertFails(batch.commit());
+  });
+
+  it('hasPhoto, quando presente, é booleano', async () => {
+    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ hasPhoto: false })));
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ hasPhoto: null })));
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ hasPhoto: 'true' })));
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ hasPhoto: 1 })));
+  });
+
+  it('hasPhoto: true sem a foto no mesmo batch é negado', async () => {
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ hasPhoto: true })));
+    await assertFails(reviewWithPhotoBatch(alice(), { withPhoto: false }));
   });
 
   it('comentário é imutável como a avaliação (nem o autor edita)', async () => {
@@ -547,5 +600,103 @@ describe('reviews', () => {
     await assertFails(updateDoc(doc(alice(), 'reviews/existing'), { food: 5 }));
     await assertFails(deleteDoc(doc(alice(), 'reviews/existing')));
     await assertFails(deleteDoc(doc(bob(), 'reviews/existing')));
+  });
+});
+
+describe('reviewPhotos/{reviewId}', () => {
+  it('batch válido: review com hasPhoto true + foto do mesmo id e autor', async () => {
+    await assertSucceeds(reviewWithPhotoBatch(alice()));
+  });
+
+  it('aceita exatamente 150.000 bytes; 150.001 é negado', async () => {
+    await assertSucceeds(reviewWithPhotoBatch(alice(), { id: 'limite', photo: { jpeg: jpegBytes(150000) } }));
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'grande', photo: { jpeg: jpegBytes(150001) } }));
+  });
+
+  it('foto sem review no mesmo batch é negada', async () => {
+    await assertFails(setDoc(doc(alice(), 'reviewPhotos/solta'), validPhoto()));
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'solta', withReview: false }));
+  });
+
+  it('foto para review já existente é negada (nem o autor anexa depois)', async () => {
+    await assertFails(setDoc(doc(alice(), 'reviewPhotos/existing'), validPhoto()));
+    await assertFails(setDoc(doc(bob(), 'reviewPhotos/existing'), validPhoto({ authorId: 'bob' })));
+  });
+
+  it('foto ligada a review de outro autor é negada', async () => {
+    // Bob cria a própria review com foto, mas o doc da foto diz ser de Alice.
+    await assertFails(reviewWithPhotoBatch(bob(), {
+      review: { authorId: 'bob', authorName: 'Bob' },
+      photo: { authorId: 'alice' },
+    }));
+    // Alice tenta anexar foto à review que Bob cria no mesmo batch: só o
+    // autor da review grava a foto (e a review de Bob nem passa com Alice).
+    await assertFails(reviewWithPhotoBatch(alice(), {
+      review: { authorId: 'bob', authorName: 'Bob' },
+    }));
+  });
+
+  it('review com hasPhoto false não leva foto', async () => {
+    await assertFails(reviewWithPhotoBatch(alice(), { review: { hasPhoto: false } }));
+  });
+
+  it('jpeg precisa ser bytes não vazios', async () => {
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 's', photo: { jpeg: 'base64...' } }));
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'l', photo: { jpeg: [255, 216] } }));
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'n', photo: { jpeg: null } }));
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'v', photo: { jpeg: Bytes.fromUint8Array(new Uint8Array(0)) } }));
+  });
+
+  it('jpeg precisa começar com o marcador JPEG (PNG é negado)', async () => {
+    const png = new Uint8Array(1000);
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'png', photo: { jpeg: Bytes.fromUint8Array(png) } }));
+    // Só FF D8 sem o FF seguinte também não passa.
+    const quase = new Uint8Array(1000);
+    quase.set([0xff, 0xd8, 0x00]);
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'quase', photo: { jpeg: Bytes.fromUint8Array(quase) } }));
+    await assertSucceeds(reviewWithPhotoBatch(alice(), { id: 'jpg' }));
+  });
+
+  it('chaves exatas e createdAt do servidor', async () => {
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'x', photo: { extra: 1 } }));
+    const semAutor = validPhoto();
+    delete semAutor.authorId;
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'reviews/y'), validReview({ hasPhoto: true }));
+    batch.set(doc(db, 'reviewPhotos/y'), semAutor);
+    await assertFails(batch.commit());
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'z', photo: { createdAt: Timestamp.now() } }));
+  });
+
+  it('anônimo não grava foto', async () => {
+    await assertFails(reviewWithPhotoBatch(anon()));
+  });
+
+  it('foto é imutável: ninguém edita nem exclui', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'reviewPhotos/existing'), {
+        authorId: 'alice',
+        jpeg: jpegBytes(10),
+        createdAt: Timestamp.now(),
+      });
+    });
+    await assertFails(updateDoc(doc(alice(), 'reviewPhotos/existing'), { jpeg: jpegBytes(20) }));
+    await assertFails(setDoc(doc(alice(), 'reviewPhotos/existing'), validPhoto()));
+    await assertFails(deleteDoc(doc(alice(), 'reviewPhotos/existing')));
+    await assertFails(deleteDoc(doc(bob(), 'reviewPhotos/existing')));
+  });
+
+  it('leitura só autenticada', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'reviewPhotos/existing'), {
+        authorId: 'alice',
+        jpeg: jpegBytes(10),
+        createdAt: Timestamp.now(),
+      });
+    });
+    await assertSucceeds(getDoc(doc(bob(), 'reviewPhotos/existing')));
+    await assertFails(getDoc(doc(anon(), 'reviewPhotos/existing')));
   });
 });

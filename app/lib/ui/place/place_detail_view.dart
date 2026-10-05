@@ -11,6 +11,7 @@ import '../feed/widgets/feed_card.dart';
 import '../feed/widgets/place_photo.dart';
 import '../feed/widgets/review_tile.dart';
 import 'place_detail_view_model.dart';
+import 'review_photo_strip.dart';
 
 /// Detalhe do local: foto grande, marcador "Quero ir" e as avaliações dos
 /// amigos ali. Abre por `placeId` sozinho (ex.: a partir dos salvos); com
@@ -129,7 +130,16 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                 children: [
                   Hero(
                     tag: 'place-photo-${place.id}',
-                    child: PlacePhoto(place: place, iconSize: 72),
+                    // Crédito acima do título expandido da barra.
+                    child: PlacePhoto(
+                      place: place,
+                      iconSize: 72,
+                      friendPhoto: item?.latestPhoto,
+                      friendPhotoIsOwn:
+                          item?.latestPhoto != null &&
+                          vm.isOwn(item!.latestPhoto!),
+                      creditPadding: const EdgeInsets.fromLTRB(16, 0, 16, 64),
+                    ),
                   ),
                   // Escurece a base para o título branco ficar legível.
                   const DecoratedBox(
@@ -210,6 +220,15 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                         vm.hasOwnReview ? 'Avaliar de novo' : 'Avaliar',
                       ),
                     ),
+                    if (item.photoReviews.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      ReviewPhotoStrip(
+                        place: place,
+                        reviews: item.photoReviews,
+                        now: at,
+                        currentUserId: vm.currentUserId,
+                      ),
+                    ],
                     const SizedBox(height: 20),
                     Text(
                       vm.reviewCountLabel,

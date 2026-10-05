@@ -60,7 +60,12 @@ class FeedCard extends StatelessWidget {
                     aspectRatio: 16 / 9,
                     child: Hero(
                       tag: 'place-photo-${place.id}',
-                      child: PlacePhoto(place: place),
+                      // Foto mais recente de um amigo ali; sem ela, a do
+                      // catálogo; sem nenhuma, o fallback da categoria.
+                      child: PlacePhoto(
+                        place: place,
+                        friendPhoto: item.latestPhoto,
+                      ),
                     ),
                   ),
                   Padding(

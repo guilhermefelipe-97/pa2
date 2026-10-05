@@ -118,16 +118,37 @@ service cloud.firestore {
       return v == null || (v is string && v.size() >= 1 && v.size() <= 280);
     }
 
-    function reviewKeys() {
+    // Chaves obrigatórias (as 10 de antes do G1).
+    function reviewRequiredKeys() {
       return ['authorId', 'authorName', 'placeId', 'placeName',
               'food', 'ambience', 'service', 'companion', 'comment', 'createdAt'];
     }
 
-    function validReview(data) {
+    // Permitidas: as 10 + `hasPhoto` (G1). Janela de transição: clientes
+    // antigos ainda gravam sem `hasPhoto`, tratado como false.
+    function reviewKeys() {
+      return reviewRequiredKeys().concat(['hasPhoto']);
+    }
+
+    function photoPath(reviewId) {
+      return /databases/$(database)/documents/reviewPhotos/$(reviewId);
+    }
+
+    // Foto opcional (G1): `hasPhoto` ausente = false; presente, é bool. Se
+    // true, o doc da foto com o mesmo id precisa existir ao fim do mesmo batch
+    // (as Rules da foto garantem o resto: mesmo autor, review nova, JPEG de
+    // até 150.000 bytes).
+    function validHasPhoto(data, reviewId) {
+      return !('hasPhoto' in data)
+        || (data.hasPhoto is bool
+            && (data.hasPhoto == false || existsAfter(photoPath(reviewId))));
+    }
+
+    function validReview(data, reviewId) {
       let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
       let placePath = /databases/$(database)/documents/places/$(data.placeId);
       return data.keys().hasOnly(reviewKeys())
-        && data.keys().hasAll(reviewKeys())
+        && data.keys().hasAll(reviewRequiredKeys())
         && data.authorId == request.auth.uid
         && data.authorName == profile.data.displayName
         && data.placeId is string
@@ -138,13 +159,43 @@ service cloud.firestore {
         && validScore(data['service']) // 'service' é palavra reservada nas Rules
         && validCompanion(data.companion)
         && validComment(data.comment)
+        && validHasPhoto(data, reviewId)
         && data.createdAt == request.time;
     }
 
     match /reviews/{reviewId} {
       allow read: if signedIn();
-      allow create: if signedIn() && validReview(request.resource.data);
+      allow create: if signedIn() && validReview(request.resource.data, reviewId);
       // Editar/excluir fica para F03/F04.
+      allow update, delete: if false;
+    }
+
+    // ---------- reviewPhotos (G1) ----------
+    // Foto de quem avaliou, gravada como bytes no Firestore (plano Spark, sem
+    // Storage). O app recodifica em JPEG <= 1080 px (sem EXIF) antes de enviar.
+    // Imutável e ligada à avaliação: só nasce no mesmo batch que cria a review
+    // do mesmo id, pelo mesmo autor, com `hasPhoto: true`.
+    function photoKeys() {
+      return ['authorId', 'jpeg', 'createdAt'];
+    }
+
+    match /reviewPhotos/{reviewId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(photoKeys())
+        && request.resource.data.keys().hasAll(photoKeys())
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.jpeg is bytes
+        && request.resource.data.jpeg.size() >= 1
+        && request.resource.data.jpeg.size() <= 150000
+        // Começa com o marcador JPEG (FF D8 FF). A comparação via toBase64()
+        // com "/9j/" negava JPEG válido no emulador; via hex funciona.
+        && request.resource.data.jpeg.toHexString().lower()[0:6] == 'ffd8ff'
+        && request.resource.data.createdAt == request.time
+        // A review não existia antes: é criada neste mesmo batch.
+        && !exists(/databases/$(database)/documents/reviews/$(reviewId))
+        && getAfter(/databases/$(database)/documents/reviews/$(reviewId)).data.authorId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/reviews/$(reviewId)).data.get('hasPhoto', false) == true;
       allow update, delete: if false;
     }
   }

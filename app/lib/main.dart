@@ -9,15 +9,18 @@ import 'package:provider/provider.dart';
 import 'data/firebase/firebase_auth_repository.dart';
 import 'data/firebase/firestore_lists_repository.dart';
 import 'data/firebase/firestore_place_repository.dart';
+import 'data/firebase/firestore_review_photo_repository.dart';
 import 'data/firebase/firestore_review_repository.dart';
 import 'data/firebase/firestore_saved_repository.dart';
 import 'data/firebase/firestore_user_repository.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/lists_repository.dart';
 import 'data/repositories/place_repository.dart';
+import 'data/repositories/review_photo_repository.dart';
 import 'data/repositories/review_repository.dart';
 import 'data/repositories/saved_repository.dart';
 import 'data/repositories/user_repository.dart';
+import 'data/services/photo_picker.dart';
 import 'firebase_config.dart';
 import 'firebase_options.dart';
 import 'routing/router.dart';
@@ -70,6 +73,16 @@ Future<void> main() async {
         Provider<ReviewRepository>(
           create: (_) => FirestoreReviewRepository(db),
         ),
+        // Fotos de quem avaliou (G1): cache em memória, limpo na troca de usuário.
+        Provider<ReviewPhotoRepository>(
+          create: (_) => FirestoreReviewPhotoRepository(
+            db,
+            authRepository: authRepository,
+          ),
+          dispose: (_, repo) =>
+              (repo as FirestoreReviewPhotoRepository).dispose(),
+        ),
+        Provider<PhotoPicker>(create: (_) => ImagePickerPhotoPicker()),
         Provider<SavedRepository>(create: (_) => FirestoreSavedRepository(db)),
         // "Quero ir": ids salvos carregados uma vez por sessão (segue o login).
         ChangeNotifierProvider<SavedPlacesStore>(

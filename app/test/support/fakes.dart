@@ -1,12 +1,15 @@
 // Fakes escritos à mão (sem mocks gerados) para testar os ViewModels.
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:naarea/data/repositories/auth_repository.dart';
 import 'package:naarea/data/repositories/lists_repository.dart';
 import 'package:naarea/data/repositories/place_repository.dart';
+import 'package:naarea/data/repositories/review_photo_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
 import 'package:naarea/data/repositories/saved_repository.dart';
 import 'package:naarea/data/repositories/user_repository.dart';
+import 'package:naarea/data/services/photo_picker.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/domain/models/place_list.dart';
 import 'package:naarea/domain/models/review.dart';
@@ -194,6 +197,12 @@ class FakePlaceRepository implements PlaceRepository {
 class FakeReviewRepository implements ReviewRepository {
   final List<Review> stored = [];
   final List<NewReview> created = [];
+
+  /// Foto enviada com cada avaliação de [created] (mesma posição).
+  final List<Uint8List?> createdPhotos = [];
+
+  /// Fotos gravadas, por id da avaliação (simula `reviewPhotos`).
+  final Map<String, Uint8List> photos = {};
   final List<List<String>> fetchCalls = [];
   Object? createError;
   Object? fetchError;
@@ -201,12 +210,15 @@ class FakeReviewRepository implements ReviewRepository {
       DateTime.utc(2026, 9, 10, 23); // 20h em Natal
 
   @override
-  Future<void> createReview(NewReview review) async {
+  Future<void> createReview(NewReview review, {Uint8List? photo}) async {
     if (createError != null) throw createError!;
     created.add(review);
+    createdPhotos.add(photo);
+    final id = 'r${stored.length + 1}';
+    if (photo != null) photos[id] = photo;
     stored.add(
       Review(
-        id: 'r${stored.length + 1}',
+        id: id,
         authorId: review.authorId,
         authorName: review.authorName,
         placeId: review.placeId,
@@ -215,6 +227,7 @@ class FakeReviewRepository implements ReviewRepository {
         companion: review.companion,
         comment: review.comment,
         createdAt: clock(),
+        hasPhoto: photo != null,
       ),
     );
   }
@@ -469,5 +482,64 @@ class FakeListsRepository implements ListsRepository {
         );
       }
     });
+  }
+}
+
+/// Mesmo contrato da implementação real (cache LRU, dedupe, backoff): só a
+/// fonte é um Map em memória.
+class FakeReviewPhotoRepository extends CachedReviewPhotoRepository {
+  FakeReviewPhotoRepository([
+    Map<String, Uint8List>? photos,
+    DateTime Function()? clock,
+  ]) : photos = photos ?? {},
+       super(clock: clock);
+
+  final Map<String, Uint8List> photos;
+
+  /// Leituras na fonte (depois do cache).
+  final List<String> calls = [];
+
+  /// Ids cuja leitura falha (ex.: sem rede).
+  final Set<String> failing = {};
+
+  /// Segura as respostas até completar (testes de "carregando").
+  Completer<void>? gate;
+
+  @override
+  Future<Uint8List?> fetch(String reviewId) async {
+    calls.add(reviewId);
+    if (gate != null) await gate!.future;
+    if (failing.contains(reviewId)) throw Exception('network');
+    return photos[reviewId];
+  }
+}
+
+class FakePhotoPicker implements PhotoPicker {
+  /// Próxima resposta: bytes, `null` (cancelou) ou erro em [error].
+  Uint8List? next;
+  Object? error;
+  final List<PhotoSource> calls = [];
+
+  /// Segura o seletor "aberto" até completar.
+  Completer<void>? gate;
+
+  /// Foto pendente para [retrieveLost] (Android).
+  Uint8List? lost;
+  int retrieveLostCalls = 0;
+
+  @override
+  Future<Uint8List?> pick(PhotoSource source) async {
+    calls.add(source);
+    if (gate != null) await gate!.future;
+    if (error != null) throw error!;
+    return next;
+  }
+
+  @override
+  Future<Uint8List?> retrieveLost() async {
+    retrieveLostCalls++;
+    final l = lost;
+    lost = null;
+    return l;
   }
 }
