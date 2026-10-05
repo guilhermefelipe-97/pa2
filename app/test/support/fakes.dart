@@ -8,6 +8,7 @@ import 'package:naarea/data/repositories/user_repository.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/domain/models/review.dart';
 import 'package:naarea/domain/models/user_profile.dart';
+import 'package:naarea/domain/search_tokens.dart';
 
 class FakeAuthRepository extends AuthRepository {
   FakeAuthRepository({String? uid, this.users, bool initialized = true})
@@ -126,13 +127,44 @@ class FakePlaceRepository implements PlaceRepository {
 
   final List<Place> places;
   bool fail = false;
-  int listCalls = 0;
+  final List<String> searchCalls = [];
+  int suggestionCalls = 0;
+  final List<Set<String>> getCalls = [];
+
+  /// Permite controlar quando/como cada busca responde (ex.: Completer).
+  Future<List<Place>> Function(String query)? searchOverride;
 
   @override
-  Future<List<Place>> listPlaces() async {
-    listCalls++;
+  Future<List<Place>> search(String query) async {
+    searchCalls.add(query);
+    if (searchOverride != null) return searchOverride!(query);
     if (fail) throw Exception('network');
-    return places;
+    final terms = normalizeQuery(query);
+    if (serverTerm(terms) == null) return const [];
+    final found = places.where((p) => nameMatchesTerms(p.name, terms)).toList()
+      ..sort((a, b) => nameLower(a.name).compareTo(nameLower(b.name)));
+    return found.take(20).toList();
+  }
+
+  @override
+  Future<List<Place>> suggestions() async {
+    suggestionCalls++;
+    if (fail) throw Exception('network');
+    return places
+        .where((p) => p.source == PlaceSource.curated && p.photoUrl != null)
+        .toList()
+      ..sort((a, b) => nameLower(a.name).compareTo(nameLower(b.name)));
+  }
+
+  @override
+  Future<Map<String, Place>> getPlaces(Iterable<String> ids) async {
+    final wanted = ids.toSet();
+    getCalls.add(wanted);
+    if (fail) throw Exception('network');
+    return {
+      for (final p in places)
+        if (wanted.contains(p.id)) p.id: p,
+    };
   }
 }
 

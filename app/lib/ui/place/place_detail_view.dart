@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/feed.dart';
 import '../../domain/models/place.dart';
+import '../core/osm_credit.dart';
 import '../feed/widgets/author_avatar.dart';
 import '../feed/widgets/axis_scores.dart';
 import '../feed/widgets/feed_card.dart';
@@ -100,6 +101,7 @@ class PlaceDetailView extends StatelessWidget {
                         ),
                       ],
                     ),
+                  PlaceFacts(place: place),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -136,7 +138,7 @@ class PlaceDetailView extends StatelessWidget {
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             sliver: SliverList.separated(
               itemCount: item.reviews.length,
               itemBuilder: (context, i) =>
@@ -144,6 +146,10 @@ class PlaceDetailView extends StatelessWidget {
               separatorBuilder: (context, i) => const Divider(height: 1),
             ),
           ),
+          if (place.hasOsmData)
+            const SliverToBoxAdapter(
+              child: OsmCredit(padding: EdgeInsets.fromLTRB(20, 0, 20, 24)),
+            ),
         ],
       ),
     );
@@ -194,6 +200,43 @@ class PhotoCredit extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Endereço e cozinha do local (dados do OSM), quando existem.
+class PlaceFacts extends StatelessWidget {
+  const PlaceFacts({super.key, required this.place});
+
+  final Place place;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    Widget fact(IconData icon, String text, Key key) => Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 4),
+          Flexible(child: Text(text, key: key, style: muted)),
+        ],
+      ),
+    );
+    final address = place.address;
+    final cuisine = place.cuisine;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (address != null)
+          fact(Icons.signpost_outlined, address, const Key('place-address')),
+        if (cuisine != null)
+          fact(Icons.restaurant_menu, cuisine, const Key('place-cuisine')),
+      ],
     );
   }
 }

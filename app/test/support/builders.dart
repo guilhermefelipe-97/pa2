@@ -40,6 +40,10 @@ Place place({
   String? photoAuthor,
   String? photoLicense,
   bool photoIllustrative = false,
+  String? cuisine,
+  String? address,
+  String? osmId,
+  PlaceSource source = PlaceSource.curated,
 }) {
   return Place(
     id: id,
@@ -51,5 +55,9 @@ Place place({
     photoAuthor: photoAuthor,
     photoLicense: photoLicense,
     photoIllustrative: photoIllustrative,
+    cuisine: cuisine,
+    address: address,
+    osmId: osmId,
+    source: source,
   );
 }

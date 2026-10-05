@@ -1,10 +1,12 @@
 {
   "name": "naarea-firebase",
   "private": true,
-  "description": "Testes das Security Rules e seed do Firestore do NaÁrea",
+  "description": "Testes das Security Rules, import do OpenStreetMap e seed do Firestore do NaÁrea",
   "scripts": {
     "test": "mocha --exit --timeout 20000 \"tests/**/*.test.js\"",
+    "test:osm": "mocha tests/osm.test.js",
     "test:emulator": "firebase emulators:exec --only firestore \"npm test\"",
+    "import:osm": "node seed/importar-osm.js",
     "seed": "node seed/seed.js"
   },
   "devDependencies": {

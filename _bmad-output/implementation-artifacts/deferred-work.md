@@ -31,3 +31,35 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-feed-rico-fotos-comentario-visual.md`
   summary: Atualizar periodicamente o tempo relativo ("agora", "há 5 min") e ao voltar o app para primeiro plano.
   evidence: `now` é capturado por build; o texto congela até outro rebuild.
+
+- source_spec: none
+  summary: F12 Listas nomeadas — organizar locais salvos em listas privadas (Onda 2).
+  evidence: Dividido em 2026-10-05 (decisão [S]); sequência acordada G0 → F11 → F12 → F06 → F14 → F10, um spec por cartão.
+
+- source_spec: none
+  summary: F06 Card com fonte de confiança — reforçar quem foi (nome, "você segue", eixos por pessoa, visitas), sem foto de perfil por upload (Onda 2).
+  evidence: Dividido em 2026-10-05 (decisão [S]); entregável independente sobre o feed existente.
+
+- source_spec: none
+  summary: F14 Avaliação mínima válida — eixos opcionais com mínimo de 1 eixo preenchido (Onda 2).
+  evidence: Dividido em 2026-10-05 (decisão [S]); relaxa regra da Onda 1 (3 eixos obrigatórios) nas Rules e na UI.
+
+- source_spec: none
+  summary: F10 "Estou na rua agora" — locais num raio de 300m usando lat/lng/geohash do catálogo OSM (G0), com opção de ampliar; "aberto agora" fica para F20 (Onda 2).
+  evidence: Dividido em 2026-10-05 (decisão [S]); depende do G0 (catálogo OSM com coordenadas).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-g0-catalogo-osm.md`
+  summary: Busca de locais por bairro no seletor (chip ou filtro de bairro), perdida ao trocar o filtro local pela busca por tokens do nome.
+  evidence: O seletor antigo filtrava por nome ou bairro ("ponta negra"); a busca por `searchTokens` só indexa o nome.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-g0-catalogo-osm.md`
+  summary: Smoke test pós-deploy do índice places(searchTokens CONTAINS, nameLower ASC) em produção.
+  evidence: Nem o emulator nem o FakeFirebaseFirestore exigem índice composto; a falta só aparece no projeto real.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-g0-catalogo-osm.md`
+  summary: Marcar como inativos (e manter buscáveis) os docs `osm-*` que saírem do OSM no futuro, em vez de só listá-los no log.
+  evidence: O seed nunca apaga nem reescreve docs fora da fonte; eles podem ter avaliações e ficariam sem tokens atualizados.
+
+- source_spec: none
+  summary: G1 Foto do local enviada por quem avaliou — opcional, comprimida no app (~80 KB) e gravada no Firestore (sem Storage/Blaze), exibida no card e no detalhe com crédito "foto de <nome>".
+  evidence: Decidido em 2026-10-05: sem cartão não há API de fotos de locais; OSM não tem fotos. Sequência: G0 → F11 → F12 → G1 → F06 → F14 → F10.

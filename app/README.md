@@ -90,10 +90,44 @@ flutter run -d chrome --dart-define=USE_EMULATOR=true
 No emulador Android o app usa `10.0.2.2` automaticamente. Mesmo no modo
 emulador é preciso ter `lib/firebase_options.dart` gerado.
 
-## 3. Seed dos locais (Natal/RN)
+## 3. Locais de Natal/RN: import do OpenStreetMap + seed
 
-Os locais ficam em `../firebase/seed/places.json`. O cliente nunca escreve em
-`places` (as Rules negam); só o seed, via Admin SDK.
+O catálogo de `places` tem duas fontes, ambas versionadas em `../firebase/seed/`:
+
+- `places.json` — 20 locais **curados** (foto, categoria e bairro conferidos à mão);
+- `osm-natal.json` — **snapshot do OpenStreetMap** (~600 locais de comer/beber
+  de Natal com bairro, coordenadas, geohash, cozinha, endereço e horário bruto),
+  gerado pelo import. Dados © OpenStreetMap contributors, licença ODbL
+  (ver `../firebase/seed/CREDITOS.md`; o app mostra o crédito no seletor e no
+  detalhe).
+
+O cliente nunca escreve em `places` (as Rules negam); só o seed, via Admin SDK.
+
+### 3.1 Atualizar o snapshot (opcional, precisa de internet)
+
+```bash
+cd ../firebase
+npm install
+npm run import:osm
+```
+
+O script consulta a Overpass API (sem chave nem cartão; `OVERPASS_URL` aceita
+outros endpoints separados por vírgula), calcula o bairro de cada local pelos
+polígonos dos 38 bairros oficiais (`admin_level=10`), junta o mesmo local
+mapeado como ponto e como prédio (fica o prédio) e grava `seed/osm-natal.json`
+ordenado por id — rodar duas vezes com o mesmo dado do OSM gera o mesmo
+arquivo. O snapshot existente **não** é tocado se o Overpass falhar, se vierem
+menos de 34 bairros ou menos de 80% dos locais do snapshot anterior. Revise o
+diff e faça commit do arquivo.
+
+Por padrão o `import:osm` não toca no Firestore. Para gravar em `places` logo
+em seguida, passe o flag explícito `--seed` (com as variáveis do seed abaixo):
+
+```bash
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-naarea npm run import:osm -- --seed
+```
+
+### 3.2 Gravar em `places` (offline, a partir dos arquivos)
 
 Emulador (com `firebase emulators:start` rodando):
 
@@ -110,6 +144,31 @@ de ambiente para ela:
 cd ../firebase
 GOOGLE_APPLICATION_CREDENTIALS=/caminho/fora/do/repo/sa.json GCLOUD_PROJECT=<id> npm run seed
 ```
+
+**Ordem de deploy em produção** (a busca do app depende do índice e dos campos
+novos do seed):
+
+1. Índices: `firebase deploy --only firestore:indexes --project prod`.
+2. Aguardar o build do índice `places (searchTokens, nameLower)` ficar
+   **Ativado** no console (Firestore > Índices). Antes disso a busca falha.
+3. Seed (comando acima), que grava `searchTokens`, `nameLower` e `source`.
+4. Publicar o app.
+
+O seed é idempotente: monta os documentos de forma determinística, grava só os
+que mudaram (`updatedAt` só muda quando o conteúdo muda) e nunca apaga
+documentos (os que saíram da fonte são listados no log). Os curados mantêm o
+id (avaliações apontam para eles): quando o nome normalizado casa com **um
+único** local do OSM de bairro compatível (igual, ou ausente em um dos lados),
+o curado recebe coordenadas, `osmId`, cozinha, endereço e horário, e o
+duplicado do OSM não é criado; casamento ambíguo (2+) mantém os dois e aparece
+no log. Um `osmId` (ex.: `"way/483561432"`) no curado em `places.json` força o
+casamento com aquele local.
+
+A busca do app usa `searchTokens` (prefixos ≥ 2 de cada palavra do nome, sem
+acento/caixa) com `array-contains` + `orderBy nameLower`, o que exige o índice
+composto de `../firebase/firestore.indexes.json` em produção. As regras de
+normalização são as mesmas no script (`seed/osm/tokens.js`) e no app
+(`lib/domain/search_tokens.dart`), testadas contra a mesma fixture.
 
 O `.gitignore` bloqueia os nomes usuais de chave, mas não conte com isso: a
 chave não deve ficar dentro do repositório.
@@ -134,4 +193,12 @@ cd ../firebase
 npm install
 npx firebase emulators:exec --only firestore "npm test"
 # ou: npm run test:emulator
+```
+
+As funções puras do import do OSM (tokens, categoria, bairro por polígono,
+geohash, casamento com os curados) não precisam do emulador:
+
+```bash
+cd ../firebase
+npx mocha tests/osm.test.js   # ou: npm run test:osm
 ```

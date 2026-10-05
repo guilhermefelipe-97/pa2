@@ -1,4 +1,21 @@
-# Créditos das fotos dos locais (seed)
+# Créditos dos dados e das fotos dos locais (seed)
+
+## Dados dos locais: OpenStreetMap
+
+O catálogo de locais de comer/beber de Natal (`osm-natal.json`: nome, categoria, cozinha,
+endereço, horário, coordenadas) e os polígonos dos 38 bairros usados para calcular o bairro
+vêm do **OpenStreetMap**: © [colaboradores do OpenStreetMap](https://www.openstreetmap.org/copyright),
+disponíveis sob a [Open Database License (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/).
+
+- Obtidos pela [Overpass API](https://overpass-api.de/) com `npm run import:osm`
+  (`importar-osm.js`); o snapshot versionado é um banco de dados derivado e segue a ODbL.
+- O app mostra "© colaboradores do OpenStreetMap" no seletor de locais e no detalhe dos
+  locais com dados do OSM.
+- Os 20 locais curados de `places.json` mantêm o id; quando casam (nome normalizado + bairro
+  compatível, casamento único, ou `osmId` explícito no curado) com um local do OSM, recebem
+  dele coordenadas, `osmId`, cozinha, endereço e horário.
+
+## Fotos dos locais
 
 As fotos de capa em `places.json` (`photoUrl`) são miniaturas de 1280 px servidas pelo
 Wikimedia Commons (`upload.wikimedia.org`, com CORS liberado para a web), usadas por URL (sem cópia no repositório nem no

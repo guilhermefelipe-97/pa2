@@ -18,8 +18,22 @@ void main() {
     expect(categoryIcon('Shopping / Alimentação'), Icons.local_mall);
     expect(categoryIcon('Artesanato / Café'), Icons.palette);
     expect(categoryIcon('Café'), Icons.local_cafe);
+    expect(categoryIcon('Mercado'), Icons.storefront);
+    expect(categoryIcon('Praça de alimentação'), Icons.local_mall);
     expect(categoryIcon(''), Icons.place);
     expect(categoryIcon('Qualquer coisa'), Icons.place);
+  });
+
+  test('ícone das categorias do OSM', () {
+    expect(categoryIcon('Pub'), Icons.sports_bar);
+    expect(categoryIcon('Lanchonete'), Icons.fastfood);
+    expect(categoryIcon('Pizzaria'), Icons.local_pizza);
+    expect(categoryIcon('Hamburgueria'), Icons.lunch_dining);
+    expect(categoryIcon('Sorveteria'), Icons.icecream);
+    expect(categoryIcon('Açaí'), Icons.icecream);
+    expect(categoryIcon('Japonês'), Icons.ramen_dining);
+    expect(categoryIcon('Frutos do mar'), Icons.set_meal);
+    expect(categoryIcon('Comida regional'), Icons.restaurant);
   });
 
   test('"bar" e "pub" só como palavra inteira', () {

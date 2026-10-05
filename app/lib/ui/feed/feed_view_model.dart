@@ -46,9 +46,6 @@ class FeedViewModel extends SafeChangeNotifier {
   bool _loadedOnce = false;
   bool get loadedOnce => _loadedOnce;
 
-  /// Locais por id (≈20, somente leitura): lidos uma vez e reaproveitados.
-  Map<String, Place>? _placesById;
-
   bool _reloadPending = false;
   Future<void>? _inFlight;
 
@@ -90,12 +87,11 @@ class FeedViewModel extends SafeChangeNotifier {
         _items = const [];
       } else {
         _followsNobody = false;
-        // Em paralelo; _loadPlaces nunca lança.
-        final placesFuture = _loadPlaces();
         final reviews = await _reviews.fetchReviewsByAuthors(
           following.toList(),
         );
-        final places = await placesFuture;
+        // Só os locais que aparecem no feed; _loadPlaces nunca lança.
+        final places = await _loadPlaces({for (final r in reviews) r.placeId});
         _items = groupReviewsIntoFeed(reviews, places: places);
       }
       _loadedOnce = true;
@@ -110,13 +106,11 @@ class FeedViewModel extends SafeChangeNotifier {
 
   /// Falha ao ler os locais não derruba o feed: os cards usam o fallback
   /// (nome da avaliação, sem foto) e a leitura é tentada de novo na próxima
-  /// carga.
-  Future<Map<String, Place>> _loadPlaces() async {
-    final cached = _placesById;
-    if (cached != null) return cached;
+  /// carga. O repositório guarda em cache o que já leu (1 leitura por local).
+  Future<Map<String, Place>> _loadPlaces(Set<String> ids) async {
+    if (ids.isEmpty) return const {};
     try {
-      final list = await _places.listPlaces();
-      return _placesById = {for (final p in list) p.id: p};
+      return await _places.getPlaces(ids);
     } on Object {
       return const {};
     }

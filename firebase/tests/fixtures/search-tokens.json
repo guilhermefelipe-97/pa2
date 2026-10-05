@@ -1,0 +1,218 @@
+{
+  "_comment": "Casos compartilhados: firebase/tests/osm.test.js (tokens.js) e app/test/domain/search_tokens_test.dart (search_tokens.dart) devem dar o mesmo resultado.",
+  "tokens": [
+    {
+      "input": "Camarões Potiguar",
+      "expected": [
+        "ca",
+        "cam",
+        "cama",
+        "camar",
+        "camaro",
+        "camaroe",
+        "camaroes",
+        "po",
+        "pot",
+        "poti",
+        "potig",
+        "potigu",
+        "potigua",
+        "potiguar"
+      ]
+    },
+    {
+      "input": "Farofa d'Água",
+      "expected": [
+        "fa",
+        "far",
+        "faro",
+        "farof",
+        "farofa",
+        "ag",
+        "agu",
+        "agua"
+      ]
+    },
+    {
+      "input": "  PAÇOCA   de Pilão ",
+      "expected": [
+        "pa",
+        "pac",
+        "paco",
+        "pacoc",
+        "pacoca",
+        "de",
+        "pi",
+        "pil",
+        "pila",
+        "pilao"
+      ]
+    },
+    {
+      "input": "Bar 1º de Maio",
+      "expected": [
+        "ba",
+        "bar",
+        "1o",
+        "de",
+        "ma",
+        "mai",
+        "maio"
+      ]
+    },
+    {
+      "input": "Café & Cia",
+      "expected": [
+        "ca",
+        "caf",
+        "cafe",
+        "ci",
+        "cia"
+      ]
+    },
+    {
+      "input": "Bar do Bar",
+      "expected": [
+        "ba",
+        "bar",
+        "do"
+      ]
+    },
+    {
+      "input": "A",
+      "expected": []
+    },
+    {
+      "input": "",
+      "expected": []
+    },
+    {
+      "input": "Camarões Potiguar",
+      "expected": [
+        "ca",
+        "cam",
+        "cama",
+        "camar",
+        "camaro",
+        "camaroe",
+        "camaroes",
+        "po",
+        "pot",
+        "poti",
+        "potig",
+        "potigu",
+        "potigua",
+        "potiguar"
+      ]
+    },
+    {
+      "input": "Paçoca de Pilão",
+      "expected": [
+        "pa",
+        "pac",
+        "paco",
+        "pacoc",
+        "pacoca",
+        "de",
+        "pi",
+        "pil",
+        "pila",
+        "pilao"
+      ]
+    },
+    {
+      "input": "Smørrebrød Æble",
+      "expected": [
+        "sm",
+        "smo",
+        "smor",
+        "smorr",
+        "smorre",
+        "smorreb",
+        "smorrebr",
+        "smorrebro",
+        "smorrebrod",
+        "ae",
+        "aeb",
+        "aebl",
+        "aeble"
+      ]
+    }
+  ],
+  "words": [
+    {
+      "input": "camar",
+      "expected": [
+        "camar"
+      ]
+    },
+    {
+      "input": "  Camarões   POT ",
+      "expected": [
+        "camaroes",
+        "pot"
+      ]
+    },
+    {
+      "input": "d'água",
+      "expected": [
+        "d",
+        "agua"
+      ]
+    },
+    {
+      "input": "Ñandú-Ü",
+      "expected": [
+        "nandu",
+        "u"
+      ]
+    },
+    {
+      "input": " ",
+      "expected": []
+    },
+    {
+      "input": "ÁGUA de coco",
+      "expected": [
+        "agua",
+        "de",
+        "coco"
+      ]
+    },
+    {
+      "input": "Straße Ýpsilon ÿ Œuvre",
+      "expected": [
+        "strasse",
+        "ypsilon",
+        "y",
+        "oeuvre"
+      ]
+    },
+    {
+      "input": "1º andar, 2ª porta",
+      "expected": [
+        "1o",
+        "andar",
+        "2a",
+        "porta"
+      ]
+    },
+    {
+      "input": "Øst Bæ",
+      "expected": [
+        "ost",
+        "bae"
+      ]
+    }
+  ],
+  "nameLower": [
+    {
+      "input": "Outback Steakhouse (Midway Mall)",
+      "expected": "outback steakhouse midway mall"
+    },
+    {
+      "input": "Mercado de Petrópolis",
+      "expected": "mercado de petropolis"
+    }
+  ]
+}

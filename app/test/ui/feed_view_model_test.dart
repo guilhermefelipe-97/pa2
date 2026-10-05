@@ -120,12 +120,23 @@ void main() {
     expect(vm.items.single.place.neighborhood, 'Tirol');
   });
 
-  test('locais são lidos uma vez só e reaproveitados nas recargas', () async {
+  test('lê só os locais que aparecem no feed, numa chamada', () async {
     users.followingByUser['me'] = {'a'};
-    reviews.stored.add(review(authorId: 'a', placeId: 'x'));
+    reviews.stored.addAll([
+      review(authorId: 'a', placeId: 'x'),
+      review(authorId: 'a', placeId: 'x'),
+      review(authorId: 'a', placeId: 'fora-do-catalogo', placeName: 'Antigo'),
+    ]);
     await vm.load();
-    await vm.load();
-    expect(places.listCalls, 1);
+    expect(places.getCalls, [
+      {'x', 'fora-do-catalogo'},
+    ]);
+    expect(places.searchCalls, isEmpty);
+    expect(places.suggestionCalls, 0);
+    // Local ausente do catálogo: Place mínimo com o nome da avaliação.
+    final antigo = vm.items.firstWhere((i) => i.placeId == 'fora-do-catalogo');
+    expect(antigo.placeName, 'Antigo');
+    expect(antigo.place.photoUrl, isNull);
   });
 
   test('falha ao ler locais não derruba o feed: card com fallback e nova tentativa depois', () async {
@@ -139,13 +150,19 @@ void main() {
 
     places.fail = false;
     await vm.load();
-    expect(places.listCalls, 2);
+    expect(places.getCalls, hasLength(2));
     expect(vm.items.single.place.photoUrl, 'https://f/x.jpg');
   });
 
   test('não segue ninguém: não lê locais', () async {
     await vm.load();
-    expect(places.listCalls, 0);
+    expect(places.getCalls, isEmpty);
+  });
+
+  test('segue alguém sem avaliações: não lê locais', () async {
+    users.followingByUser['me'] = {'a'};
+    await vm.load();
+    expect(places.getCalls, isEmpty);
   });
 
   test('now() usa o relógio injetado (tempo relativo testável)', () {

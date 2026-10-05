@@ -5,8 +5,10 @@ import 'package:naarea/data/firebase/firestore_place_repository.dart';
 import 'package:naarea/data/firebase/firestore_review_repository.dart';
 import 'package:naarea/data/firebase/firestore_user_repository.dart';
 import 'package:naarea/domain/models/companion.dart';
+import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/domain/models/review.dart';
 import 'package:naarea/domain/models/scores.dart';
+import 'package:naarea/domain/search_tokens.dart';
 
 import '../support/builders.dart';
 
@@ -41,6 +43,34 @@ Future<void> _addReview(
     'createdAt': Timestamp.fromDate(createdAt),
   });
 }
+
+/// Lê os docs por id (getPlaces) — o repositório não tem "listar tudo".
+Future<Map<String, Place>> _allById(FakeFirebaseFirestore db) async {
+  final ids = (await db.collection('places').get()).docs.map((d) => d.id);
+  return FirestorePlaceRepository(db).getPlaces(ids);
+}
+
+Future<List<Place>> _all(FakeFirebaseFirestore db) async =>
+    (await _allById(db)).values.toList();
+
+/// Doc de `places` como o seed grava (nameLower + searchTokens).
+Future<void> _seedPlace(
+  FakeFirebaseFirestore db,
+  String id,
+  String name, {
+  String source = 'osm',
+  String? photoUrl,
+  String category = 'Restaurante',
+}) => db.doc('places/$id').set({
+  'name': name,
+  'nameLower': nameLower(name),
+  'searchTokens': searchTokens(name),
+  'category': category,
+  'neighborhood': 'Ponta Negra',
+  'city': 'Natal',
+  'source': source,
+  'photoUrl': ?photoUrl,
+});
 
 void main() {
   group('FirestoreReviewRepository.createReview', () {
@@ -205,7 +235,7 @@ void main() {
       await db.doc('places/nome-numero').set({'name': 7});
       await db.doc('places/nome-vazio').set({'name': '  '});
 
-      final places = await FirestorePlaceRepository(db).listPlaces();
+      final places = await _all(db);
       expect(places.map((p) => p.id).toSet(), {'ok', 'parcial'});
       final parcial = places.firstWhere((p) => p.id == 'parcial');
       expect(parcial.category, '');
@@ -218,7 +248,7 @@ void main() {
       await db.doc('places/sem').set({'name': 'B'});
       await db.doc('places/vazio').set({'name': 'C', 'photoUrl': '  '});
       await db.doc('places/numero').set({'name': 'D', 'photoUrl': 3});
-      final byId = {for (final p in await FirestorePlaceRepository(db).listPlaces()) p.id: p};
+      final byId = await _allById(db);
       expect(byId['com']!.photoUrl, 'https://upload.wikimedia.org/x.jpg');
       expect(byId['sem']!.photoUrl, isNull);
       expect(byId['vazio']!.photoUrl, isNull);
@@ -235,13 +265,148 @@ void main() {
         'photoIllustrative': true,
       });
       await db.doc('places/b').set({'name': 'B', 'photoAuthor': 3, 'photoIllustrative': 'sim'});
-      final byId = {for (final p in await FirestorePlaceRepository(db).listPlaces()) p.id: p};
+      final byId = await _allById(db);
       expect(byId['a']!.photoAuthor, 'Beraldo Leal');
       expect(byId['a']!.photoLicense, 'CC BY 2.0');
       expect(byId['a']!.photoIllustrative, isTrue);
       expect(byId['b']!.photoAuthor, isNull);
       expect(byId['b']!.photoLicense, isNull);
       expect(byId['b']!.photoIllustrative, isFalse);
+    });
+
+    test('lê os campos do OSM (coordenadas, cozinha, endereço, horário, origem)', () async {
+      final db = FakeFirebaseFirestore();
+      await db.doc('places/osm-n1').set({
+        'name': 'Camarões',
+        'lat': -5.88,
+        'lng': -35.17,
+        'cuisine': 'Frutos do mar',
+        'address': 'Av. Engenheiro Roberto Freire, 2610',
+        'openingHours': 'Mo-Su 11:30-23:00',
+        'osmId': 'node/1',
+        'source': 'osm',
+      });
+      await db.doc('places/ruim').set({'name': 'X', 'lat': 'a', 'lng': -35, 'source': 3});
+      await db.doc('places/meia').set({'name': 'Y', 'lat': -5.8});
+      final byId = await _allById(db);
+      final p = byId['osm-n1']!;
+      expect(p.lat, -5.88);
+      expect(p.lng, -35.17);
+      expect(p.cuisine, 'Frutos do mar');
+      expect(p.address, 'Av. Engenheiro Roberto Freire, 2610');
+      expect(p.openingHours, 'Mo-Su 11:30-23:00');
+      expect(p.osmId, 'node/1');
+      expect(p.source, PlaceSource.osm);
+      expect(p.hasOsmData, isTrue);
+      expect(byId['ruim']!.lat, isNull);
+      expect(byId['ruim']!.lng, isNull);
+      expect(byId['ruim']!.source, PlaceSource.curated);
+      expect(byId['meia']!.lat, isNull, reason: 'sem par lat/lng completo');
+      expect(byId['meia']!.hasOsmData, isFalse);
+    });
+
+    test('search: token sem acento/caixa, ordenado por nome, termos extras no cliente', () async {
+      final db = FakeFirebaseFirestore();
+      await _seedPlace(db, 'c1', 'Camarões Potiguar');
+      await _seedPlace(db, 'c2', 'Camarões');
+      await _seedPlace(db, 'c3', 'Bar do Camarada');
+      await _seedPlace(db, 'm', 'Mangai');
+      final repo = FirestorePlaceRepository(db);
+
+      expect((await repo.search('CAMAR')).map((p) => p.id), ['c3', 'c2', 'c1']);
+      expect((await repo.search('camarões pot')).map((p) => p.id), ['c1']);
+      expect((await repo.search('pot camar')).map((p) => p.id), ['c1']);
+      expect(await repo.search('c'), isEmpty);
+      expect(await repo.search('  '), isEmpty);
+      expect(await repo.search('xyz'), isEmpty);
+    });
+
+    test('search: manda ao servidor o termo mais longo; o doc que casa todos aparece mesmo depois do 20º', () async {
+      final db = FakeFirebaseFirestore();
+      // 70 docs com "de" antes do alvo em nameLower: com o 1º termo ("de")
+      // a página de 60 enche e o alvo fica de fora.
+      for (var i = 0; i < 70; i++) {
+        await _seedPlace(db, 'b$i', 'Bar de ${i.toString().padLeft(2, '0')}');
+      }
+      // 25 docs com "camaroes" antes do alvo (o alvo é o 26º).
+      for (var i = 0; i < 25; i++) {
+        await _seedPlace(db, 'c$i', 'Camarões ${i.toString().padLeft(2, '0')}');
+      }
+      await _seedPlace(db, 'alvo', 'Camarões de Zé');
+      final r = await FirestorePlaceRepository(db).search('de camarões');
+      expect(r.map((p) => p.id), ['alvo']);
+    });
+
+    test('search: no máximo 20 resultados', () async {
+      final db = FakeFirebaseFirestore();
+      for (var i = 0; i < 25; i++) {
+        await _seedPlace(db, 'b$i', 'Bar ${i.toString().padLeft(2, '0')}');
+      }
+      final r = await FirestorePlaceRepository(db).search('bar');
+      expect(r, hasLength(20));
+      expect(r.first.name, 'Bar 00');
+    });
+
+    test('suggestions: só curados com foto, por nome', () async {
+      final db = FakeFirebaseFirestore();
+      await _seedPlace(db, 'z', 'Zé', source: 'curated', photoUrl: 'https://f/z.jpg');
+      await _seedPlace(db, 'a', 'Árvore', source: 'curated', photoUrl: 'https://f/a.jpg');
+      await _seedPlace(db, 'sem-foto', 'Sem foto', source: 'curated');
+      await _seedPlace(db, 'osm', 'Do OSM', photoUrl: 'https://f/o.jpg');
+      final r = await FirestorePlaceRepository(db).suggestions();
+      expect(r.map((p) => p.id), ['a', 'z']);
+    });
+
+    test('getPlaces: ids vazios ou com "/" são ignorados sem consultar', () async {
+      final db = FakeFirebaseFirestore();
+      await _seedPlace(db, 'p1', 'Local 1');
+      final repo = FirestorePlaceRepository(db);
+      expect(await repo.getPlaces(['', 'a/b', '/']), isEmpty);
+      expect(repo.queryCount, 0);
+      expect((await repo.getPlaces(['', 'p1', 'x/y'])).keys, ['p1']);
+      expect(repo.queryCount, 1);
+    });
+
+    test('getPlaces: id ausente fica em cache e não é consultado de novo na sessão', () async {
+      final db = FakeFirebaseFirestore();
+      final repo = FirestorePlaceRepository(db);
+      expect(await repo.getPlaces(['sumiu']), isEmpty);
+      expect(repo.queryCount, 1);
+      await _seedPlace(db, 'sumiu', 'Voltou');
+      expect(await repo.getPlaces(['sumiu']), isEmpty);
+      expect(repo.queryCount, 1);
+    });
+
+    test('getPlaces: chamadas simultâneas pelos mesmos ids compartilham a consulta', () async {
+      final db = FakeFirebaseFirestore();
+      await _seedPlace(db, 'p1', 'Local 1');
+      await _seedPlace(db, 'p2', 'Local 2');
+      final repo = FirestorePlaceRepository(db);
+      final results = await Future.wait([
+        repo.getPlaces(['p1', 'p2']),
+        repo.getPlaces(['p2', 'p1']),
+        repo.getPlaces(['p1']),
+      ]);
+      expect(repo.queryCount, 1);
+      expect(results[0].keys.toSet(), {'p1', 'p2'});
+      expect(results[1].keys.toSet(), {'p1', 'p2'});
+      expect(results[2].keys, ['p1']);
+    });
+
+    test('getPlaces: lotes de 30, ids ausentes ficam de fora, cache em memória', () async {
+      final db = FakeFirebaseFirestore();
+      for (var i = 0; i < 65; i++) {
+        await _seedPlace(db, 'p$i', 'Local $i');
+      }
+      final repo = FirestorePlaceRepository(db);
+      final ids = [for (var i = 0; i < 65; i++) 'p$i', 'nao-existe', ''];
+      final byId = await repo.getPlaces(ids);
+      expect(byId.keys.toSet(), {for (var i = 0; i < 65; i++) 'p$i'});
+
+      // Cache: apagar no banco não muda o que já foi lido nesta sessão.
+      await db.doc('places/p0').delete();
+      expect((await repo.getPlaces(['p0']))['p0']!.name, 'Local 0');
+      expect(await repo.getPlaces(const []), isEmpty);
     });
   });
 }
