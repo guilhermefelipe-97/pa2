@@ -6,6 +6,9 @@ const String emulatorProjectId = 'demo-naarea';
 
 /// No modo emulador troca só o projectId: o emulador separa os dados por
 /// projeto, e com o id real o app leria um namespace diferente do seed.
-FirebaseOptions firebaseOptionsFor(FirebaseOptions options, {required bool useEmulator}) {
+FirebaseOptions firebaseOptionsFor(
+  FirebaseOptions options, {
+  required bool useEmulator,
+}) {
   return useEmulator ? options.copyWith(projectId: emulatorProjectId) : options;
 }

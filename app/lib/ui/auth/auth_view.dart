@@ -62,12 +62,14 @@ class _AuthViewState extends State<AuthView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('NaÁrea',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.displaySmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: theme.colorScheme.primary,
-                            )),
+                        Text(
+                          'NaÁrea',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.displaySmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           isSignUp
@@ -109,7 +111,9 @@ class _AuthViewState extends State<AuthView> {
                           controller: _password,
                           obscureText: true,
                           autofillHints: [
-                            isSignUp ? AutofillHints.newPassword : AutofillHints.password,
+                            isSignUp
+                                ? AutofillHints.newPassword
+                                : AutofillHints.password,
                           ],
                           decoration: const InputDecoration(
                             labelText: 'Senha',
@@ -134,7 +138,9 @@ class _AuthViewState extends State<AuthView> {
                                 ? const SizedBox(
                                     height: 20,
                                     width: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : Text(isSignUp ? 'Criar conta' : 'Entrar'),
                           ),
@@ -143,10 +149,14 @@ class _AuthViewState extends State<AuthView> {
                         TextButton(
                           onPressed: vm.isLoading
                               ? null
-                              : () => context.go(isSignUp ? Routes.login : Routes.signUp),
-                          child: Text(isSignUp
-                              ? 'Já tenho conta — entrar'
-                              : 'Não tem conta? Cadastre-se'),
+                              : () => context.go(
+                                  isSignUp ? Routes.login : Routes.signUp,
+                                ),
+                          child: Text(
+                            isSignUp
+                                ? 'Já tenho conta — entrar'
+                                : 'Não tem conta? Cadastre-se',
+                          ),
                         ),
                       ],
                     ),

@@ -30,6 +30,7 @@ class Place {
     this.openingHours,
     this.osmId,
     this.source = PlaceSource.curated,
+    this.inCatalog = true,
   });
 
   final String id;
@@ -66,6 +67,10 @@ class Place {
   final String? osmId;
 
   final PlaceSource source;
+
+  /// `false` no Place mínimo que o feed monta quando o id da avaliação não
+  /// está no catálogo: sem doc em `places`, as Rules negam salvar.
+  final bool inCatalog;
 
   /// Tem dados vindos do OpenStreetMap (exige o crédito © OpenStreetMap).
   bool get hasOsmData => source == PlaceSource.osm || osmId != null;

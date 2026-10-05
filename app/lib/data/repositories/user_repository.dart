@@ -1,7 +1,10 @@
 import '../../domain/models/user_profile.dart';
 
 abstract class UserRepository {
-  Future<void> createProfile({required String uid, required String displayName});
+  Future<void> createProfile({
+    required String uid,
+    required String displayName,
+  });
 
   Future<UserProfile?> getProfile(String uid);
 

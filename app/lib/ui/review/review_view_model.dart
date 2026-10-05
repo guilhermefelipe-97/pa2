@@ -14,9 +14,9 @@ class ReviewViewModel extends SafeChangeNotifier {
     required AuthRepository authRepository,
     required UserRepository userRepository,
     required ReviewRepository reviewRepository,
-  })  : _auth = authRepository,
-        _users = userRepository,
-        _reviews = reviewRepository;
+  }) : _auth = authRepository,
+       _users = userRepository,
+       _reviews = reviewRepository;
 
   final Place place;
   final AuthRepository _auth;
@@ -89,15 +89,21 @@ class ReviewViewModel extends SafeChangeNotifier {
     try {
       final profile = await _users.getProfile(uid);
       if (profile == null) throw StateError('perfil ausente');
-      await _reviews.createReview(NewReview(
-        authorId: uid,
-        authorName: profile.displayName,
-        placeId: place.id,
-        placeName: place.name,
-        scores: Scores(food: _food!, ambience: _ambience!, service: _service!),
-        companion: _companion,
-        comment: _comment, // NewReview normaliza: trim, vazio → null
-      ));
+      await _reviews.createReview(
+        NewReview(
+          authorId: uid,
+          authorName: profile.displayName,
+          placeId: place.id,
+          placeName: place.name,
+          scores: Scores(
+            food: _food!,
+            ambience: _ambience!,
+            service: _service!,
+          ),
+          companion: _companion,
+          comment: _comment, // NewReview normaliza: trim, vazio → null
+        ),
+      );
       return true;
     } on Object {
       // Inclui permission-denied das Rules.

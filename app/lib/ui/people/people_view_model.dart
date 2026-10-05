@@ -10,13 +10,14 @@ class PeopleViewModel extends SafeChangeNotifier {
   PeopleViewModel({
     required AuthRepository authRepository,
     required UserRepository userRepository,
-  })  : _auth = authRepository,
-        _users = userRepository;
+  }) : _auth = authRepository,
+       _users = userRepository;
 
   final AuthRepository _auth;
   final UserRepository _users;
 
-  static const String initErrorMessage = 'Não foi possível carregar quem você segue.';
+  static const String initErrorMessage =
+      'Não foi possível carregar quem você segue.';
 
   List<UserProfile> _results = const [];
   List<UserProfile> get results => _results;

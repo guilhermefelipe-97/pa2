@@ -3,6 +3,7 @@ abstract final class Routes {
   static const login = '/login';
   static const signUp = '/cadastro';
   static const feed = '/';
+  static const saved = '/quero-ir';
   static const people = '/pessoas';
   static const pickPlace = '/avaliar';
 
@@ -10,5 +11,6 @@ abstract final class Routes {
 
   static String reviewFor(String placeId) => '/avaliar/$placeId';
 
-  static String placeDetail(String placeId) => '/local/${Uri.encodeComponent(placeId)}';
+  static String placeDetail(String placeId) =>
+      '/local/${Uri.encodeComponent(placeId)}';
 }

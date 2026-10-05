@@ -13,13 +13,37 @@
 library;
 
 const _accents = {
-  'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a',
-  'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
-  'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
-  'ó': 'o', 'ò': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
-  'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
-  'ç': 'c', 'ñ': 'n',
-  'ø': 'o', 'æ': 'ae', 'ß': 'ss', 'ý': 'y', 'ÿ': 'y', 'œ': 'oe', 'º': 'o',
+  'á': 'a',
+  'à': 'a',
+  'â': 'a',
+  'ã': 'a',
+  'ä': 'a',
+  'é': 'e',
+  'è': 'e',
+  'ê': 'e',
+  'ë': 'e',
+  'í': 'i',
+  'ì': 'i',
+  'î': 'i',
+  'ï': 'i',
+  'ó': 'o',
+  'ò': 'o',
+  'ô': 'o',
+  'õ': 'o',
+  'ö': 'o',
+  'ú': 'u',
+  'ù': 'u',
+  'û': 'u',
+  'ü': 'u',
+  'ç': 'c',
+  'ñ': 'n',
+  'ø': 'o',
+  'æ': 'ae',
+  'ß': 'ss',
+  'ý': 'y',
+  'ÿ': 'y',
+  'œ': 'oe',
+  'º': 'o',
   'ª': 'a',
 };
 
@@ -68,7 +92,8 @@ List<String> normalizeQuery(String query) => searchWords(query);
 String? serverTerm(List<String> terms) {
   String? best;
   for (final t in terms) {
-    if (t.length >= minTokenLength && (best == null || t.length > best.length)) {
+    if (t.length >= minTokenLength &&
+        (best == null || t.length > best.length)) {
       best = t;
     }
   }

@@ -52,7 +52,6 @@ class _PeopleViewState extends State<PeopleView> {
             padding: const EdgeInsets.all(12),
             child: TextField(
               key: const Key('people-search'),
-              autofocus: true,
               decoration: const InputDecoration(
                 hintText: 'Buscar pelo nome',
                 prefixIcon: Icon(Icons.search),
@@ -73,14 +72,21 @@ class _PeopleViewState extends State<PeopleView> {
                       MaterialBanner(
                         content: const Text(PeopleViewModel.initErrorMessage),
                         actions: [
-                          TextButton(onPressed: vm.init, child: const Text('Tentar de novo')),
+                          TextButton(
+                            onPressed: vm.init,
+                            child: const Text('Tentar de novo'),
+                          ),
                         ],
                       ),
                     if (vm.errorMessage != null)
                       Padding(
                         padding: const EdgeInsets.all(12),
-                        child: Text(vm.errorMessage!,
-                            style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                        child: Text(
+                          vm.errorMessage!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
                       ),
                     Expanded(child: _buildList(vm)),
                   ],
@@ -95,7 +101,9 @@ class _PeopleViewState extends State<PeopleView> {
 
   Widget _buildList(PeopleViewModel vm) {
     if (vm.lastQuery.isEmpty) {
-      return const Center(child: Text('Digite um nome para encontrar pessoas.'));
+      return const Center(
+        child: Text('Digite um nome para encontrar pessoas.'),
+      );
     }
     if (!vm.isSearching && vm.results.isEmpty) {
       return const Center(child: Text('Ninguém encontrado com esse nome.'));

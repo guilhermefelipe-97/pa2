@@ -6,6 +6,7 @@ import '../../domain/models/place.dart';
 import '../../routing/routes.dart';
 import '../core/category_style.dart';
 import '../core/osm_credit.dart';
+import '../core/save_button.dart';
 import '../feed/widgets/feed_card.dart' show placeSubtitle;
 import 'place_picker_view_model.dart';
 
@@ -83,7 +84,10 @@ class _PlacePickerViewState extends State<PlacePickerView> {
           children: [
             Text(vm.errorMessage!),
             const SizedBox(height: 12),
-            FilledButton(onPressed: vm.retry, child: const Text('Tentar de novo')),
+            FilledButton(
+              onPressed: vm.retry,
+              child: const Text('Tentar de novo'),
+            ),
           ],
         ),
       );
@@ -154,6 +158,7 @@ class _PlacePickerViewState extends State<PlacePickerView> {
           leading: Icon(categoryIcon(p.category)),
           title: Text(p.name),
           subtitle: subtitle.isEmpty ? null : Text(subtitle),
+          trailing: SaveButton(placeId: p.id),
           onTap: () => _pick(p),
         );
       },
@@ -176,7 +181,11 @@ class _EmptyMessage extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(title, style: theme.textTheme.titleMedium, textAlign: TextAlign.center),
+            Text(
+              title,
+              style: theme.textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
             if (hint != null) ...[
               const SizedBox(height: 6),
               Text(
@@ -202,13 +211,13 @@ class _SkeletonList extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.surfaceContainerHighest;
     Widget bar(double width, double height) => Container(
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(6),
-          ),
-        );
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
+    );
     return Semantics(
       label: 'Buscando locais',
       child: ListView.builder(

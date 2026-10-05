@@ -14,6 +14,7 @@ import 'package:naarea/ui/review/review_view.dart';
 import 'package:naarea/ui/review/review_view_model.dart';
 
 import '../support/builders.dart';
+import '../support/app_harness.dart';
 import '../support/fakes.dart';
 
 final _now = DateTime.utc(2026, 9, 28, 15); // 12h em Natal
@@ -260,7 +261,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: PlaceDetailView(item: item, now: () => _now),
+          home: PlaceDetailView(viewModel: detailVmFor(item, now: _now)),
         ),
       );
       await tester.pumpAndSettle();
@@ -292,7 +293,7 @@ void main() {
     ]).single;
     await tester.pumpWidget(
       MaterialApp(
-        home: PlaceDetailView(item: item, now: () => _now),
+        home: PlaceDetailView(viewModel: detailVmFor(item, now: _now)),
       ),
     );
     await tester.pumpAndSettle();
@@ -309,16 +310,18 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: PlaceDetailView(
-          item: itemFor(
-            place(
-              id: 'x',
-              photoUrl: 'https://f/x.jpg',
-              photoAuthor: 'Beraldo Leal',
-              photoLicense: 'CC BY 2.0',
-              photoIllustrative: true,
+          viewModel: detailVmFor(
+            itemFor(
+              place(
+                id: 'x',
+                photoUrl: 'https://f/x.jpg',
+                photoAuthor: 'Beraldo Leal',
+                photoLicense: 'CC BY 2.0',
+                photoIllustrative: true,
+              ),
             ),
+            now: _now,
           ),
-          now: () => _now,
         ),
       ),
     );
@@ -329,15 +332,17 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: PlaceDetailView(
-          item: itemFor(
-            place(
-              id: 'y',
-              photoUrl: 'https://f/y.jpg',
-              photoAuthor: 'Marcos',
-              photoLicense: 'CC0',
+          viewModel: detailVmFor(
+            itemFor(
+              place(
+                id: 'y',
+                photoUrl: 'https://f/y.jpg',
+                photoAuthor: 'Marcos',
+                photoLicense: 'CC0',
+              ),
             ),
+            now: _now,
           ),
-          now: () => _now,
         ),
       ),
     );
@@ -349,8 +354,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: PlaceDetailView(
-          item: itemFor(place(id: 'z', photoAuthor: 'X')),
-          now: () => _now,
+          viewModel: detailVmFor(
+            itemFor(place(id: 'z', photoAuthor: 'X')),
+            now: _now,
+          ),
         ),
       ),
     );

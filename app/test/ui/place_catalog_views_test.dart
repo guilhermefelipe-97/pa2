@@ -17,17 +17,40 @@ import 'package:naarea/ui/review/review_view.dart';
 import 'package:provider/provider.dart';
 
 import '../support/builders.dart';
+import '../support/app_harness.dart';
 import '../support/fakes.dart';
 
 final _catalog = [
-  place(id: 'c1', name: 'Camarões Potiguar', category: 'Frutos do mar', neighborhood: 'Ponta Negra', photoUrl: 'https://f/c1.jpg'),
-  place(id: 'c2', name: 'Camarões', category: 'Restaurante', neighborhood: 'Petrópolis', photoUrl: 'https://f/c2.jpg'),
-  place(id: 'osm-n9', name: 'Camarada Bar', category: 'Bar', neighborhood: 'Rocas', source: PlaceSource.osm, osmId: 'node/9'),
+  place(
+    id: 'c1',
+    name: 'Camarões Potiguar',
+    category: 'Frutos do mar',
+    neighborhood: 'Ponta Negra',
+    photoUrl: 'https://f/c1.jpg',
+  ),
+  place(
+    id: 'c2',
+    name: 'Camarões',
+    category: 'Restaurante',
+    neighborhood: 'Petrópolis',
+    photoUrl: 'https://f/c2.jpg',
+  ),
+  place(
+    id: 'osm-n9',
+    name: 'Camarada Bar',
+    category: 'Bar',
+    neighborhood: 'Rocas',
+    source: PlaceSource.osm,
+    osmId: 'node/9',
+  ),
 ];
 
 const _debounce = Duration(milliseconds: 300);
 
-Future<PlacePickerViewModel> _pumpPicker(WidgetTester tester, FakePlaceRepository repo) async {
+Future<PlacePickerViewModel> _pumpPicker(
+  WidgetTester tester,
+  FakePlaceRepository repo,
+) async {
   final vm = PlacePickerViewModel(placeRepository: repo);
   await tester.pumpWidget(MaterialApp(home: PlacePickerView(viewModel: vm)));
   await tester.pumpAndSettle();
@@ -35,11 +58,17 @@ Future<PlacePickerViewModel> _pumpPicker(WidgetTester tester, FakePlaceRepositor
 }
 
 void main() {
-  testWidgets('seletor: sugestões iniciais e crédito © OpenStreetMap', (tester) async {
+  testWidgets('seletor: sugestões iniciais e crédito © OpenStreetMap', (
+    tester,
+  ) async {
     await _pumpPicker(tester, FakePlaceRepository(_catalog));
     expect(find.text('Sugestões'), findsOneWidget);
     expect(find.text('Camarões Potiguar'), findsOneWidget);
-    expect(find.text('Camarada Bar'), findsNothing, reason: 'sugestões = curados com foto');
+    expect(
+      find.text('Camarada Bar'),
+      findsNothing,
+      reason: 'sugestões = curados com foto',
+    );
     expect(find.text('© colaboradores do OpenStreetMap'), findsOneWidget);
   });
 
@@ -49,10 +78,16 @@ void main() {
     expect(find.text('Sugestões'), findsNothing);
   });
 
-  testWidgets('seletor: com 20 resultados avisa no fim para refinar', (tester) async {
-    await _pumpPicker(tester, FakePlaceRepository([
-      for (var i = 0; i < 25; i++) place(id: 'b$i', name: 'Bar ${i.toString().padLeft(2, '0')}'),
-    ]));
+  testWidgets('seletor: com 20 resultados avisa no fim para refinar', (
+    tester,
+  ) async {
+    await _pumpPicker(
+      tester,
+      FakePlaceRepository([
+        for (var i = 0; i < 25; i++)
+          place(id: 'b$i', name: 'Bar ${i.toString().padLeft(2, '0')}'),
+      ]),
+    );
     await tester.enterText(find.byKey(const Key('place-search')), 'bar');
     await tester.pump(_debounce);
     await tester.pumpAndSettle();
@@ -69,24 +104,27 @@ void main() {
     expect(find.text('Bar 20'), findsNothing);
   });
 
-  testWidgets('seletor: skeleton durante a busca, depois resultados com bairro', (tester) async {
-    final repo = FakePlaceRepository(_catalog);
-    final gate = Completer<List<Place>>();
-    repo.searchOverride = (_) => gate.future;
-    await _pumpPicker(tester, repo);
+  testWidgets(
+    'seletor: skeleton durante a busca, depois resultados com bairro',
+    (tester) async {
+      final repo = FakePlaceRepository(_catalog);
+      final gate = Completer<List<Place>>();
+      repo.searchOverride = (_) => gate.future;
+      await _pumpPicker(tester, repo);
 
-    await tester.enterText(find.byKey(const Key('place-search')), 'camar');
-    await tester.pump();
-    expect(find.byKey(const Key('place-skeleton')), findsOneWidget);
-    await tester.pump(_debounce);
-    expect(repo.searchCalls, ['camar']);
+      await tester.enterText(find.byKey(const Key('place-search')), 'camar');
+      await tester.pump();
+      expect(find.byKey(const Key('place-skeleton')), findsOneWidget);
+      await tester.pump(_debounce);
+      expect(repo.searchCalls, ['camar']);
 
-    gate.complete(_catalog);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('place-skeleton')), findsNothing);
-    expect(find.text('Ponta Negra · Frutos do mar'), findsOneWidget);
-    expect(find.text('Rocas · Bar'), findsOneWidget);
-  });
+      gate.complete(_catalog);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('place-skeleton')), findsNothing);
+      expect(find.text('Ponta Negra · Frutos do mar'), findsOneWidget);
+      expect(find.text('Rocas · Bar'), findsOneWidget);
+    },
+  );
 
   testWidgets('seletor: chips de categoria filtram', (tester) async {
     await _pumpPicker(tester, FakePlaceRepository(_catalog));
@@ -109,7 +147,9 @@ void main() {
     expect(find.text('Tente só uma palavra do nome'), findsOneWidget);
   });
 
-  testWidgets('seletor: erro mostra "Tentar de novo", que refaz a busca', (tester) async {
+  testWidgets('seletor: erro mostra "Tentar de novo", que refaz a busca', (
+    tester,
+  ) async {
     final repo = FakePlaceRepository(_catalog);
     await _pumpPicker(tester, repo);
     repo.fail = true;
@@ -124,47 +164,58 @@ void main() {
     expect(find.text('Camarões Potiguar'), findsOneWidget);
   });
 
-  testWidgets('AC: busco "camarões", vejo o local com bairro e consigo avaliar', (tester) async {
+  testWidgets(
+    'AC: busco "camarões", vejo o local com bairro e consigo avaliar',
+    (tester) async {
+      final users = FakeUserRepository()..addUser('me', 'Eu');
+      final auth = FakeAuthRepository(uid: 'me', users: users);
+      final router = buildRouter(auth);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthRepository>.value(value: auth),
+            Provider<UserRepository>.value(value: users),
+            Provider<PlaceRepository>.value(
+              value: FakePlaceRepository(_catalog),
+            ),
+            Provider<ReviewRepository>.value(value: FakeReviewRepository()),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+      router.go(Routes.pickPlace);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('place-search')), 'camarões');
+      await tester.pump(_debounce);
+      await tester.pumpAndSettle();
+      expect(find.text('Petrópolis · Restaurante'), findsOneWidget);
+      expect(find.text('Camarada Bar'), findsNothing);
+
+      await tester.tap(find.text('Camarões'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ReviewView), findsOneWidget);
+    },
+  );
+
+  testWidgets('seletor: toque duplo abre a avaliação uma vez só', (
+    tester,
+  ) async {
     final users = FakeUserRepository()..addUser('me', 'Eu');
     final auth = FakeAuthRepository(uid: 'me', users: users);
     final router = buildRouter(auth);
-    await tester.pumpWidget(MultiProvider(
-      providers: [
-        ChangeNotifierProvider<AuthRepository>.value(value: auth),
-        Provider<UserRepository>.value(value: users),
-        Provider<PlaceRepository>.value(value: FakePlaceRepository(_catalog)),
-        Provider<ReviewRepository>.value(value: FakeReviewRepository()),
-      ],
-      child: MaterialApp.router(routerConfig: router),
-    ));
-    await tester.pumpAndSettle();
-    router.go(Routes.pickPlace);
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byKey(const Key('place-search')), 'camarões');
-    await tester.pump(_debounce);
-    await tester.pumpAndSettle();
-    expect(find.text('Petrópolis · Restaurante'), findsOneWidget);
-    expect(find.text('Camarada Bar'), findsNothing);
-
-    await tester.tap(find.text('Camarões'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ReviewView), findsOneWidget);
-  });
-
-  testWidgets('seletor: toque duplo abre a avaliação uma vez só', (tester) async {
-    final users = FakeUserRepository()..addUser('me', 'Eu');
-    final auth = FakeAuthRepository(uid: 'me', users: users);
-    final router = buildRouter(auth);
-    await tester.pumpWidget(MultiProvider(
-      providers: [
-        ChangeNotifierProvider<AuthRepository>.value(value: auth),
-        Provider<UserRepository>.value(value: users),
-        Provider<PlaceRepository>.value(value: FakePlaceRepository(_catalog)),
-        Provider<ReviewRepository>.value(value: FakeReviewRepository()),
-      ],
-      child: MaterialApp.router(routerConfig: router),
-    ));
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthRepository>.value(value: auth),
+          Provider<UserRepository>.value(value: users),
+          Provider<PlaceRepository>.value(value: FakePlaceRepository(_catalog)),
+          Provider<ReviewRepository>.value(value: FakeReviewRepository()),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
     await tester.pumpAndSettle();
     router.go(Routes.pickPlace);
     await tester.pumpAndSettle();
@@ -186,23 +237,52 @@ void main() {
     expect(find.byType(ReviewView), findsOneWidget);
   });
 
+  testWidgets(
+    'seletor: marcador em cada resultado; tocar salva e não abre a avaliação',
+    (tester) async {
+      final saved = FakeSavedRepository();
+      final app = await pumpApp(tester, places: _catalog, saved: saved);
+      app.router.go(Routes.pickPlace);
+      await tester.pumpAndSettle();
+
+      final marker = find.byKey(const Key('save-c1'));
+      expect(marker, findsOneWidget);
+      await tester.tap(marker);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ReviewView), findsNothing);
+      expect(find.byType(PlacePickerView), findsOneWidget);
+      expect(saved.byUser['me']!.containsKey('c1'), isTrue);
+      expect(app.store(tester).isSaved('c1'), isTrue);
+      expect(find.text('Salvo em Quero ir'), findsOneWidget);
+    },
+  );
+
   group('detalhe do local', () {
     FeedItem itemFor(Place p) =>
         groupReviewsIntoFeed([review(placeId: p.id)], places: {p.id: p}).single;
 
-    testWidgets('mostra endereço, cozinha e crédito © OpenStreetMap', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: PlaceDetailView(
-          item: itemFor(place(
-            id: 'osm-n1',
-            name: 'Camarões',
-            address: 'Av. Engenheiro Roberto Freire, 2610',
-            cuisine: 'Frutos do mar',
-            source: PlaceSource.osm,
-            osmId: 'node/1',
-          )),
+    testWidgets('mostra endereço, cozinha e crédito © OpenStreetMap', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlaceDetailView(
+            viewModel: detailVmFor(
+              itemFor(
+                place(
+                  id: 'osm-n1',
+                  name: 'Camarões',
+                  address: 'Av. Engenheiro Roberto Freire, 2610',
+                  cuisine: 'Frutos do mar',
+                  source: PlaceSource.osm,
+                  osmId: 'node/1',
+                ),
+              ),
+            ),
+          ),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
       expect(find.text('Av. Engenheiro Roberto Freire, 2610'), findsOneWidget);
       expect(find.text('Frutos do mar'), findsOneWidget);
@@ -210,20 +290,37 @@ void main() {
       expect(find.text('© colaboradores do OpenStreetMap'), findsOneWidget);
     });
 
-    testWidgets('curado sem dados do OSM: sem endereço, cozinha nem crédito OSM', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: PlaceDetailView(item: itemFor(place(id: 'beco', name: 'Beco da Lama'))),
-      ));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('place-address')), findsNothing);
-      expect(find.byKey(const Key('place-cuisine')), findsNothing);
-      expect(find.byKey(const Key('osm-credit')), findsNothing);
-    });
+    testWidgets(
+      'curado sem dados do OSM: sem endereço, cozinha nem crédito OSM',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: PlaceDetailView(
+              viewModel: detailVmFor(
+                itemFor(place(id: 'beco', name: 'Beco da Lama')),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('place-address')), findsNothing);
+        expect(find.byKey(const Key('place-cuisine')), findsNothing);
+        expect(find.byKey(const Key('osm-credit')), findsNothing);
+      },
+    );
 
-    testWidgets('curado com dados mesclados do OSM também credita', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: PlaceDetailView(item: itemFor(place(id: 'mangai', name: 'Mangai', osmId: 'way/1'))),
-      ));
+    testWidgets('curado com dados mesclados do OSM também credita', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlaceDetailView(
+            viewModel: detailVmFor(
+              itemFor(place(id: 'mangai', name: 'Mangai', osmId: 'way/1')),
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.byKey(const Key('osm-credit')), 100);
       expect(find.byKey(const Key('osm-credit')), findsOneWidget);

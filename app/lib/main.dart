@@ -9,15 +9,18 @@ import 'package:provider/provider.dart';
 import 'data/firebase/firebase_auth_repository.dart';
 import 'data/firebase/firestore_place_repository.dart';
 import 'data/firebase/firestore_review_repository.dart';
+import 'data/firebase/firestore_saved_repository.dart';
 import 'data/firebase/firestore_user_repository.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/place_repository.dart';
 import 'data/repositories/review_repository.dart';
+import 'data/repositories/saved_repository.dart';
 import 'data/repositories/user_repository.dart';
 import 'firebase_config.dart';
 import 'firebase_options.dart';
 import 'routing/router.dart';
 import 'ui/core/theme.dart';
+import 'ui/saved/saved_places_store.dart';
 
 /// `flutter run --dart-define=USE_EMULATOR=true` usa os emuladores locais
 /// (auth :9099, firestore :8080) em vez do projeto real.
@@ -27,7 +30,10 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await Firebase.initializeApp(
-      options: firebaseOptionsFor(DefaultFirebaseOptions.currentPlatform, useEmulator: useEmulator),
+      options: firebaseOptionsFor(
+        DefaultFirebaseOptions.currentPlatform,
+        useEmulator: useEmulator,
+      ),
     );
   } on Object catch (e) {
     // Ex.: lib/firebase_options.dart ainda é o placeholder. Mostra a instrução
@@ -47,7 +53,10 @@ Future<void> main() async {
   }
 
   final userRepository = FirestoreUserRepository(db);
-  final authRepository = FirebaseAuthRepository(auth: auth, userRepository: userRepository);
+  final authRepository = FirebaseAuthRepository(
+    auth: auth,
+    userRepository: userRepository,
+  );
 
   runApp(
     MultiProvider(
@@ -55,7 +64,18 @@ Future<void> main() async {
         ChangeNotifierProvider<AuthRepository>.value(value: authRepository),
         Provider<UserRepository>.value(value: userRepository),
         Provider<PlaceRepository>(create: (_) => FirestorePlaceRepository(db)),
-        Provider<ReviewRepository>(create: (_) => FirestoreReviewRepository(db)),
+        Provider<ReviewRepository>(
+          create: (_) => FirestoreReviewRepository(db),
+        ),
+        Provider<SavedRepository>(create: (_) => FirestoreSavedRepository(db)),
+        // "Quero ir": ids salvos carregados uma vez por sessão (segue o login).
+        ChangeNotifierProvider<SavedPlacesStore>(
+          lazy: false,
+          create: (context) => SavedPlacesStore(
+            authRepository: authRepository,
+            savedRepository: context.read(),
+          ),
+        ),
       ],
       child: NaAreaApp(router: buildRouter(authRepository)),
     ),
@@ -101,8 +121,10 @@ class SetupErrorApp extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Firebase não configurado',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Firebase não configurado',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 12),
                 SelectableText(message),
                 const SizedBox(height: 12),

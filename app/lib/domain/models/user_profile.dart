@@ -19,5 +19,6 @@ class UserProfile {
       normalizeName(raw).length <= maxNameLength;
 
   /// Nome válido = não vazio e dentro do limite, depois de `trim`.
-  static bool isValidName(String raw) => isNonEmptyName(raw) && isNameWithinLimit(raw);
+  static bool isValidName(String raw) =>
+      isNonEmptyName(raw) && isNameWithinLimit(raw);
 }

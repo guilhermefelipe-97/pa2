@@ -28,8 +28,10 @@ class ReviewView extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('${vm.place.category} · ${vm.place.neighborhood}',
-                  style: theme.textTheme.bodyMedium),
+              Text(
+                '${vm.place.category} · ${vm.place.neighborhood}',
+                style: theme.textTheme.bodyMedium,
+              ),
               const SizedBox(height: 24),
               _AxisPicker(
                 label: 'Comida',
@@ -50,7 +52,10 @@ class ReviewView extends StatelessWidget {
                 enabled: !vm.isSubmitting,
               ),
               const SizedBox(height: 16),
-              Text('Com quem você foi? (opcional)', style: theme.textTheme.titleMedium),
+              Text(
+                'Com quem você foi? (opcional)',
+                style: theme.textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -60,7 +65,9 @@ class ReviewView extends StatelessWidget {
                     ChoiceChip(
                       label: Text(c.label),
                       selected: vm.companion == c,
-                      onSelected: vm.isSubmitting ? null : (_) => vm.toggleCompanion(c),
+                      onSelected: vm.isSubmitting
+                          ? null
+                          : (_) => vm.toggleCompanion(c),
                     ),
                 ],
               ),
@@ -74,7 +81,9 @@ class ReviewView extends StatelessWidget {
                 maxLength: Review.maxCommentLength,
                 // O maxLength do Flutter conta grafemas; as Rules contam
                 // unidades UTF-16. Este formatter garante a conta das Rules.
-                inputFormatters: const [Utf16LengthLimitingFormatter(Review.maxCommentLength)],
+                inputFormatters: const [
+                  Utf16LengthLimitingFormatter(Review.maxCommentLength),
+                ],
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
                   labelText: 'Conta pra galera como foi (opcional)',
@@ -90,7 +99,10 @@ class ReviewView extends StatelessWidget {
               ),
               if (vm.errorMessage != null) ...[
                 const SizedBox(height: 16),
-                Text(vm.errorMessage!, style: TextStyle(color: theme.colorScheme.error)),
+                Text(
+                  vm.errorMessage!,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
               ],
               const SizedBox(height: 24),
               FilledButton(
@@ -167,7 +179,10 @@ class Utf16LengthLimitingFormatter extends TextInputFormatter {
   final int maxLength;
 
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     final text = newValue.text;
     if (text.length <= maxLength) return newValue;
     var cut = maxLength;

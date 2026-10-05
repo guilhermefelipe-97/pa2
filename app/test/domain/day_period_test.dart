@@ -20,13 +20,19 @@ void main() {
       (23, 59, DayPeriod.noite),
     ];
     for (final (h, m, expected) in cases) {
-      test('${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')} -> ${expected.name}', () {
-        expect(DayPeriod.fromTimestamp(natal(h, m)), expected);
-      });
+      test(
+        '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')} -> ${expected.name}',
+        () {
+          expect(DayPeriod.fromTimestamp(natal(h, m)), expected);
+        },
+      );
     }
 
     test('usa UTC-3, não UTC: 02:00Z é 23:00 do dia anterior em Natal', () {
-      expect(DayPeriod.fromTimestamp(DateTime.utc(2026, 9, 10, 2)), DayPeriod.noite);
+      expect(
+        DayPeriod.fromTimestamp(DateTime.utc(2026, 9, 10, 2)),
+        DayPeriod.noite,
+      );
     });
 
     test('independe do fuso do DateTime de entrada', () {

@@ -179,6 +179,57 @@ describe('users/{uid}/following/{target}', () => {
   });
 });
 
+describe('users/{uid}/saved/{placeId} (Quero ir)', () => {
+  it('dono salva local existente com createdAt do servidor', async () => {
+    await assertSucceeds(setDoc(doc(alice(), 'users/alice/saved/camaroes'), { createdAt: serverTimestamp() }));
+  });
+
+  it('outro usuário não salva no meu Quero ir', async () => {
+    await assertFails(setDoc(doc(bob(), 'users/alice/saved/camaroes'), { createdAt: serverTimestamp() }));
+  });
+
+  it('anônimo não salva', async () => {
+    await assertFails(setDoc(doc(anon(), 'users/alice/saved/camaroes'), { createdAt: serverTimestamp() }));
+  });
+
+  it('não salva local inexistente', async () => {
+    await assertFails(setDoc(doc(alice(), 'users/alice/saved/fantasma'), { createdAt: serverTimestamp() }));
+  });
+
+  it('só aceita createdAt (sem campos extras, sem nota privada)', async () => {
+    await assertFails(setDoc(doc(alice(), 'users/alice/saved/camaroes'), { createdAt: serverTimestamp(), note: 'sábado' }));
+    await assertFails(setDoc(doc(alice(), 'users/alice/saved/camaroes'), { createdAt: serverTimestamp(), list: 'x' }));
+    await assertFails(setDoc(doc(alice(), 'users/alice/saved/camaroes'), {}));
+  });
+
+  it('createdAt precisa ser do servidor', async () => {
+    await assertFails(setDoc(doc(alice(), 'users/alice/saved/camaroes'), { createdAt: Timestamp.fromMillis(0) }));
+    await assertFails(setDoc(doc(alice(), 'users/alice/saved/camaroes'), { createdAt: Timestamp.now() }));
+  });
+
+  it('update é negado (nem o dono reescreve)', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users/alice/saved/camaroes'), { createdAt: Timestamp.now() });
+    });
+    await assertFails(updateDoc(doc(alice(), 'users/alice/saved/camaroes'), { createdAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(alice(), 'users/alice/saved/camaroes'), { createdAt: serverTimestamp() }));
+  });
+
+  it('só o dono lê, lista e remove (privado por padrão)', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users/alice/saved/camaroes'), { createdAt: Timestamp.now() });
+    });
+    await assertSucceeds(getDoc(doc(alice(), 'users/alice/saved/camaroes')));
+    const mine = await assertSucceeds(getDocs(query(collection(alice(), 'users/alice/saved'), orderBy('createdAt', 'desc'))));
+    if (mine.size !== 1) throw new Error('esperava 1 salvo, veio ' + mine.size);
+    await assertFails(getDoc(doc(bob(), 'users/alice/saved/camaroes')));
+    await assertFails(getDocs(collection(bob(), 'users/alice/saved')));
+    await assertFails(getDoc(doc(anon(), 'users/alice/saved/camaroes')));
+    await assertFails(deleteDoc(doc(bob(), 'users/alice/saved/camaroes')));
+    await assertSucceeds(deleteDoc(doc(alice(), 'users/alice/saved/camaroes')));
+  });
+});
+
 describe('places', () => {
   it('logado lê; anônimo não', async () => {
     await assertSucceeds(getDoc(doc(alice(), 'places/camaroes')));
@@ -193,6 +244,22 @@ describe('places', () => {
 });
 
 describe('reviews', () => {
+  it('consulta do detalhe (placeId ==, authorId in lote, orderBy createdAt desc) é permitida para logado', async () => {
+    const q = query(
+      collection(bob(), 'reviews'),
+      where('placeId', '==', 'camaroes'),
+      where('authorId', 'in', ['alice', 'bob']),
+      orderBy('createdAt', 'desc'),
+    );
+    const snap = await assertSucceeds(getDocs(q));
+    if (snap.size !== 1) throw new Error('esperava 1 review, veio ' + snap.size);
+    await assertFails(getDocs(query(
+      collection(anon(), 'reviews'),
+      where('placeId', '==', 'camaroes'),
+      where('authorId', 'in', ['alice']),
+    )));
+  });
+
   it('cria avaliação válida', async () => {
     await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview()));
   });

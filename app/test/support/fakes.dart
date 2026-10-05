@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:naarea/data/repositories/auth_repository.dart';
 import 'package:naarea/data/repositories/place_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
+import 'package:naarea/data/repositories/saved_repository.dart';
 import 'package:naarea/data/repositories/user_repository.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/domain/models/review.dart';
@@ -12,8 +13,8 @@ import 'package:naarea/domain/search_tokens.dart';
 
 class FakeAuthRepository extends AuthRepository {
   FakeAuthRepository({String? uid, this.users, bool initialized = true})
-      : _uid = uid,
-        _initialized = initialized;
+    : _uid = uid,
+      _initialized = initialized;
 
   final FakeUserRepository? users;
   String? _uid;
@@ -41,7 +42,11 @@ class FakeAuthRepository extends AuthRepository {
     required String email,
     required String password,
   }) async {
-    signUpCalls.add({'displayName': displayName, 'email': email, 'password': password});
+    signUpCalls.add({
+      'displayName': displayName,
+      'email': email,
+      'password': password,
+    });
     if (nextError != null) throw nextError!;
     final uid = 'new-${++_seq}';
     await users?.createProfile(uid: uid, displayName: displayName);
@@ -82,7 +87,10 @@ class FakeUserRepository implements UserRepository {
   }
 
   @override
-  Future<void> createProfile({required String uid, required String displayName}) async {
+  Future<void> createProfile({
+    required String uid,
+    required String displayName,
+  }) async {
     addUser(uid, UserProfile.normalizeName(displayName));
   }
 
@@ -116,7 +124,10 @@ class FakeUserRepository implements UserRepository {
   }
 
   @override
-  Future<void> unfollow({required String uid, required String targetUid}) async {
+  Future<void> unfollow({
+    required String uid,
+    required String targetUid,
+  }) async {
     if (failFollow) throw Exception('permission-denied');
     followingByUser[uid]?.remove(targetUid);
   }
@@ -130,6 +141,7 @@ class FakePlaceRepository implements PlaceRepository {
   final List<String> searchCalls = [];
   int suggestionCalls = 0;
   final List<Set<String>> getCalls = [];
+  final List<bool> refreshMissingCalls = [];
 
   /// Permite controlar quando/como cada busca responde (ex.: Completer).
   Future<List<Place>> Function(String query)? searchOverride;
@@ -157,9 +169,13 @@ class FakePlaceRepository implements PlaceRepository {
   }
 
   @override
-  Future<Map<String, Place>> getPlaces(Iterable<String> ids) async {
+  Future<Map<String, Place>> getPlaces(
+    Iterable<String> ids, {
+    bool refreshMissing = false,
+  }) async {
     final wanted = ids.toSet();
     getCalls.add(wanted);
+    refreshMissingCalls.add(refreshMissing);
     if (fail) throw Exception('network');
     return {
       for (final p in places)
@@ -174,23 +190,43 @@ class FakeReviewRepository implements ReviewRepository {
   final List<List<String>> fetchCalls = [];
   Object? createError;
   Object? fetchError;
-  DateTime Function() clock = () => DateTime.utc(2026, 9, 10, 23); // 20h em Natal
+  DateTime Function() clock = () =>
+      DateTime.utc(2026, 9, 10, 23); // 20h em Natal
 
   @override
   Future<void> createReview(NewReview review) async {
     if (createError != null) throw createError!;
     created.add(review);
-    stored.add(Review(
-      id: 'r${stored.length + 1}',
-      authorId: review.authorId,
-      authorName: review.authorName,
-      placeId: review.placeId,
-      placeName: review.placeName,
-      scores: review.scores,
-      companion: review.companion,
-      comment: review.comment,
-      createdAt: clock(),
-    ));
+    stored.add(
+      Review(
+        id: 'r${stored.length + 1}',
+        authorId: review.authorId,
+        authorName: review.authorName,
+        placeId: review.placeId,
+        placeName: review.placeName,
+        scores: review.scores,
+        companion: review.companion,
+        comment: review.comment,
+        createdAt: clock(),
+      ),
+    );
+  }
+
+  final List<String> placeFetchCalls = [];
+  Object? placeFetchError;
+
+  @override
+  Future<List<Review>> fetchReviewsForPlace(
+    String placeId,
+    List<String> authorIds,
+  ) async {
+    placeFetchCalls.add(placeId);
+    if (placeFetchError != null) throw placeFetchError!;
+    final ids = authorIds.toSet();
+    return stored
+        .where((r) => r.placeId == placeId && ids.contains(r.authorId))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   @override
@@ -201,4 +237,81 @@ class FakeReviewRepository implements ReviewRepository {
     return stored.where((r) => ids.contains(r.authorId)).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
+}
+
+class FakeSavedRepository implements SavedRepository {
+  /// uid → (placeId → savedAt).
+  final Map<String, Map<String, DateTime>> byUser = {};
+  DateTime Function() clock = () => DateTime.utc(2026, 9, 28, 15);
+
+  Object? listError;
+  Object? writeError;
+  int listCalls = 0;
+  final List<String> writes = [];
+
+  /// Escritas em voo agora (para provar que nunca há 2 do mesmo id).
+  final Map<String, int> inFlight = {};
+  int maxConcurrentPerId = 0;
+
+  /// Segura cada escrita até ser liberada (ex.: Completer).
+  Completer<void>? writeGate;
+  Future<List<SavedPlace>> Function(String uid)? listOverride;
+
+  void seed(String uid, String placeId, DateTime savedAt) {
+    byUser.putIfAbsent(uid, () => {})[placeId] = savedAt;
+  }
+
+  @override
+  Future<List<SavedPlace>> listSaved(String uid) async {
+    listCalls++;
+    if (listOverride != null) return listOverride!(uid);
+    if (listError != null) throw listError!;
+    final list = [
+      for (final e in (byUser[uid] ?? const <String, DateTime>{}).entries)
+        SavedPlace(placeId: e.key, savedAt: e.value),
+    ]..sort((a, b) => b.savedAt.compareTo(a.savedAt));
+    return list;
+  }
+
+  Future<void> _write(String placeId, String op, void Function() apply) async {
+    writes.add('$op:$placeId');
+    final n = (inFlight[placeId] ?? 0) + 1;
+    inFlight[placeId] = n;
+    if (n > maxConcurrentPerId) maxConcurrentPerId = n;
+    try {
+      final gate = writeGate;
+      if (gate != null) await gate.future;
+      if (writeError != null) throw writeError!;
+      apply();
+    } finally {
+      inFlight[placeId] = inFlight[placeId]! - 1;
+    }
+  }
+
+  Object? savedAtOfError;
+  int savedAtOfCalls = 0;
+
+  /// Como as Rules: `set` num doc que já existe vira update, negado.
+  @override
+  Future<void> save({required String uid, required String placeId}) =>
+      _write(placeId, 'save', () {
+        if (byUser[uid]?.containsKey(placeId) ?? false) {
+          throw Exception('permission-denied: update');
+        }
+        seed(uid, placeId, clock());
+      });
+
+  @override
+  Future<DateTime?> savedAtOf({
+    required String uid,
+    required String placeId,
+  }) async {
+    savedAtOfCalls++;
+    if (savedAtOfError != null) throw savedAtOfError!;
+    return byUser[uid]?[placeId];
+  }
+
+  @override
+  Future<void> remove({required String uid, required String placeId}) =>
+      _write(placeId, 'remove', () => byUser[uid]?.remove(placeId));
 }

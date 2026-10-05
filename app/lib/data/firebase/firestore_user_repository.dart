@@ -11,10 +11,14 @@ class FirestoreUserRepository implements UserRepository {
   /// Maior code point do BMP de uso privado: fecha a faixa da busca por prefixo.
   static const String _prefixUpperBound = '\uf8ff';
 
-  CollectionReference<Map<String, dynamic>> get _users => _db.collection('users');
+  CollectionReference<Map<String, dynamic>> get _users =>
+      _db.collection('users');
 
   @override
-  Future<void> createProfile({required String uid, required String displayName}) {
+  Future<void> createProfile({
+    required String uid,
+    required String displayName,
+  }) {
     final name = UserProfile.normalizeName(displayName);
     return _users.doc(uid).set({
       'displayName': name,
@@ -27,7 +31,10 @@ class FirestoreUserRepository implements UserRepository {
     final snap = await _users.doc(uid).get();
     final data = snap.data();
     if (data == null) return null;
-    return UserProfile(uid: snap.id, displayName: data['displayName'] as String);
+    return UserProfile(
+      uid: snap.id,
+      displayName: data['displayName'] as String,
+    );
   }
 
   @override
@@ -41,7 +48,12 @@ class FirestoreUserRepository implements UserRepository {
         .limit(limit)
         .get();
     return snap.docs
-        .map((d) => UserProfile(uid: d.id, displayName: d.data()['displayName'] as String))
+        .map(
+          (d) => UserProfile(
+            uid: d.id,
+            displayName: d.data()['displayName'] as String,
+          ),
+        )
         .toList();
   }
 
@@ -53,11 +65,9 @@ class FirestoreUserRepository implements UserRepository {
 
   @override
   Future<void> follow({required String uid, required String targetUid}) {
-    return _users
-        .doc(uid)
-        .collection('following')
-        .doc(targetUid)
-        .set({'createdAt': FieldValue.serverTimestamp()});
+    return _users.doc(uid).collection('following').doc(targetUid).set({
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
   @override

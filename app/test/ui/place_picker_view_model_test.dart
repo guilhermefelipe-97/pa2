@@ -9,10 +9,32 @@ import '../support/builders.dart';
 import '../support/fakes.dart';
 
 final _places = [
-  place(id: 'c', name: 'Camarões Potiguar', category: 'Frutos do mar', photoUrl: 'https://f/c.jpg'),
-  place(id: 'c2', name: 'Camarões', category: 'Restaurante', neighborhood: 'Petrópolis', photoUrl: 'https://f/c2.jpg'),
-  place(id: 'm', name: 'Mangai', category: 'Restaurante', neighborhood: 'Tirol'),
-  place(id: 'o', name: 'Camarada Bar', category: 'Bar', source: PlaceSource.osm, osmId: 'node/1'),
+  place(
+    id: 'c',
+    name: 'Camarões Potiguar',
+    category: 'Frutos do mar',
+    photoUrl: 'https://f/c.jpg',
+  ),
+  place(
+    id: 'c2',
+    name: 'Camarões',
+    category: 'Restaurante',
+    neighborhood: 'Petrópolis',
+    photoUrl: 'https://f/c2.jpg',
+  ),
+  place(
+    id: 'm',
+    name: 'Mangai',
+    category: 'Restaurante',
+    neighborhood: 'Tirol',
+  ),
+  place(
+    id: 'o',
+    name: 'Camarada Bar',
+    category: 'Bar',
+    source: PlaceSource.osm,
+    osmId: 'node/1',
+  ),
 ];
 
 const _debounce = Duration(milliseconds: 300);
@@ -61,7 +83,11 @@ void main() {
       async.flushMicrotasks();
       expect(repo.searchCalls, ['camar']);
       expect(vm.isLoading, isFalse);
-      expect(vm.places.map((p) => p.id), ['o', 'c2', 'c'], reason: 'por nameLower');
+      expect(vm.places.map((p) => p.id), [
+        'o',
+        'c2',
+        'c',
+      ], reason: 'por nameLower');
     });
   });
 
@@ -115,7 +141,8 @@ void main() {
   test('resposta antiga não sobrescreve a mais recente', () {
     fakeAsync((async) {
       final slow = Completer<List<Place>>();
-      repo.searchOverride = (q) => q == 'mang' ? slow.future : Future.value([_places[0]]);
+      repo.searchOverride = (q) =>
+          q == 'mang' ? slow.future : Future.value([_places[0]]);
       vm.setQuery('mang');
       async.elapse(_debounce);
       vm.setQuery('camar');
@@ -149,7 +176,8 @@ void main() {
     fakeAsync((async) {
       final many = PlacePickerViewModel(
         placeRepository: FakePlaceRepository([
-          for (var i = 0; i < 25; i++) place(id: 'b$i', name: 'Bar ${i.toString().padLeft(2, '0')}'),
+          for (var i = 0; i < 25; i++)
+            place(id: 'b$i', name: 'Bar ${i.toString().padLeft(2, '0')}'),
         ]),
       );
       many.setQuery('bar');
@@ -164,7 +192,11 @@ void main() {
       expect(many.isResultCapped, isFalse);
 
       many.setQuery('');
-      expect(many.isResultCapped, isFalse, reason: 'sugestões não são cortadas');
+      expect(
+        many.isResultCapped,
+        isFalse,
+        reason: 'sugestões não são cortadas',
+      );
     });
   });
 

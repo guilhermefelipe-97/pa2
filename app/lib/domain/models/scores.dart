@@ -37,7 +37,11 @@ class Scores {
 /// Média de cada eixo entre várias avaliações de um mesmo local. Continua
 /// sendo 3 números independentes — nunca uma nota única agregada.
 class AxisAverages {
-  const AxisAverages({required this.food, required this.ambience, required this.service});
+  const AxisAverages({
+    required this.food,
+    required this.ambience,
+    required this.service,
+  });
 
   factory AxisAverages.of(Iterable<Scores> scores) {
     final list = scores.toList();
@@ -61,6 +65,8 @@ class AxisAverages {
 /// "4", "4,5", "3,7": uma casa decimal, vírgula e sem ",0".
 String formatAverage(double value) {
   final fixed = value.toStringAsFixed(1);
-  final trimmed = fixed.endsWith('.0') ? fixed.substring(0, fixed.length - 2) : fixed;
+  final trimmed = fixed.endsWith('.0')
+      ? fixed.substring(0, fixed.length - 2)
+      : fixed;
   return trimmed.replaceAll('.', ',');
 }

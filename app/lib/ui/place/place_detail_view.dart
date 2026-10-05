@@ -1,32 +1,102 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../domain/feed.dart';
 import '../../domain/models/place.dart';
+import '../../routing/routes.dart';
 import '../core/osm_credit.dart';
+import '../core/save_button.dart';
 import '../feed/widgets/author_avatar.dart';
 import '../feed/widgets/axis_scores.dart';
 import '../feed/widgets/feed_card.dart';
 import '../feed/widgets/place_photo.dart';
 import '../feed/widgets/review_tile.dart';
+import 'place_detail_view_model.dart';
 
-/// Detalhe do local: foto grande e todas as avaliações dos amigos ali.
-/// Os dados chegam prontos do feed (`FeedItem`); não há leitura extra.
-class PlaceDetailView extends StatelessWidget {
-  const PlaceDetailView({
-    super.key,
-    required this.item,
-    this.now = DateTime.now,
-  });
+/// Detalhe do local: foto grande, marcador "Quero ir" e as avaliações dos
+/// amigos ali. Abre por `placeId` sozinho (ex.: a partir dos salvos); com
+/// dados prontos da navegação, aparece já e só atualiza.
+class PlaceDetailView extends StatefulWidget {
+  const PlaceDetailView({super.key, required this.viewModel});
 
-  final FeedItem item;
-  final DateTime Function() now;
+  final PlaceDetailViewModel viewModel;
+
+  @override
+  State<PlaceDetailView> createState() => _PlaceDetailViewState();
+}
+
+class _PlaceDetailViewState extends State<PlaceDetailView> {
+  @override
+  void initState() {
+    super.initState();
+    widget.viewModel.load();
+  }
+
+  void _back() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(Routes.feed);
+    }
+  }
+
+  Future<void> _review(Place place) async {
+    final sent = await context.push<bool>(
+      Routes.reviewFor(place.id),
+      extra: place,
+    );
+    if (!mounted) return;
+    if (sent == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Avaliação enviada! Quem segue você já pode ver.'),
+        ),
+      );
+      // A avaliação nova aparece no detalhe (como "Você").
+      widget.viewModel.load();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.viewModel,
+      builder: (context, _) {
+        final vm = widget.viewModel;
+        final place = vm.place;
+        if (place != null) return _detail(context, vm, place);
+        if (vm.notFound) {
+          return _Bare(
+            child: _CenteredMessage(
+              key: const Key('place-not-found'),
+              icon: Icons.wrong_location_outlined,
+              text: 'Local não encontrado',
+              actionLabel: 'Voltar',
+              onAction: _back,
+            ),
+          );
+        }
+        if (vm.errorMessage != null) {
+          return _Bare(
+            child: _CenteredMessage(
+              icon: Icons.wifi_off,
+              text: vm.errorMessage!,
+              actionLabel: 'Tentar de novo',
+              onAction: vm.load,
+              secondaryLabel: 'Voltar',
+              onSecondary: _back,
+            ),
+          );
+        }
+        return const _Bare(child: Center(child: CircularProgressIndicator()));
+      },
+    );
+  }
+
+  Widget _detail(BuildContext context, PlaceDetailViewModel vm, Place place) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final place = item.place;
-    final at = now();
+    final at = vm.now();
+    final item = vm.item;
     final subtitle = [
       placeSubtitle(place.neighborhood, place.category),
       if (place.city.trim().isNotEmpty) place.city,
@@ -40,9 +110,14 @@ class PlaceDetailView extends StatelessWidget {
             expandedHeight: 280,
             foregroundColor: Colors.white,
             backgroundColor: scheme.primary,
+            actions: [
+              if (place.inCatalog)
+                SaveButton(placeId: place.id, style: SaveButtonStyle.onAppBar),
+              const SizedBox(width: 4),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
-                item.placeName,
+                place.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.titleLarge?.copyWith(
@@ -103,54 +178,173 @@ class PlaceDetailView extends StatelessWidget {
                     ),
                   PlaceFacts(place: place),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      AuthorAvatarStack(
-                        authors: distinctAuthors(item),
-                        ringColor: scheme.surface,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          item.headline,
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            color: scheme.primary,
-                            fontWeight: FontWeight.w700,
+                  if (item != null) ...[
+                    Row(
+                      children: [
+                        AuthorAvatarStack(
+                          authors: distinctAuthors(item),
+                          ringColor: scheme.surface,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            item.headline,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Média dos amigos', style: theme.textTheme.labelLarge),
+                    const SizedBox(height: 6),
+                    AxisScores.averages(item.averages),
+                    const SizedBox(height: 16),
+                    FilledButton.tonalIcon(
+                      key: const Key('place-review'),
+                      onPressed: () => _review(place),
+                      icon: const Icon(Icons.rate_review),
+                      label: Text(
+                        vm.hasOwnReview ? 'Avaliar de novo' : 'Avaliar',
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text('Média dos amigos', style: theme.textTheme.labelLarge),
-                  const SizedBox(height: 6),
-                  AxisScores.averages(item.averages),
-                  const SizedBox(height: 20),
-                  Text(
-                    item.reviews.length == 1
-                        ? '1 avaliação de amigo'
-                        : '${item.reviews.length} avaliações de amigos',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                  const Divider(height: 20),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      vm.reviewCountLabel,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const Divider(height: 20),
+                  ] else if (vm.reviewsKnown)
+                    _NoFriendReviews(onReview: () => _review(place))
+                  else if (vm.errorMessage != null)
+                    _CenteredMessage(
+                      icon: Icons.wifi_off,
+                      text: vm.errorMessage!,
+                      actionLabel: 'Tentar de novo',
+                      onAction: vm.load,
+                    )
+                  else
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
                 ],
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-            sliver: SliverList.separated(
-              itemCount: item.reviews.length,
-              itemBuilder: (context, i) =>
-                  ReviewTile(review: item.reviews[i], now: at),
-              separatorBuilder: (context, i) => const Divider(height: 1),
+          if (item != null)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              sliver: SliverList.separated(
+                itemCount: item.reviews.length,
+                itemBuilder: (context, i) =>
+                    ReviewTile(review: item.reviews[i], now: at),
+                separatorBuilder: (context, i) => const Divider(height: 1),
+              ),
             ),
-          ),
           if (place.hasOsmData)
             const SliverToBoxAdapter(
               child: OsmCredit(padding: EdgeInsets.fromLTRB(20, 0, 20, 24)),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Nenhum amigo avaliou o local ainda: convite para ser o primeiro.
+class _NoFriendReviews extends StatelessWidget {
+  const _NoFriendReviews({required this.onReview});
+
+  final VoidCallback onReview;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Nenhum amigo avaliou ainda',
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            key: const Key('place-review'),
+            onPressed: onReview,
+            icon: const Icon(Icons.rate_review),
+            label: const Text('Avaliar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tela sem os dados do local (carregando, erro, não encontrado).
+class _Bare extends StatelessWidget {
+  const _Bare({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(appBar: AppBar(), body: child);
+}
+
+class _CenteredMessage extends StatelessWidget {
+  const _CenteredMessage({
+    super.key,
+    required this.icon,
+    required this.text,
+    required this.actionLabel,
+    required this.onAction,
+    this.secondaryLabel,
+    this.onSecondary,
+  });
+
+  final IconData icon;
+  final String text;
+  final String actionLabel;
+  final VoidCallback onAction;
+  final String? secondaryLabel;
+  final VoidCallback? onSecondary;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: scheme.primary),
+            const SizedBox(height: 12),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                if (secondaryLabel != null)
+                  OutlinedButton(
+                    onPressed: onSecondary,
+                    child: Text(secondaryLabel!),
+                  ),
+                FilledButton(onPressed: onAction, child: Text(actionLabel)),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -223,7 +417,9 @@ class PlaceFacts extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 4),
-          Flexible(child: Text(text, key: key, style: muted)),
+          Flexible(
+            child: Text(text, key: key, style: muted),
+          ),
         ],
       ),
     );

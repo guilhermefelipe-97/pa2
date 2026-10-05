@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../domain/feed.dart';
 import '../../routing/routes.dart';
+import '../core/app_shell.dart';
 import 'feed_view_model.dart';
 import 'widgets/feed_card.dart';
 
@@ -16,16 +17,24 @@ class FeedView extends StatefulWidget {
 }
 
 class _FeedViewState extends State<FeedView> {
+  bool? _active;
+
   @override
   void initState() {
     super.initState();
     widget.viewModel.load();
   }
 
-  Future<void> _openPeople() async {
-    await context.push(Routes.people);
-    if (mounted) widget.viewModel.load();
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Seguir alguém acontece na aba Pessoas: ao voltar para Amigos, recarrega.
+    final active = ActiveTab.maybeOf(context);
+    if (active == true && _active == false) widget.viewModel.load();
+    _active = active;
   }
+
+  void _openPeople() => context.go(Routes.people);
 
   Future<void> _signOut() async {
     try {
@@ -75,15 +84,19 @@ class _FeedViewState extends State<FeedView> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Pessoas',
-            icon: const Icon(Icons.person_search),
-            onPressed: _openPeople,
-          ),
-          IconButton(
-            tooltip: 'Sair',
-            icon: const Icon(Icons.logout),
-            onPressed: _signOut,
+          PopupMenuButton<void>(
+            key: const Key('feed-menu'),
+            tooltip: 'Mais opções',
+            itemBuilder: (context) => [
+              PopupMenuItem<void>(
+                onTap: _signOut,
+                child: const ListTile(
+                  leading: Icon(Icons.logout),
+                  title: Text('Sair'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),

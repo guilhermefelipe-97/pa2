@@ -77,6 +77,7 @@ List<FeedItem> groupReviewsIntoFeed(
               category: '',
               neighborhood: '',
               city: '',
+              inCatalog: false,
             );
         return FeedItem(place: place, reviews: sorted);
       }).toList()..sort((a, b) {

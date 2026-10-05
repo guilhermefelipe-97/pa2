@@ -72,7 +72,10 @@ class PlacePickerViewModel extends SafeChangeNotifier {
 
   /// Busca concluída sem resultados: "Nenhum local com esse nome".
   bool get showNoResults =>
-      !_isLoading && _errorMessage == null && !isShowingSuggestions && _results.isEmpty;
+      !_isLoading &&
+      _errorMessage == null &&
+      !isShowingSuggestions &&
+      _results.isEmpty;
 
   /// Carga inicial: sugestões.
   Future<void> load() => _loadSuggestions();

@@ -27,7 +27,9 @@ IconData categoryIcon(String category) {
   if (c.contains('sorvet') || c.contains('acai')) return Icons.icecream;
   if (c.contains('japon')) return Icons.ramen_dining;
   if (c.contains('frutos do mar')) return Icons.set_meal;
-  if (c.contains('restaurante') || c.contains('comida')) return Icons.restaurant;
+  if (c.contains('restaurante') || c.contains('comida')) {
+    return Icons.restaurant;
+  }
   return Icons.place;
 }
 

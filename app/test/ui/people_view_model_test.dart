@@ -26,7 +26,10 @@ void main() {
   test('busca "bia" encontra por prefixo e não lista a si mesmo', () async {
     await vm.init();
     await vm.search('bia');
-    expect(vm.results.map((p) => p.uid), unorderedEquals(['bianca', 'biazinha']));
+    expect(
+      vm.results.map((p) => p.uid),
+      unorderedEquals(['bianca', 'biazinha']),
+    );
   });
 
   test('busca vazia limpa resultados', () async {
@@ -70,7 +73,11 @@ void main() {
       expect(vm.initState, PeopleInitState.loading);
       expect(vm.canToggle('bianca'), isFalse);
       await vm.toggleFollow('bianca');
-      expect(users.followingByUser['me'], isNull, reason: 'toggle ignorado antes do init');
+      expect(
+        users.followingByUser['me'],
+        isNull,
+        reason: 'toggle ignorado antes do init',
+      );
 
       gate.complete({'toni'});
       await pending;
@@ -92,23 +99,28 @@ void main() {
       expect(vm.isFollowing('toni'), isTrue);
     });
 
-    test('retry do init não apaga um seguir concluído durante a carga (merge)', () async {
-      await vm.init();
-      users.followGate = Completer<void>();
-      final toggling = vm.toggleFollow('bianca'); // fica preso no follow
+    test(
+      'retry do init não apaga um seguir concluído durante a carga (merge)',
+      () async {
+        await vm.init();
+        users.followGate = Completer<void>();
+        final toggling = vm.toggleFollow('bianca'); // fica preso no follow
 
-      final initGate = Completer<Set<String>>();
-      users.getFollowingOverride = (_) => initGate.future;
-      final reinit = vm.init(); // recarga começa antes do follow terminar
+        final initGate = Completer<Set<String>>();
+        users.getFollowingOverride = (_) => initGate.future;
+        final reinit = vm.init(); // recarga começa antes do follow terminar
 
-      users.followGate!.complete();
-      await toggling;
-      initGate.complete(<String>{}); // resposta desatualizada: ainda sem bianca
-      await reinit;
+        users.followGate!.complete();
+        await toggling;
+        initGate.complete(
+          <String>{},
+        ); // resposta desatualizada: ainda sem bianca
+        await reinit;
 
-      expect(vm.isFollowing('bianca'), isTrue);
-      expect(users.followingByUser['me'], contains('bianca'));
-    });
+        expect(vm.isFollowing('bianca'), isTrue);
+        expect(users.followingByUser['me'], contains('bianca'));
+      },
+    );
 
     test('falha ao seguir busca following de novo e reconcilia', () async {
       await vm.init();
@@ -139,29 +151,36 @@ void main() {
 
     a.complete([const UserProfile(uid: 'bianca', displayName: 'Bianca')]);
     await searchA;
-    expect(vm.results.map((p) => p.uid), ['toni'], reason: 'resposta velha de A é descartada');
+    expect(vm.results.map((p) => p.uid), [
+      'toni',
+    ], reason: 'resposta velha de A é descartada');
     expect(vm.isSearching, isFalse);
     expect(vm.lastQuery, 'toni');
   });
 
-  test('AC: busca "bia", segue Bianca, e as avaliações dela aparecem no feed', () async {
-    final reviews = FakeReviewRepository()
-      ..stored.add(review(authorId: 'bianca', authorName: 'Bianca', placeId: 'mangai'));
-    final feed = FeedViewModel(
-      authRepository: auth,
-      userRepository: users,
-      reviewRepository: reviews,
-      placeRepository: FakePlaceRepository(const []),
-    );
-    await feed.load();
-    expect(feed.followsNobody, isTrue);
+  test(
+    'AC: busca "bia", segue Bianca, e as avaliações dela aparecem no feed',
+    () async {
+      final reviews = FakeReviewRepository()
+        ..stored.add(
+          review(authorId: 'bianca', authorName: 'Bianca', placeId: 'mangai'),
+        );
+      final feed = FeedViewModel(
+        authRepository: auth,
+        userRepository: users,
+        reviewRepository: reviews,
+        placeRepository: FakePlaceRepository(const []),
+      );
+      await feed.load();
+      expect(feed.followsNobody, isTrue);
 
-    await vm.init();
-    await vm.search('bia');
-    await vm.toggleFollow('bianca');
+      await vm.init();
+      await vm.search('bia');
+      await vm.toggleFollow('bianca');
 
-    await feed.load();
-    expect(feed.items.single.placeId, 'mangai');
-    expect(feed.items.single.headline, 'Bianca foi aqui');
-  });
+      await feed.load();
+      expect(feed.items.single.placeId, 'mangai');
+      expect(feed.items.single.headline, 'Bianca foi aqui');
+    },
+  );
 }

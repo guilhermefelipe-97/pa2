@@ -11,8 +11,15 @@ void main() {
   });
 
   test('31 vira 30 + 1; 65 vira 30 + 30 + 5', () {
-    expect(chunked(List.generate(31, (i) => i), 30).map((b) => b.length), [30, 1]);
-    expect(chunked(List.generate(65, (i) => i), 30).map((b) => b.length), [30, 30, 5]);
+    expect(chunked(List.generate(31, (i) => i), 30).map((b) => b.length), [
+      30,
+      1,
+    ]);
+    expect(chunked(List.generate(65, (i) => i), 30).map((b) => b.length), [
+      30,
+      30,
+      5,
+    ]);
   });
 
   test('preserva todos os itens na ordem', () {

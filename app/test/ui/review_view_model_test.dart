@@ -39,14 +39,17 @@ void main() {
     expect(vm.canSubmit, isFalse);
   });
 
-  test('2 de 3 eixos: Enviar desabilitado e repositório não é chamado', () async {
-    vm
-      ..setFood(4)
-      ..setAmbience(3);
-    expect(vm.canSubmit, isFalse);
-    expect(await vm.submit(), isFalse);
-    expect(reviews.created, isEmpty);
-  });
+  test(
+    '2 de 3 eixos: Enviar desabilitado e repositório não é chamado',
+    () async {
+      vm
+        ..setFood(4)
+        ..setAmbience(3);
+      expect(vm.canSubmit, isFalse);
+      expect(await vm.submit(), isFalse);
+      expect(reviews.created, isEmpty);
+    },
+  );
 
   test('valor fora de 1–5 não conta como preenchido', () {
     vm
@@ -113,27 +116,30 @@ void main() {
     expect(vm.errorMessage, 'Não foi possível salvar');
   });
 
-  test('AC: avaliação aparece no feed de quem segue, com nome, 3 eixos e período', () async {
-    users.followingByUser['toni'] = {'bianca'};
-    vm
-      ..setFood(5)
-      ..setAmbience(4)
-      ..setService(3);
-    await vm.submit();
+  test(
+    'AC: avaliação aparece no feed de quem segue, com nome, 3 eixos e período',
+    () async {
+      users.followingByUser['toni'] = {'bianca'};
+      vm
+        ..setFood(5)
+        ..setAmbience(4)
+        ..setService(3);
+      await vm.submit();
 
-    final feed = FeedViewModel(
-      authRepository: FakeAuthRepository(uid: 'toni'),
-      userRepository: users,
-      reviewRepository: reviews,
-      placeRepository: FakePlaceRepository([_place]),
-    );
-    await feed.load();
-    final r = feed.items.single.reviews.single;
-    expect(r.authorName, 'Bianca');
-    expect(r.scores, Scores(food: 5, ambience: 4, service: 3));
-    // clock do fake: 23:00Z = 20:00 em Natal
-    expect(r.dayPeriod, DayPeriod.noite);
-  });
+      final feed = FeedViewModel(
+        authRepository: FakeAuthRepository(uid: 'toni'),
+        userRepository: users,
+        reviewRepository: reviews,
+        placeRepository: FakePlaceRepository([_place]),
+      );
+      await feed.load();
+      final r = feed.items.single.reviews.single;
+      expect(r.authorName, 'Bianca');
+      expect(r.scores, Scores(food: 5, ambience: 4, service: 3));
+      // clock do fake: 23:00Z = 20:00 em Natal
+      expect(r.dayPeriod, DayPeriod.noite);
+    },
+  );
 
   group('comentário (opcional)', () {
     void fill() => vm
@@ -162,18 +168,21 @@ void main() {
       expect(reviews.created.single.comment, 'Camarão no ponto, fila grande.');
     });
 
-    test('acima de 280 (contagem UTF-16, igual às Rules): Enviar desabilitado', () async {
-      fill();
-      vm.setComment('😀' * 141);
-      expect(vm.commentTooLong, isTrue);
-      expect(vm.canSubmit, isFalse);
-      expect(await vm.submit(), isFalse);
-      expect(reviews.created, isEmpty);
+    test(
+      'acima de 280 (contagem UTF-16, igual às Rules): Enviar desabilitado',
+      () async {
+        fill();
+        vm.setComment('😀' * 141);
+        expect(vm.commentTooLong, isTrue);
+        expect(vm.canSubmit, isFalse);
+        expect(await vm.submit(), isFalse);
+        expect(reviews.created, isEmpty);
 
-      vm.setComment('x' * 280);
-      expect(vm.commentTooLong, isFalse);
-      expect(vm.canSubmit, isTrue);
-    });
+        vm.setComment('x' * 280);
+        expect(vm.commentTooLong, isFalse);
+        expect(vm.canSubmit, isTrue);
+      },
+    );
 
     test('AC: comentário aparece no card de quem segue', () async {
       users.followingByUser['toni'] = {'bianca'};

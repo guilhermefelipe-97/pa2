@@ -8,4 +8,12 @@ abstract class ReviewRepository {
 
   /// Avaliações dos [authorIds], mais recentes primeiro.
   Future<List<Review>> fetchReviewsByAuthors(List<String> authorIds);
+
+  /// Avaliações de [authorIds] no local, mais recentes primeiro. Filtra no
+  /// servidor (`placeId ==` + `authorId in`, lotes de [whereInLimit]): não
+  /// lê avaliações de terceiros e não perde as de amigos mais antigas.
+  Future<List<Review>> fetchReviewsForPlace(
+    String placeId,
+    List<String> authorIds,
+  );
 }

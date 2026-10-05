@@ -24,6 +24,9 @@ class FirestorePlaceRepository implements PlaceRepository {
   /// "não existe" → null) vale para a sessão inteira. Guardar o Future
   /// deduplica leituras em andamento.
   final Map<String, Future<Place?>> _byId = {};
+
+  /// Ids que a última leitura deu como ausentes.
+  final Set<String> _absent = {};
   List<Place>? _suggestions;
 
   /// Consultas `whereIn` feitas por [getPlaces] (para testes).
@@ -33,7 +36,8 @@ class FirestorePlaceRepository implements PlaceRepository {
   /// Id que pode ir ao `whereIn` de documentId (vazio ou com "/" lança).
   static bool _validId(String id) => id.isNotEmpty && !id.contains('/');
 
-  CollectionReference<Map<String, dynamic>> get _col => _db.collection('places');
+  CollectionReference<Map<String, dynamic>> get _col =>
+      _db.collection('places');
 
   @override
   Future<List<Place>> search(String query) async {
@@ -46,10 +50,9 @@ class FirestorePlaceRepository implements PlaceRepository {
         .orderBy('nameLower')
         .limit(others.isEmpty ? searchLimit : _multiTermFetch)
         .get();
-    return _parse(snap.docs)
-        .where((p) => nameMatchesTerms(p.name, others))
-        .take(searchLimit)
-        .toList();
+    return _parse(
+      snap.docs,
+    ).where((p) => nameMatchesTerms(p.name, others)).take(searchLimit).toList();
   }
 
   @override
@@ -63,9 +66,19 @@ class FirestorePlaceRepository implements PlaceRepository {
   }
 
   @override
-  Future<Map<String, Place>> getPlaces(Iterable<String> ids) async {
+  Future<Map<String, Place>> getPlaces(
+    Iterable<String> ids, {
+    bool refreshMissing = false,
+  }) async {
     final wanted = ids.where(_validId).toSet();
-    final missing = wanted.where((id) => !_byId.containsKey(id)).toList()..sort();
+    if (refreshMissing) {
+      for (final id in wanted.where(_absent.contains).toList()) {
+        _absent.remove(id);
+        _byId.remove(id);
+      }
+    }
+    final missing = wanted.where((id) => !_byId.containsKey(id)).toList()
+      ..sort();
     for (final batch in chunked(missing, _whereInLimit)) {
       final fetch = _fetchBatch(batch);
       for (final id in batch) {
@@ -84,7 +97,9 @@ class FirestorePlaceRepository implements PlaceRepository {
     queryCount++;
     try {
       final snap = await _col.where(FieldPath.documentId, whereIn: batch).get();
-      return {for (final p in _parse(snap.docs)) p.id: p};
+      final found = {for (final p in _parse(snap.docs)) p.id: p};
+      _absent.addAll(batch.where((id) => !found.containsKey(id)));
+      return found;
     } on Object {
       for (final id in batch) {
         _byId.remove(id);
@@ -100,6 +115,7 @@ class FirestorePlaceRepository implements PlaceRepository {
       final place = placeFromData(d.id, d.data());
       if (place == null) continue;
       _byId[place.id] = Future.value(place);
+      _absent.remove(place.id);
       out.add(place);
     }
     return out;

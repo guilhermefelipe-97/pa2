@@ -7,7 +7,10 @@ import '../chunk.dart';
 import '../repositories/review_repository.dart';
 
 class FirestoreReviewRepository implements ReviewRepository {
-  FirestoreReviewRepository(this._db, {this.perBatchLimit = defaultPerBatchLimit});
+  FirestoreReviewRepository(
+    this._db, {
+    this.perBatchLimit = defaultPerBatchLimit,
+  });
 
   final FirebaseFirestore _db;
 
@@ -16,7 +19,8 @@ class FirestoreReviewRepository implements ReviewRepository {
   /// Limite por lote na consulta do feed.
   final int perBatchLimit;
 
-  CollectionReference<Map<String, dynamic>> get _reviews => _db.collection('reviews');
+  CollectionReference<Map<String, dynamic>> get _reviews =>
+      _db.collection('reviews');
 
   @override
   Future<void> createReview(NewReview review) {
@@ -42,11 +46,15 @@ class FirestoreReviewRepository implements ReviewRepository {
     final ids = authorIds.toSet().toList();
     if (ids.isEmpty) return [];
     final batches = chunked(ids, ReviewRepository.whereInLimit);
-    final snaps = await Future.wait(batches.map((batch) => _reviews
-        .where('authorId', whereIn: batch)
-        .orderBy('createdAt', descending: true)
-        .limit(perBatchLimit)
-        .get()));
+    final snaps = await Future.wait(
+      batches.map(
+        (batch) => _reviews
+            .where('authorId', whereIn: batch)
+            .orderBy('createdAt', descending: true)
+            .limit(perBatchLimit)
+            .get(),
+      ),
+    );
     final byId = <String, Review>{};
     // Um lote que bateu o limite pode ter avaliações mais antigas que não
     // vieram. Para os lotes ficarem consistentes entre si, corta o resultado
@@ -63,15 +71,43 @@ class FirestoreReviewRepository implements ReviewRepository {
         }
       }
       if (snap.docs.length >= perBatchLimit && oldestInBatch != null) {
-        if (cutoff == null || oldestInBatch.isAfter(cutoff)) cutoff = oldestInBatch;
+        if (cutoff == null || oldestInBatch.isAfter(cutoff)) {
+          cutoff = oldestInBatch;
+        }
       }
     }
     return applyBatchCutoff(byId.values, cutoff);
   }
 
+  @override
+  Future<List<Review>> fetchReviewsForPlace(
+    String placeId,
+    List<String> authorIds,
+  ) async {
+    final ids = authorIds.toSet().toList();
+    if (ids.isEmpty) return [];
+    final snaps = await Future.wait(
+      chunked(ids, ReviewRepository.whereInLimit).map(
+        (batch) => _reviews
+            .where('placeId', isEqualTo: placeId)
+            .where('authorId', whereIn: batch)
+            .orderBy('createdAt', descending: true)
+            .get(),
+      ),
+    );
+    final byId = {
+      for (final snap in snaps)
+        for (final r in snap.docs.map(_fromDoc).whereType<Review>()) r.id: r,
+    };
+    return applyBatchCutoff(byId.values, null);
+  }
+
   /// Remove avaliações anteriores a [cutoff] (quando houver) e ordena da mais
   /// recente para a mais antiga.
-  static List<Review> applyBatchCutoff(Iterable<Review> reviews, DateTime? cutoff) {
+  static List<Review> applyBatchCutoff(
+    Iterable<Review> reviews,
+    DateTime? cutoff,
+  ) {
     final kept = cutoff == null
         ? reviews.toList()
         : reviews.where((r) => !r.createdAt.isBefore(cutoff)).toList();
@@ -98,7 +134,9 @@ class FirestoreReviewRepository implements ReviewRepository {
         companion: Companion.fromValue(d['companion'] as String?),
         // Normaliza na leitura: avaliações da Onda 1 não têm a chave, e vazio
         // ou só espaços vira null (a UI nunca mostra citação vazia).
-        comment: Review.normalizeComment(d['comment'] is String ? d['comment'] as String : null),
+        comment: Review.normalizeComment(
+          d['comment'] is String ? d['comment'] as String : null,
+        ),
         createdAt: ts.toDate(),
       );
     } on Object {

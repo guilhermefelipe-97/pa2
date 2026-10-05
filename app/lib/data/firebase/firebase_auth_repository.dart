@@ -12,8 +12,8 @@ class FirebaseAuthRepository extends AuthRepository {
   FirebaseAuthRepository({
     required FirebaseAuth auth,
     required UserRepository userRepository,
-  })  : _auth = auth,
-        _users = userRepository {
+  }) : _auth = auth,
+       _users = userRepository {
     _sub = _auth.authStateChanges().listen((user) {
       if (_gating) return;
       _publish(user?.uid);
@@ -21,7 +21,8 @@ class FirebaseAuthRepository extends AuthRepository {
   }
 
   static const String signUpFallbackMessage = 'Não foi possível criar a conta.';
-  static const String signInFallbackMessage = 'Não foi possível entrar. Tente de novo.';
+  static const String signInFallbackMessage =
+      'Não foi possível entrar. Tente de novo.';
   static const String missingProfileMessage =
       'Sua conta está sem perfil e não pôde ser recuperada. '
       'Crie uma nova conta ou fale com o suporte.';

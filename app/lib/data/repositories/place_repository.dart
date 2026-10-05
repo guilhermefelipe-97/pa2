@@ -14,5 +14,10 @@ abstract class PlaceRepository {
   Future<List<Place>> suggestions();
 
   /// Locais por id (ids ausentes no catálogo ficam de fora do mapa).
-  Future<Map<String, Place>> getPlaces(Iterable<String> ids);
+  /// [refreshMissing]: ids que a sessão já sabe ausentes são lidos de novo
+  /// (ex.: "Tentar de novo"/puxar para atualizar na aba "Quero ir").
+  Future<Map<String, Place>> getPlaces(
+    Iterable<String> ids, {
+    bool refreshMissing = false,
+  });
 }

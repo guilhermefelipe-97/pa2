@@ -7,7 +7,11 @@ import 'package:naarea/domain/search_tokens.dart';
 /// Mesmos casos que `firebase/tests/osm.test.js` usa para `tokens.js`: o app
 /// e o script precisam normalizar igual, senão a busca não acha o token.
 final _fixture =
-    jsonDecode(File('../firebase/tests/fixtures/search-tokens.json').readAsStringSync())
+    jsonDecode(
+          File(
+            '../firebase/tests/fixtures/search-tokens.json',
+          ).readAsStringSync(),
+        )
         as Map<String, dynamic>;
 
 List<Map<String, dynamic>> _cases(String key) =>
@@ -36,14 +40,17 @@ void main() {
     expect(foldAccents('ÁGUA Ê ÇÃO'), 'agua e cao');
   });
 
-  test('serverTerm: termo mais longo com 2+ letras (empate: o 1º); null na busca curta', () {
-    expect(serverTerm(normalizeQuery('camar pot')), 'camar');
-    expect(serverTerm(normalizeQuery('de camarões')), 'camaroes');
-    expect(serverTerm(normalizeQuery('bar pub')), 'bar');
-    expect(serverTerm(normalizeQuery("d'água")), 'agua');
-    expect(serverTerm(normalizeQuery('c')), isNull);
-    expect(serverTerm(normalizeQuery('')), isNull);
-  });
+  test(
+    'serverTerm: termo mais longo com 2+ letras (empate: o 1º); null na busca curta',
+    () {
+      expect(serverTerm(normalizeQuery('camar pot')), 'camar');
+      expect(serverTerm(normalizeQuery('de camarões')), 'camaroes');
+      expect(serverTerm(normalizeQuery('bar pub')), 'bar');
+      expect(serverTerm(normalizeQuery("d'água")), 'agua');
+      expect(serverTerm(normalizeQuery('c')), isNull);
+      expect(serverTerm(normalizeQuery('')), isNull);
+    },
+  );
 
   test('nameMatchesTerms: cada termo é prefixo de alguma palavra', () {
     expect(nameMatchesTerms('Camarões Potiguar', ['camar', 'pot']), isTrue);

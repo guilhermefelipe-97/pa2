@@ -3,12 +3,14 @@ import '../../domain/models/user_profile.dart';
 import '../core/safe_change_notifier.dart';
 
 class AuthViewModel extends SafeChangeNotifier {
-  AuthViewModel({required AuthRepository authRepository}) : _auth = authRepository;
+  AuthViewModel({required AuthRepository authRepository})
+    : _auth = authRepository;
 
   final AuthRepository _auth;
 
   static const int minPasswordLength = 6;
-  static const String nameTooLongMessage = 'Nome muito longo (máx. 60 caracteres).';
+  static const String nameTooLongMessage =
+      'Nome muito longo (máx. 60 caracteres).';
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -31,11 +33,13 @@ class AuthViewModel extends SafeChangeNotifier {
     final credentialsError = _validateCredentials(email, password);
     if (credentialsError != null) return _fail(credentialsError);
 
-    return _run(() => _auth.signUp(
-          displayName: UserProfile.normalizeName(displayName),
-          email: email.trim(),
-          password: password,
-        ));
+    return _run(
+      () => _auth.signUp(
+        displayName: UserProfile.normalizeName(displayName),
+        email: email.trim(),
+        password: password,
+      ),
+    );
   }
 
   Future<bool> signIn({required String email, required String password}) async {

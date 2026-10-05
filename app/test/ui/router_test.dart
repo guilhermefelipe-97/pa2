@@ -4,7 +4,11 @@ import 'package:naarea/routing/routes.dart';
 
 void main() {
   String? go(String location, {bool init = true, bool signedIn = false}) =>
-      authRedirect(isInitialized: init, isSignedIn: signedIn, location: location);
+      authRedirect(
+        isInitialized: init,
+        isSignedIn: signedIn,
+        location: location,
+      );
 
   test('antes de restaurar a sessão fica no splash', () {
     expect(go(Routes.feed, init: false), Routes.splash);

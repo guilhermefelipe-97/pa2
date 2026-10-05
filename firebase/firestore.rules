@@ -43,6 +43,19 @@ service cloud.firestore {
         allow delete: if isOwner(uid);
         allow update: if false;
       }
+
+      // "Quero ir" (F11): privado — só o dono lê e escreve. Doc só com o
+      // createdAt do servidor; sem notas nem listas (F12). Salvar de novo um
+      // local já salvo seria update: negado (o cliente só cria ou apaga).
+      match /saved/{placeId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && exists(/databases/$(database)/documents/places/$(placeId))
+          && request.resource.data.keys().hasOnly(['createdAt'])
+          && request.resource.data.createdAt == request.time;
+        allow delete: if isOwner(uid);
+        allow update: if false;
+      }
     }
 
     // ---------- places (somente seed/admin escreve) ----------
