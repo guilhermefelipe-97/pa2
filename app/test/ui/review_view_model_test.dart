@@ -49,25 +49,61 @@ void main() {
   });
 
   test(
-    '2 de 3 eixos: Enviar desabilitado e repositório não é chamado',
+    'nenhum eixo: Enviar desabilitado e repositório não é chamado',
     () async {
-      vm
-        ..setFood(4)
-        ..setAmbience(3);
+      expect(vm.hasValidAxes, isFalse);
       expect(vm.canSubmit, isFalse);
       expect(await vm.submit(), isFalse);
       expect(reviews.created, isEmpty);
     },
   );
 
+  test('F14: só comida envia food 4 e os outros null', () async {
+    vm.setFood(4);
+    expect(vm.canSubmit, isTrue);
+    expect(await vm.submit(), isTrue);
+    final r = reviews.created.single;
+    expect(r.scores.food, 4);
+    expect(r.scores.ambience, isNull);
+    expect(r.scores.service, isNull);
+  });
+
+  test('F14: 2 de 3 eixos envia, o terceiro null', () async {
+    vm
+      ..setFood(4)
+      ..setAmbience(3);
+    expect(vm.canSubmit, isTrue);
+    expect(await vm.submit(), isTrue);
+    expect(reviews.created.single.scores, Scores(food: 4, ambience: 3));
+  });
+
+  test('F14: Limpar volta o eixo a vazio; era o único, Enviar desabilita', () {
+    vm.setFood(4);
+    expect(vm.canSubmit, isTrue);
+    vm.clearFood();
+    expect(vm.food, isNull);
+    expect(vm.canSubmit, isFalse);
+
+    vm
+      ..setAmbience(5)
+      ..setService(2)
+      ..clearAmbience();
+    expect(vm.ambience, isNull);
+    expect(vm.canSubmit, isTrue, reason: 'atendimento ainda tem nota');
+    vm.clearService();
+    expect(vm.service, isNull);
+    expect(vm.canSubmit, isFalse);
+  });
+
   test('valor fora de 1–5 não conta como preenchido', () {
     vm
       ..setFood(0)
-      ..setAmbience(6)
-      ..setService(3);
+      ..setAmbience(6);
     expect(vm.food, isNull);
     expect(vm.ambience, isNull);
     expect(vm.canSubmit, isFalse);
+    vm.setService(3);
+    expect(vm.canSubmit, isTrue);
   });
 
   test('3 eixos: envia com autor = uid, nome do perfil e local', () async {
@@ -150,6 +186,25 @@ void main() {
       expect(r.dayPeriod, DayPeriod.noite);
     },
   );
+
+  test('AC F14: Bianca toca só 5 em ambiente; aparece no feed de quem a segue '
+      'só com ambiente', () async {
+    users.followingByUser['toni'] = {'bianca'};
+    vm.setAmbience(5);
+    expect(await vm.submit(), isTrue);
+
+    final feed = FeedViewModel(
+      authRepository: FakeAuthRepository(uid: 'toni'),
+      userRepository: users,
+      reviewRepository: reviews,
+      placeRepository: FakePlaceRepository([_place]),
+      followEvents: FollowEvents(),
+    );
+    await feed.load();
+    final r = feed.items.single.reviews.single;
+    expect(r.authorName, 'Bianca');
+    expect(r.scores, Scores(ambience: 5));
+  });
 
   group('comentário (opcional)', () {
     void fill() => vm

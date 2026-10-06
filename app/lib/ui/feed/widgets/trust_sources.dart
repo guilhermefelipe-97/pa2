@@ -59,9 +59,10 @@ String sourceSemanticsLabel(
   return [
     displayAuthorName(source.authorName),
     if (following) 'você segue',
-    'comida ${r.scores.food}',
-    'ambiente ${r.scores.ambience}',
-    'atendimento ${r.scores.service}',
+    // Só os eixos avaliados (F14): eixo sem nota não é falado.
+    if (r.scores.food != null) 'comida ${r.scores.food}',
+    if (r.scores.ambience != null) 'ambiente ${r.scores.ambience}',
+    if (r.scores.service != null) 'atendimento ${r.scores.service}',
     visitContext(r),
     ?visitsLabel(source.visits),
     relativeTimeSpoken(r.createdAt, now),

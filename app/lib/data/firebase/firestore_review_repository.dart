@@ -42,6 +42,7 @@ class FirestoreReviewRepository implements ReviewRepository {
     final batch = _db.batch();
     // Schema exato (11 chaves) validado pelas Rules (hasOnly/hasAll). O período
     // do dia NÃO é gravado; createdAt é sempre o timestamp do servidor.
+    // Eixo não avaliado vai como null (F14): a chave está sempre presente.
     // `comment` já vem normalizado (aparado; null quando não há).
     batch.set(ref, {
       'authorId': review.authorId,
@@ -153,6 +154,18 @@ class FirestoreReviewRepository implements ReviewRepository {
     return kept;
   }
 
+  /// Leitura estrita de um eixo (F14), espelhando as Rules: a chave precisa
+  /// existir e valer `null` (não avaliado) ou um `int` de 1 a 5. Chave
+  /// ausente, decimal (4.5) ou texto invalida o doc (ignorado em [_fromDoc]).
+  /// Os 3 null também: `Scores` exige ao menos um eixo.
+  static int? _axis(Map<String, dynamic> d, String key) {
+    if (!d.containsKey(key)) throw FormatException('eixo "$key" ausente');
+    final v = d[key];
+    if (v == null) return null;
+    if (v is int && Scores.isValid(v)) return v;
+    throw FormatException('eixo "$key" inválido: $v');
+  }
+
   Review? _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data();
     final ts = d['createdAt'];
@@ -165,9 +178,9 @@ class FirestoreReviewRepository implements ReviewRepository {
         placeId: d['placeId'] as String,
         placeName: d['placeName'] as String,
         scores: Scores(
-          food: (d['food'] as num).toInt(),
-          ambience: (d['ambience'] as num).toInt(),
-          service: (d['service'] as num).toInt(),
+          food: _axis(d, 'food'),
+          ambience: _axis(d, 'ambience'),
+          service: _axis(d, 'service'),
         ),
         companion: Companion.fromValue(d['companion'] as String?),
         // Normaliza na leitura: avaliações da Onda 1 não têm a chave, e vazio

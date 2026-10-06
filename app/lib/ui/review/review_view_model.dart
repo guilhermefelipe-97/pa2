@@ -16,8 +16,8 @@ import '../core/safe_change_notifier.dart';
 Future<Uint8List> compressPhotoInBackground(Uint8List bytes) =>
     compute(compressPhoto, bytes);
 
-/// Avaliação em 3 eixos (F01) com contexto (F02), comentário e foto
-/// opcionais (G1).
+/// Avaliação em 3 eixos (F01), cada um opcional com mínimo de 1 (F14), com
+/// contexto (F02), comentário e foto opcionais (G1).
 class ReviewViewModel extends SafeChangeNotifier {
   ReviewViewModel({
     required this.place,
@@ -115,19 +115,26 @@ class ReviewViewModel extends SafeChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  /// Os 3 eixos são obrigatórios; companhia e comentário são opcionais.
+  /// Avaliação mínima (F14): pelo menos um eixo; os outros, companhia,
+  /// comentário e foto são opcionais.
+  bool get hasValidAxes =>
+      Scores.isValidCombination(_food, _ambience, _service);
+
   bool get canSubmit =>
       !_isSubmitting &&
       !_isPicking &&
       !_isProcessingPhoto &&
-      Scores.isValid(_food) &&
-      Scores.isValid(_ambience) &&
-      Scores.isValid(_service) &&
+      hasValidAxes &&
       !commentTooLong;
 
   void setFood(int value) => _set(() => _food = _clamp(value));
   void setAmbience(int value) => _set(() => _ambience = _clamp(value));
   void setService(int value) => _set(() => _service = _clamp(value));
+
+  /// "Limpar": o eixo volta a não avaliado (nunca zero).
+  void clearFood() => _set(() => _food = null);
+  void clearAmbience() => _set(() => _ambience = null);
+  void clearService() => _set(() => _service = null);
 
   /// Tocar de novo na companhia selecionada desmarca.
   void toggleCompanion(Companion value) =>
@@ -250,11 +257,7 @@ class ReviewViewModel extends SafeChangeNotifier {
           authorName: profile.displayName,
           placeId: place.id,
           placeName: place.name,
-          scores: Scores(
-            food: _food!,
-            ambience: _ambience!,
-            service: _service!,
-          ),
+          scores: Scores(food: _food, ambience: _ambience, service: _service),
           companion: _companion,
           comment: _comment, // NewReview normaliza: trim, vazio → null
         ),

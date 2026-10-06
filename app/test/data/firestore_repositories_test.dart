@@ -14,15 +14,16 @@ import 'package:naarea/domain/search_tokens.dart';
 
 import '../support/builders.dart';
 
-NewReview _newReview({Companion? companion, String? comment}) => NewReview(
-  authorId: 'alice',
-  authorName: 'Alice',
-  placeId: 'mangai',
-  placeName: 'Mangai',
-  scores: Scores(food: 5, ambience: 4, service: 3),
-  companion: companion,
-  comment: comment,
-);
+NewReview _newReview({Companion? companion, String? comment, Scores? scores}) =>
+    NewReview(
+      authorId: 'alice',
+      authorName: 'Alice',
+      placeId: 'mangai',
+      placeName: 'Mangai',
+      scores: scores ?? Scores(food: 5, ambience: 4, service: 3),
+      companion: companion,
+      comment: comment,
+    );
 
 Future<void> _addReview(
   FakeFirebaseFirestore db, {
@@ -119,6 +120,22 @@ void main() {
       expect(data.containsKey('companion'), isTrue);
       expect(data['companion'], isNull);
     });
+
+    test(
+      'F14: eixo não avaliado é gravado como null (chave presente)',
+      () async {
+        final db = FakeFirebaseFirestore();
+        await FirestoreReviewRepository(
+          db,
+        ).createReview(_newReview(scores: Scores(food: 4)));
+        final data = (await db.collection('reviews').get()).docs.single.data();
+        expect(data['food'], 4);
+        for (final axis in ['ambience', 'service']) {
+          expect(data.containsKey(axis), isTrue, reason: axis);
+          expect(data[axis], isNull, reason: axis);
+        }
+      },
+    );
 
     test('sem comentário: chave comment presente com null', () async {
       final db = FakeFirebaseFirestore();
@@ -358,6 +375,73 @@ void main() {
           db,
         ).fetchReviewsByAuthors(['a']);
         expect(result.map((r) => r.hasPhoto), [true, false, false, false]);
+      },
+    );
+
+    test(
+      'F14: lê eixos null como não avaliados; os 3 null é ignorado',
+      () async {
+        final db = FakeFirebaseFirestore();
+        Map<String, Object?> doc(
+          Object? food,
+          Object? ambience,
+          Object? service,
+        ) => {
+          'authorId': 'a',
+          'authorName': 'A',
+          'placeId': 'p',
+          'placeName': 'Local p',
+          'food': food,
+          'ambience': ambience,
+          'service': service,
+          'companion': null,
+          'comment': null,
+          'createdAt': Timestamp.fromDate(DateTime.utc(2026, 9, 1)),
+        };
+        await db.collection('reviews').add(doc(null, 5, null));
+        await db.collection('reviews').add(doc(null, null, null));
+        final result = await FirestoreReviewRepository(
+          db,
+        ).fetchReviewsByAuthors(['a']);
+        expect(result.single.scores, Scores(ambience: 5));
+      },
+    );
+
+    test(
+      'F14: leitura estrita — decimal ou chave ausente invalida o doc',
+      () async {
+        final db = FakeFirebaseFirestore();
+        Map<String, Object?> base() => {
+          'authorId': 'a',
+          'authorName': 'A',
+          'placeId': 'p',
+          'placeName': 'Local p',
+          'food': 4,
+          'ambience': null,
+          'service': 3,
+          'companion': null,
+          'comment': null,
+          'createdAt': Timestamp.fromDate(DateTime.utc(2026, 9, 1)),
+        };
+        await db.collection('reviews').doc('ok').set(base());
+        await db.collection('reviews').doc('decimal').set({
+          ...base(),
+          'food': 4.5,
+        });
+        await db
+            .collection('reviews')
+            .doc('sem-chave')
+            .set(base()..remove('ambience'));
+        await db.collection('reviews').doc('fora').set({...base(), 'food': 6});
+        await db.collection('reviews').doc('texto').set({
+          ...base(),
+          'service': '3',
+        });
+        final result = await FirestoreReviewRepository(
+          db,
+        ).fetchReviewsByAuthors(['a']);
+        expect(result.map((r) => r.id), ['ok']);
+        expect(result.single.scores, Scores(food: 4, service: 3));
       },
     );
 

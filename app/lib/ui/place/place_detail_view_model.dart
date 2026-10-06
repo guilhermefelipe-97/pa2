@@ -5,6 +5,7 @@ import '../../data/repositories/user_repository.dart';
 import '../../domain/feed.dart';
 import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
+import '../../domain/models/scores.dart' as scores;
 import '../core/follow_events.dart';
 import '../core/safe_change_notifier.dart';
 
@@ -90,8 +91,8 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   /// "2 avaliações de amigos"; com a do próprio usuário, só "3 avaliações".
   String get reviewCountLabel {
     final n = reviews.length;
-    if (hasOwnReview) return n == 1 ? '1 avaliação' : '$n avaliações';
-    return n == 1 ? '1 avaliação de amigo' : '$n avaliações de amigos';
+    if (hasOwnReview) return scores.reviewCountLabel(n);
+    return scores.countLabel(n, 'avaliação de amigo', 'avaliações de amigos');
   }
 
   /// Card com as avaliações (para cabeçalho, médias e autores).

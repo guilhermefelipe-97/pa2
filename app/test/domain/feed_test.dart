@@ -166,9 +166,9 @@ void main() {
           scores: Scores(food: 4, ambience: 3, service: 5),
         ),
       ]);
-      expect(feed.single.averages.food, 4.5);
-      expect(feed.single.averages.ambience, 2.5);
-      expect(feed.single.averages.service, 4.5);
+      expect(feed.single.averages.food.value, 4.5);
+      expect(feed.single.averages.ambience.value, 2.5);
+      expect(feed.single.averages.service.value, 4.5);
     });
   });
 

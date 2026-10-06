@@ -16,6 +16,52 @@ void main() {
     );
   });
 
+  test('F14: cada eixo é opcional, mas pelo menos um tem nota', () {
+    final onlyFood = Scores(food: 4);
+    expect(onlyFood.food, 4);
+    expect(onlyFood.ambience, isNull);
+    expect(onlyFood.service, isNull);
+    expect(() => Scores(ambience: 5), returnsNormally);
+    expect(() => Scores(service: 1), returnsNormally);
+    expect(() => Scores(), throwsArgumentError);
+    expect(() => Scores(food: 0), throwsArgumentError);
+    expect(() => Scores(food: 4, service: 6), throwsArgumentError);
+  });
+
+  test('F14: o erro diz qual eixo está errado', () {
+    expect(
+      () => Scores(food: 4, ambience: 6),
+      throwsA(
+        isA<ArgumentError>()
+            .having((e) => e.name, 'name', 'ambience')
+            .having((e) => e.message, 'message', contains('ambience')),
+      ),
+    );
+    expect(
+      () => Scores(service: 0),
+      throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'service')),
+    );
+    expect(
+      () => Scores(),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => e.message,
+          'message',
+          contains('pelo menos um eixo'),
+        ),
+      ),
+    );
+  });
+
+  test('F14: isValidCombination espelha o construtor', () {
+    expect(Scores.isValidCombination(4, null, null), isTrue);
+    expect(Scores.isValidCombination(null, null, 5), isTrue);
+    expect(Scores.isValidCombination(1, 2, 3), isTrue);
+    expect(Scores.isValidCombination(null, null, null), isFalse);
+    expect(Scores.isValidCombination(0, null, null), isFalse);
+    expect(Scores.isValidCombination(4, 6, null), isFalse);
+  });
+
   test('isValid trata null como inválido', () {
     expect(Scores.isValid(null), isFalse);
     expect(Scores.isValid(1), isTrue);

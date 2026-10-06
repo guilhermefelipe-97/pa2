@@ -348,6 +348,54 @@ void main() {
     );
   });
 
+  testWidgets('F14: Ana só com comida 4 mostra "🍽️ 4" e fala "comida 4"', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    final item = groupReviewsIntoFeed(
+      [
+        review(
+          authorId: 'ana',
+          authorName: 'Ana',
+          placeId: 'mangai',
+          scores: Scores(food: 4),
+          createdAt: DateTime.utc(2026, 9, 28, 13),
+        ),
+      ],
+      places: {'mangai': place(id: 'mangai', name: 'Mangai')},
+    ).single;
+    expect(
+      sourceSemanticsLabel(item.sources.single, following: false, now: _now),
+      'Ana, comida 4, de manhã, há 2 horas',
+    );
+    await tester.pumpWidget(_host(FeedCard(item: item, now: _now)));
+    final row = find.byKey(const ValueKey('trust-source-ana'));
+    expect(_pill('🍽️ 4', within: row), findsOneWidget);
+    expect(find.textContaining('✨'), findsNothing);
+    expect(find.textContaining('🤝'), findsNothing);
+    handle.dispose();
+  });
+
+  testWidgets('AC F14: Bianca só com ambiente 5 aparece no card com "✨ 5" e '
+      'nenhum outro eixo', (tester) async {
+    final item = groupReviewsIntoFeed(
+      [
+        review(
+          authorId: 'bianca',
+          authorName: 'Bianca',
+          placeId: 'mangai',
+          scores: Scores(ambience: 5),
+          createdAt: DateTime.utc(2026, 9, 28, 13),
+        ),
+      ],
+      places: {'mangai': place(id: 'mangai', name: 'Mangai')},
+    ).single;
+    await tester.pumpWidget(_host(FeedCard(item: item, now: _now)));
+    expect(_pill('✨ 5'), findsOneWidget);
+    expect(find.textContaining('🍽️'), findsNothing);
+    expect(find.textContaining('🤝'), findsNothing);
+  });
+
   testWidgets('AC: Bianca segue Ana; o card mostra "Ana" + "você segue" e '
       '🍽️ 5 de Ana, sem número sem nome', (tester) async {
     final item = groupReviewsIntoFeed(

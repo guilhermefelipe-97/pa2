@@ -108,6 +108,20 @@ service cloud.firestore {
       return v is int && v >= 1 && v <= 5;
     }
 
+    // Avaliação mínima (F14): cada eixo é opcional — null = não avaliado,
+    // nunca zero. A chave continua sempre presente (hasAll) e ao menos um
+    // eixo precisa ter nota.
+    function validAxis(v) {
+      return v == null || validScore(v);
+    }
+
+    function validAxes(data) {
+      return validAxis(data.food)
+        && validAxis(data.ambience)
+        && validAxis(data['service']) // 'service' é palavra reservada nas Rules
+        && (data.food != null || data.ambience != null || data['service'] != null);
+    }
+
     function validCompanion(v) {
       return v == null || v in ['sozinho', 'casal', 'amigos', 'familia', 'trabalho'];
     }
@@ -154,9 +168,7 @@ service cloud.firestore {
         && data.placeId is string
         && exists(placePath)
         && data.placeName == get(placePath).data.name
-        && validScore(data.food)
-        && validScore(data.ambience)
-        && validScore(data['service']) // 'service' é palavra reservada nas Rules
+        && validAxes(data)
         && validCompanion(data.companion)
         && validComment(data.comment)
         && validHasPhoto(data, reviewId)

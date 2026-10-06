@@ -473,12 +473,38 @@ describe('reviews', () => {
       await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ [axis]: '3' })));
     });
 
-    it(axis + ': obrigatório', async () => {
+    it(axis + ': rejeita 4.5 e "5" (F14)', async () => {
+      await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ [axis]: 4.5 })));
+      await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ [axis]: '5' })));
+    });
+
+    it(axis + ': chave obrigatória, mesmo quando não avaliado (null)', async () => {
       const data = validReview();
       delete data[axis];
       await assertFails(addDoc(collection(alice(), 'reviews'), data));
     });
+
+    it(axis + ': opcional (null) quando outro eixo foi avaliado (F14)', async () => {
+      await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ [axis]: null })));
+    });
+
+    it(axis + ': avaliação só com este eixo é válida (F14)', async () => {
+      const only = { food: null, ambience: null, service: null, [axis]: 4 };
+      await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview(only)));
+    });
   }
+
+  it('os 3 eixos null é negado (mínimo 1 eixo; F14)', async () => {
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ food: null, ambience: null, service: null })));
+  });
+
+  it('eixo inválido não passa só porque outro é null (F14)', async () => {
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ food: null, ambience: 6, service: 3 })));
+  });
+
+  it('eixo ausente não vira zero: 0 com os outros null é negado (F14)', async () => {
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ food: 0, ambience: null, service: null })));
+  });
 
   it('aceita as fronteiras 1 e 5', async () => {
     await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ food: 1, ambience: 5, service: 1 })));

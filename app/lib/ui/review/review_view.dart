@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +7,11 @@ import 'package:go_router/go_router.dart';
 import '../../data/services/photo_picker.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/models/review.dart';
+import '../feed/widgets/axis_scores.dart' show noScoresLabel;
 import 'review_view_model.dart';
+
+/// Dica abaixo do Enviar enquanto nenhum eixo tem nota (F14).
+const String noAxisHint = 'Toque numa estrela de pelo menos um eixo';
 
 class ReviewView extends StatefulWidget {
   const ReviewView({super.key, required this.viewModel});
@@ -50,22 +56,47 @@ class _ReviewViewState extends State<ReviewView> {
               ),
               const SizedBox(height: 24),
               _AxisPicker(
+                axisKey: 'food',
+                emoji: '🍽️',
                 label: 'Comida',
                 value: vm.food,
                 onChanged: vm.setFood,
+                onClear: vm.clearFood,
                 enabled: !vm.isSubmitting,
               ),
               _AxisPicker(
+                axisKey: 'ambience',
+                emoji: '✨',
                 label: 'Ambiente',
                 value: vm.ambience,
                 onChanged: vm.setAmbience,
+                onClear: vm.clearAmbience,
                 enabled: !vm.isSubmitting,
               ),
               _AxisPicker(
+                axisKey: 'service',
+                emoji: '🤝',
                 label: 'Atendimento',
                 value: vm.service,
                 onChanged: vm.setService,
+                onClear: vm.clearService,
                 enabled: !vm.isSubmitting,
+              ),
+              // Junto dos eixos; anunciada quando aparece/some (liveRegion).
+              Semantics(
+                liveRegion: true,
+                child: vm.hasValidAxes
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          noAxisHint,
+                          key: const Key('review-axis-hint'),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
               ),
               const SizedBox(height: 16),
               Text(
@@ -317,43 +348,127 @@ class _PhotoField extends StatelessWidget {
   }
 }
 
+/// Um eixo da avaliação rápida (F14): 5 estrelas grandes, um toque escolhe
+/// a nota; "Limpar" volta a não avaliado. Eixo vazio é ausência, nunca zero.
 class _AxisPicker extends StatelessWidget {
   const _AxisPicker({
+    required this.axisKey,
+    required this.emoji,
     required this.label,
     required this.value,
     required this.onChanged,
+    required this.onClear,
     this.enabled = true,
   });
 
+  /// Base das keys: `axis-<axisKey>-<n>` e `axis-<axisKey>-clear`.
+  final String axisKey;
+  final String emoji;
   final String label;
   final int? value;
   final ValueChanged<int> onChanged;
+  final VoidCallback onClear;
   final bool enabled;
+
+  static const double maxStarSize = 44;
+  static const double starPadding = 4;
+
+  /// Opacidade das estrelas durante o envio.
+  static const double disabledOpacity = 0.38;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final current = value;
+    // Azul-mar fechado do tema: contraste AA sobre a areia da superfície.
+    final filled = scheme.tertiary;
+    final opacity = enabled ? 1.0 : disabledOpacity;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          SegmentedButton<int>(
-            emptySelectionAllowed: true,
-            showSelectedIcon: false,
-            segments: [
-              for (var i = 1; i <= 5; i++)
-                ButtonSegment<int>(value: i, label: Text('$i')),
-            ],
-            selected: value == null ? <int>{} : {value!},
-            // null desabilita o SegmentedButton (ex.: durante o envio).
-            onSelectionChanged: enabled
-                ? (s) {
-                    if (s.isNotEmpty) onChanged(s.first);
-                  }
-                : null,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '$emoji $label',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                Flexible(
+                  child: Text(
+                    current == null ? noScoresLabel : '$current de 5',
+                    textAlign: TextAlign.end,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                // Reserva o espaço do Limpar mesmo oculto: o cabeçalho não
+                // pula ao escolher a primeira nota.
+                Visibility(
+                  visible: current != null,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: TextButton(
+                    key: Key('axis-$axisKey-clear'),
+                    onPressed: enabled && current != null ? onClear : null,
+                    child: Text('Limpar', semanticsLabel: 'Limpar $label'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final iconSize = math.max(
+                0.0,
+                math.min(
+                  maxStarSize,
+                  constraints.maxWidth / 5 - 2 * starPadding,
+                ),
+              );
+              return Row(
+                children: [
+                  for (var i = 1; i <= 5; i++)
+                    Expanded(
+                      child: Semantics(
+                        button: true,
+                        enabled: enabled,
+                        selected: current == i,
+                        label: '$label $i de 5',
+                        onTap: enabled ? () => onChanged(i) : null,
+                        excludeSemantics: true,
+                        child: Center(
+                          child: IconButton(
+                            key: Key('axis-$axisKey-$i'),
+                            iconSize: iconSize,
+                            padding: const EdgeInsets.all(starPadding),
+                            constraints: const BoxConstraints(),
+                            onPressed: enabled ? () => onChanged(i) : null,
+                            icon: Opacity(
+                              opacity: opacity,
+                              child: Icon(
+                                current != null && i <= current
+                                    ? Icons.star_rounded
+                                    : Icons.star_outline_rounded,
+                                color: current != null && i <= current
+                                    ? filled
+                                    : scheme.outline,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),
