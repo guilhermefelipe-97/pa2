@@ -8,6 +8,7 @@ import 'package:naarea/data/repositories/review_photo_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
 import 'package:naarea/data/repositories/saved_repository.dart';
 import 'package:naarea/data/repositories/user_repository.dart';
+import 'package:naarea/data/services/location_service.dart';
 import 'package:naarea/data/services/photo_picker.dart';
 import 'package:naarea/domain/feed.dart';
 import 'package:naarea/domain/models/place.dart';
@@ -32,6 +33,7 @@ class TestApp {
     required this.router,
     required this.photos,
     required this.picker,
+    required this.location,
   });
 
   final FakeAuthRepository auth;
@@ -43,6 +45,7 @@ class TestApp {
   final GoRouter router;
   final FakeReviewPhotoRepository photos;
   final FakePhotoPicker picker;
+  final FakeLocationService location;
 
   SavedPlacesStore store(WidgetTester tester) => Provider.of<SavedPlacesStore>(
     tester.element(find.byType(Navigator).first),
@@ -66,8 +69,10 @@ Future<TestApp> pumpApp(
   FakeListsRepository? lists,
   FakeReviewPhotoRepository? photos,
   FakePhotoPicker? picker,
+  FakeLocationService? location,
   DateTime Function()? clock,
 }) async {
+  final loc = location ?? FakeLocationService();
   final u = users ?? (FakeUserRepository()..addUser('me', 'Eu'));
   final auth = FakeAuthRepository(uid: uid, users: u);
   final r = reviews ?? FakeReviewRepository();
@@ -86,6 +91,7 @@ Future<TestApp> pumpApp(
         Provider<ReviewRepository>.value(value: r),
         Provider<ReviewPhotoRepository>.value(value: ph),
         Provider<PhotoPicker>.value(value: pk),
+        Provider<LocationService>.value(value: loc),
         ChangeNotifierProvider<FollowEvents>(create: (_) => FollowEvents()),
         Provider<SavedRepository>.value(value: s),
         ChangeNotifierProvider<SavedPlacesStore>(
@@ -121,6 +127,7 @@ Future<TestApp> pumpApp(
     router: router,
     photos: ph,
     picker: pk,
+    location: loc,
   );
 }
 

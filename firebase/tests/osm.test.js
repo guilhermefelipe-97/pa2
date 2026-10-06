@@ -6,7 +6,9 @@ const { fold, words, searchTokens, nameLower } = require('../seed/osm/tokens');
 const { categoryFor, cuisineLabel, CATEGORIES } = require('../seed/osm/category');
 const { pointInMultipolygon, neighborhoodAt, geohash } = require('../seed/osm/geo');
 const { placeId, toPlace, buildSnapshot, parseNeighborhoods, checkSnapshot } = require('../seed/osm/places');
-const { matchCurated, buildPlaceDocs } = require('../seed/osm/match');
+const fs = require('node:fs');
+const path = require('node:path');
+const { matchCurated, buildPlaceDocs, withGeohash } = require('../seed/osm/match');
 
 /** Quadrado [lat0,lat1]×[lng0,lng1] partido em duas vias abertas (como membros OSM). */
 function squareAsTwoWays(lat0, lat1, lng0, lng1) {
@@ -344,7 +346,8 @@ describe('casamento com os curados', () => {
       osmId: 'way/1',
       lat: -5.8,
       lng: -35.2,
-      geohash: 'abc',
+      // Recalculado das coordenadas (o 'abc' do snapshot de teste não vale).
+      geohash: geohash(-5.8, -35.2, 9),
       cuisine: 'Comida regional',
       address: 'Av. Amintas Barros, 3300',
       nameLower: 'mangai',
@@ -376,4 +379,48 @@ describe('casamento com os curados', () => {
     const { docs } = buildPlaceDocs(curated, undefined);
     assert.equal(docs.length, 3);
   });
+});
+
+describe('geohash garantido em todo doc com coordenadas (F10)', () => {
+  it('curado com lat/lng próprios e sem geohash ganha o geohash (precisão 9)', () => {
+    const { docs } = buildPlaceDocs([{ id: 'x', name: 'X', lat: -5.8817, lng: -35.1708 }], undefined);
+    assert.equal(docs[0].geohash, geohash(-5.8817, -35.1708, 9));
+    assert.equal(docs[0].geohash.length, 9);
+  });
+
+  it('geohash divergente das coordenadas é recalculado', () => {
+    assert.equal(withGeohash({ lat: -5.8, lng: -35.2, geohash: 'zzz' }).geohash, geohash(-5.8, -35.2, 9));
+  });
+
+  it('sem coordenadas válidas não há geohash', () => {
+    assert.equal('geohash' in withGeohash({ id: 'a', geohash: 'abc' }), false);
+    assert.equal('geohash' in withGeohash({ lat: 91, lng: 0 }), false);
+    assert.equal('geohash' in withGeohash({ lat: '1', lng: 2 }), false);
+    assert.equal('geohash' in withGeohash({ lat: -5.8 }), false);
+  });
+
+  it('arquivos versionados: todo doc com lat/lng sai com o geohash delas', () => {
+    const seedDir = path.join(__dirname, '..', 'seed');
+    const curated = JSON.parse(fs.readFileSync(path.join(seedDir, 'places.json'), 'utf8'));
+    const snapshotPath = path.join(seedDir, 'osm-natal.json');
+    const snapshot = fs.existsSync(snapshotPath) ? JSON.parse(fs.readFileSync(snapshotPath, 'utf8')) : undefined;
+    const { docs } = buildPlaceDocs(curated, snapshot);
+    const located = docs.filter((d) => d.lat !== undefined || d.lng !== undefined);
+    for (const d of located) {
+      assert.equal(d.geohash, geohash(d.lat, d.lng, 9), d.id);
+    }
+    for (const d of docs.filter((x) => x.lat === undefined)) {
+      assert.equal(d.geohash, undefined, d.id);
+    }
+  });
+});
+
+describe('geohash do seed = geofire-common (fixture compartilhada com o app)', () => {
+  const geoFixture = require('./fixtures/geo.json');
+  for (const c of geoFixture.geohash) {
+    it(`geohash(${c.lat}, ${c.lng})`, () => {
+      assert.equal(geohash(c.lat, c.lng, c.precision), c.expected);
+      assert.equal(geohash(c.lat, c.lng, 9), c.expected.slice(0, 9));
+    });
+  }
 });

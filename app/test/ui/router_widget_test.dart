@@ -100,11 +100,12 @@ void main() {
 
   group('shell com barra inferior', () {
     testWidgets(
-      'abas Amigos · Quero ir · Pessoas; FAB "Avaliar" só em Amigos',
+      'abas Amigos · Perto · Quero ir · Pessoas; FAB "Avaliar" só em Amigos',
       (tester) async {
         final app = await pumpApp(tester, places: [_mangai]);
         expect(find.byType(NavigationBar), findsOneWidget);
         expect(_tab('Amigos'), findsOneWidget);
+        expect(_tab('Perto'), findsOneWidget);
         expect(_tab('Quero ir'), findsOneWidget);
         expect(_tab('Pessoas'), findsOneWidget);
         expect(find.byType(FeedView), findsOneWidget);

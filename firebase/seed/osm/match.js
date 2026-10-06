@@ -1,6 +1,7 @@
 // Casamento dos locais curados (places.json) com o snapshot do OSM e montagem
 // dos documentos finais de `places`.
 const { nameLower, searchTokens } = require('./tokens');
+const { geohash } = require('./geo');
 
 /** Campos que o curado recebe do OSM (nome, categoria, bairro e foto do curado ficam). */
 const FROM_OSM = ['osmId', 'lat', 'lng', 'geohash', 'cuisine', 'address', 'openingHours'];
@@ -82,6 +83,22 @@ function withSearchFields(doc) {
   return { ...doc, nameLower: nameLower(doc.name), searchTokens: searchTokens(doc.name) };
 }
 
+/** Precisão do `geohash` gravado (o app consulta por faixas dele no "Perto", F10). */
+const GEOHASH_PRECISION = 9;
+
+const validCoord = (v, max) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= max;
+
+/**
+ * Todo doc com lat/lng válidos sai com o `geohash` calculado delas (curados
+ * casados, curados com coordenada própria e OSM): sem ele o local nunca
+ * aparece no "Perto". Sem coordenadas válidas, sem geohash.
+ */
+function withGeohash(doc) {
+  const { geohash: _old, ...rest } = doc;
+  if (!validCoord(doc.lat, 90) || !validCoord(doc.lng, 180)) return rest;
+  return { ...rest, geohash: geohash(doc.lat, doc.lng, GEOHASH_PRECISION) };
+}
+
 function stripEmpty(doc) {
   const out = {};
   for (const [k, v] of Object.entries(doc)) {
@@ -112,14 +129,14 @@ function buildPlaceDocs(curated, snapshot, log = () => {}) {
       for (const k of FROM_OSM) if (osm[k] !== undefined && osm[k] !== '') merged[k] = osm[k];
       if (!merged.neighborhood) merged.neighborhood = osm.neighborhood;
     }
-    docs.push(stripEmpty(withSearchFields(merged)));
+    docs.push(stripEmpty(withGeohash(withSearchFields(merged))));
   }
   for (const p of osmPlaces) {
     if (consumed.has(p.id)) continue;
-    docs.push(stripEmpty(withSearchFields({ ...p, source: 'osm' })));
+    docs.push(stripEmpty(withGeohash(withSearchFields({ ...p, source: 'osm' }))));
   }
   docs.sort((a, b) => byId(a.id, b.id));
   return { docs, matched: matches.size, ambiguous };
 }
 
-module.exports = { matchCurated, buildPlaceDocs };
+module.exports = { matchCurated, buildPlaceDocs, withGeohash, GEOHASH_PRECISION };

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import '../../domain/geo.dart';
 import '../../domain/models/place.dart';
 import '../../domain/search_tokens.dart';
 import '../chunk.dart';
@@ -28,6 +29,14 @@ class FirestorePlaceRepository implements PlaceRepository {
   /// Ids que a última leitura deu como ausentes.
   final Set<String> _absent = {};
   List<Place>? _suggestions;
+
+  /// Máximo de documentos por faixa de geohash em [nearby]. O catálogo tem
+  /// ~650 locais; a faixa mais larga (3 km) cabe folgada.
+  static const nearbyLimitPerRange = 200;
+
+  /// Faixas de geohash consultadas por [nearby] (para testes).
+  @visibleForTesting
+  int nearbyRangeCount = 0;
 
   /// Consultas `whereIn` feitas por [getPlaces] (para testes).
   @visibleForTesting
@@ -63,6 +72,38 @@ class FirestorePlaceRepository implements PlaceRepository {
     final list = _parse(snap.docs).where((p) => p.photoUrl != null).toList()
       ..sort((a, b) => nameLower(a.name).compareTo(nameLower(b.name)));
     return _suggestions = List.unmodifiable(list);
+  }
+
+  @override
+  Future<List<NearbyPlace>> nearby(
+    double lat,
+    double lng,
+    double radiusMeters,
+  ) async {
+    final center = (lat: lat, lng: lng);
+    final ranges = geohashQueryBounds(center, radiusMeters);
+    nearbyRangeCount += ranges.length;
+    final snaps = await Future.wait([
+      for (final r in ranges)
+        // Igual a `orderBy + startAt/endAt` do geofire; docs sem `geohash`
+        // (sem coordenadas) nunca entram numa faixa.
+        _col
+            .where('geohash', isGreaterThanOrEqualTo: r.start)
+            .where('geohash', isLessThanOrEqualTo: r.end)
+            .orderBy('geohash')
+            .limit(nearbyLimitPerRange)
+            .get(),
+    ]);
+    final seen = <String>{};
+    final out = <NearbyPlace>[];
+    for (final snap in snaps) {
+      for (final p in _parse(snap.docs)) {
+        if (!seen.add(p.id) || !p.hasCoordinates) continue;
+        final d = distanceMeters(center, (lat: p.lat!, lng: p.lng!));
+        if (d <= radiusMeters) out.add((place: p, distanceMeters: d));
+      }
+    }
+    return out..sort(compareNearby);
   }
 
   @override
@@ -160,6 +201,7 @@ class FirestorePlaceRepository implements PlaceRepository {
       photoIllustrative: data['photoIllustrative'] == true,
       lat: hasCoords ? lat : null,
       lng: hasCoords ? lng : null,
+      geohash: hasCoords ? nonEmpty('geohash') : null,
       cuisine: nonEmpty('cuisine'),
       address: nonEmpty('address'),
       openingHours: nonEmpty('openingHours'),

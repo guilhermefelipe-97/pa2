@@ -6,6 +6,11 @@
          permissão. Não declarar CAMERA: declarada, o image_picker passa a
          exigir o pedido em tempo de execução. -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <!-- "Perto" (F10): posição só em primeiro plano, só em memória (nunca
+         gravada). Sem ACCESS_BACKGROUND_LOCATION. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
     <application
         android:label="NaÁrea"
         android:name="${applicationName}"

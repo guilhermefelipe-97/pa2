@@ -3,6 +3,7 @@ abstract final class Routes {
   static const login = '/login';
   static const signUp = '/cadastro';
   static const feed = '/';
+  static const nearby = '/perto';
   static const saved = '/quero-ir';
   static const people = '/pessoas';
   static const pickPlace = '/avaliar';

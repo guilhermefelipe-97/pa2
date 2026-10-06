@@ -1,0 +1,355 @@
+{
+  "_comment": "Vetores gerados com geofire-common@6.0.0 (geohashForLocation, geohashQueryBounds, distanceBetween). App (Dart) e seed (JS) conferem contra eles.",
+  "geohash": [
+    {
+      "lat": -5.8817,
+      "lng": -35.1708,
+      "precision": 10,
+      "expected": "7nyyx9m2sg"
+    },
+    {
+      "lat": -5.7945,
+      "lng": -35.211,
+      "precision": 10,
+      "expected": "7nyznc0hs4"
+    },
+    {
+      "lat": -5.8031189,
+      "lng": -35.2199833,
+      "precision": 10,
+      "expected": "7nyyyx9d6u"
+    },
+    {
+      "lat": -5.8447471,
+      "lng": -35.2185173,
+      "precision": 10,
+      "expected": "7nyywxfxvh"
+    },
+    {
+      "lat": 37.7749,
+      "lng": -122.4194,
+      "precision": 10,
+      "expected": "9q8yyk8ytp"
+    },
+    {
+      "lat": 57.64911,
+      "lng": 10.40744,
+      "precision": 10,
+      "expected": "u4pruydqqv"
+    },
+    {
+      "lat": 0.5,
+      "lng": 179.999,
+      "precision": 10,
+      "expected": "xbpfzgp28w"
+    },
+    {
+      "lat": -33.8688,
+      "lng": 151.2093,
+      "precision": 10,
+      "expected": "r3gx2f77bn"
+    },
+    {
+      "lat": 89.9,
+      "lng": 0.3,
+      "precision": 10,
+      "expected": "upbpqvf3qw"
+    },
+    {
+      "lat": 1.2345,
+      "lng": 0.5,
+      "precision": 10,
+      "expected": "s00r52sp6z"
+    }
+  ],
+  "bounds": [
+    {
+      "lat": -5.8817,
+      "lng": -35.1708,
+      "radius": 300,
+      "expected": [
+        [
+          "7nyyx9h",
+          "7nyyx9s"
+        ],
+        [
+          "7nyyx90",
+          "7nyyx98"
+        ],
+        [
+          "7nyyx9s",
+          "7nyyx9~"
+        ],
+        [
+          "7nyyx98",
+          "7nyyx9h"
+        ],
+        [
+          "7nyyx8s",
+          "7nyyx8~"
+        ],
+        [
+          "7nyyx88",
+          "7nyyx8h"
+        ]
+      ]
+    },
+    {
+      "lat": -5.8817,
+      "lng": -35.1708,
+      "radius": 1000,
+      "expected": [
+        [
+          "7nyyx8",
+          "7nyyxd"
+        ],
+        [
+          "7nyyx0",
+          "7nyyx4"
+        ],
+        [
+          "7nyyxd",
+          "7nyyxh"
+        ],
+        [
+          "7nyyx4",
+          "7nyyx8"
+        ],
+        [
+          "7nyyrw",
+          "7nyyr~"
+        ],
+        [
+          "7nyyrn",
+          "7nyyrs"
+        ]
+      ]
+    },
+    {
+      "lat": -5.8817,
+      "lng": -35.1708,
+      "radius": 3000,
+      "expected": [
+        [
+          "7nyyw",
+          "7nyyy"
+        ],
+        [
+          "7nzn8",
+          "7nznb"
+        ],
+        [
+          "7nyyq",
+          "7nyys"
+        ],
+        [
+          "7nzn2",
+          "7nzn4"
+        ]
+      ]
+    },
+    {
+      "lat": -5.7945,
+      "lng": -35.211,
+      "radius": 300,
+      "expected": [
+        [
+          "7nyznc0",
+          "7nyznc8"
+        ],
+        [
+          "7nyzn9h",
+          "7nyzn9s"
+        ],
+        [
+          "7nyznc8",
+          "7nyznch"
+        ],
+        [
+          "7nyzn9s",
+          "7nyzn9~"
+        ],
+        [
+          "7nyznb8",
+          "7nyznbh"
+        ],
+        [
+          "7nyzn8s",
+          "7nyzn8~"
+        ]
+      ]
+    },
+    {
+      "lat": -5.7945,
+      "lng": -35.211,
+      "radius": 1000,
+      "expected": [
+        [
+          "7nyzn8",
+          "7nyznd"
+        ],
+        [
+          "7nyznd",
+          "7nyznh"
+        ],
+        [
+          "7nyyyw",
+          "7nyyy~"
+        ]
+      ]
+    },
+    {
+      "lat": -5.7945,
+      "lng": -35.211,
+      "radius": 3000,
+      "expected": [
+        [
+          "7nyzn",
+          "7nyzq"
+        ],
+        [
+          "7nyyy",
+          "7nyy~"
+        ]
+      ]
+    },
+    {
+      "lat": 37.7749,
+      "lng": -122.4194,
+      "radius": 1000,
+      "expected": [
+        [
+          "9q8yyh",
+          "9q8yys"
+        ],
+        [
+          "9q8yys",
+          "9q8yy~"
+        ],
+        [
+          "9q8yy0",
+          "9q8yy8"
+        ],
+        [
+          "9q8yy8",
+          "9q8yyh"
+        ]
+      ]
+    },
+    {
+      "lat": 0.5,
+      "lng": 179.999,
+      "radius": 5000,
+      "expected": [
+        [
+          "xbpfs",
+          "xbpf~"
+        ],
+        [
+          "80048",
+          "8004h"
+        ],
+        [
+          "xbpgh",
+          "xbpgs"
+        ],
+        [
+          "80050",
+          "80058"
+        ]
+      ]
+    },
+    {
+      "lat": -33.8688,
+      "lng": 151.2093,
+      "radius": 300,
+      "expected": [
+        [
+          "r3gx2f0",
+          "r3gx2fh"
+        ],
+        [
+          "r3gx2fh",
+          "r3gx2f~"
+        ],
+        [
+          "r3gx2c0",
+          "r3gx2ch"
+        ],
+        [
+          "r3gx2ch",
+          "r3gx2c~"
+        ]
+      ]
+    },
+    {
+      "lat": 89.9,
+      "lng": 0.3,
+      "radius": 3000,
+      "expected": [
+        [
+          "uh",
+          "us"
+        ],
+        [
+          "gs",
+          "g~"
+        ]
+      ]
+    },
+    {
+      "lat": 1.2345,
+      "lng": 0.5,
+      "radius": 10,
+      "expected": [
+        [
+          "s00r52sp",
+          "s00r52sq"
+        ],
+        [
+          "s00r52u0",
+          "s00r52u1"
+        ],
+        [
+          "s00r52sn",
+          "s00r52sp"
+        ]
+      ]
+    }
+  ],
+  "distance": [
+    {
+      "a": [
+        -5.8817,
+        -35.1708
+      ],
+      "b": [
+        -5.7945,
+        -35.211
+      ],
+      "expectedMeters": 10667.273795003242
+    },
+    {
+      "a": [
+        -5.8817,
+        -35.1708
+      ],
+      "b": [
+        -5.8817,
+        -35.1678
+      ],
+      "expectedMeters": 331.8286554934117
+    },
+    {
+      "a": [
+        37.7749,
+        -122.4194
+      ],
+      "b": [
+        -33.8688,
+        151.2093
+      ],
+      "expectedMeters": 11947660.518547894
+    }
+  ]
+}

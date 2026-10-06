@@ -25,6 +25,7 @@ class Place {
     this.photoIllustrative = false,
     this.lat,
     this.lng,
+    this.geohash,
     this.cuisine,
     this.address,
     this.openingHours,
@@ -53,6 +54,13 @@ class Place {
   /// Coordenadas (OSM). Ausentes em curados sem par no OSM.
   final double? lat;
   final double? lng;
+
+  /// Geohash (precisão 9) de [lat]/[lng], gravado pelo seed: é o campo das
+  /// consultas por faixa do "Perto" (F10).
+  final String? geohash;
+
+  /// Tem coordenadas (pode aparecer no "Perto").
+  bool get hasCoordinates => lat != null && lng != null;
 
   /// Cozinha legível em pt-BR ("Pizza, Italiano").
   final String? cuisine;

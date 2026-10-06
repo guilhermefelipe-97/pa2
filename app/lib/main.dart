@@ -20,6 +20,7 @@ import 'data/repositories/review_photo_repository.dart';
 import 'data/repositories/review_repository.dart';
 import 'data/repositories/saved_repository.dart';
 import 'data/repositories/user_repository.dart';
+import 'data/services/location_service.dart';
 import 'data/services/photo_picker.dart';
 import 'firebase_config.dart';
 import 'firebase_options.dart';
@@ -84,6 +85,10 @@ Future<void> main() async {
               (repo as FirestoreReviewPhotoRepository).dispose(),
         ),
         Provider<PhotoPicker>(create: (_) => ImagePickerPhotoPicker()),
+        // Posição só em memória, para o "Perto" (F10).
+        Provider<LocationService>(
+          create: (_) => const GeolocatorLocationService(),
+        ),
         // Seguir/deixar de seguir no perfil: o feed recarrega ao voltar.
         ChangeNotifierProvider<FollowEvents>(create: (_) => FollowEvents()),
         Provider<SavedRepository>(create: (_) => FirestoreSavedRepository(db)),

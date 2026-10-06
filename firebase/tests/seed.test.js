@@ -68,6 +68,17 @@ describe('seed de places (emulador)', function () {
     assert.equal((await db.doc('places/mangai-natal').get()).get('osmId'), 'way/1');
   });
 
+  it('todo doc com lat/lng é gravado com o geohash delas; sem coordenada, sem geohash', async () => {
+    const { geohash } = require('../seed/osm/geo');
+    await run();
+    const mangai = (await db.doc('places/mangai-natal').get()).data();
+    assert.equal(mangai.geohash, geohash(mangai.lat, mangai.lng, 9));
+    const ze = (await db.doc('places/osm-n2').get()).data();
+    assert.equal(ze.geohash, geohash(-5.77, -35.2, 9));
+    const beco = (await db.doc('places/beco-da-lama').get()).data();
+    assert.equal('geohash' in beco, false);
+  });
+
   it('mudança de um campo regrava só aquele doc', async () => {
     await run();
     const becoBefore = await updatedAt('beco-da-lama');

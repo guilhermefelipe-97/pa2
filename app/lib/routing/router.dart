@@ -12,6 +12,8 @@ import '../ui/core/view_model_host.dart';
 import '../ui/feed/feed_view.dart';
 import '../ui/feed/feed_view_model.dart';
 import '../ui/lists/lists_store.dart';
+import '../ui/nearby/nearby_view.dart';
+import '../ui/nearby/nearby_view_model.dart';
 import '../ui/place/place_detail_view.dart';
 import '../ui/place/place_detail_view_model.dart';
 import '../ui/people/people_view.dart';
@@ -22,6 +24,7 @@ import '../ui/review/place_picker_view.dart';
 import '../ui/review/place_picker_view_model.dart';
 import '../ui/review/review_view.dart';
 import '../ui/review/review_view_model.dart';
+import '../ui/saved/saved_places_store.dart';
 import '../ui/saved/saved_view.dart';
 import '../ui/saved/saved_view_model.dart';
 import 'routes.dart';
@@ -70,7 +73,8 @@ GoRouter buildRouter(AuthRepository auth) {
           builder: (context, vm) => AuthView(isSignUp: true, viewModel: vm),
         ),
       ),
-      // Telas principais com a barra inferior (Amigos · Quero ir · Pessoas).
+      // Telas principais com a barra inferior (Amigos · Perto · Quero ir ·
+      // Pessoas).
       // Cada aba guarda o próprio estado (IndexedStack).
       StatefulShellRoute(
         builder: (context, state, shell) => AppShell(navigationShell: shell),
@@ -92,6 +96,27 @@ GoRouter buildRouter(AuthRepository auth) {
                     followEvents: context.read<FollowEvents>(),
                   ),
                   builder: (context, vm) => FeedView(viewModel: vm),
+                ),
+              ),
+            ],
+          ),
+          // "Perto" (F10): criado só na 1ª visita à aba (branch sem preload),
+          // então a permissão é pedida no contexto dela.
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: Routes.nearby,
+                builder: (context, state) => ViewModelHost<NearbyViewModel>(
+                  create: (context) => NearbyViewModel(
+                    locationService: context.read(),
+                    placeRepository: context.read(),
+                    authRepository: context.read(),
+                    userRepository: context.read(),
+                    reviewRepository: context.read(),
+                    followEvents: context.read<FollowEvents>(),
+                    savedStore: context.read<SavedPlacesStore?>(),
+                  ),
+                  builder: (context, vm) => NearbyView(viewModel: vm),
                 ),
               ),
             ],

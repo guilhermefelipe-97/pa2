@@ -45,6 +45,8 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>O NaÁrea usa sua localização só enquanto você usa a aba Perto, para mostrar os lugares em volta. Ela não é guardada nem compartilhada.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>O NaÁrea usa a câmera para você tirar uma foto do local ao avaliar. A foto é opcional.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

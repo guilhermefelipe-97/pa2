@@ -9,7 +9,9 @@ import 'package:naarea/data/repositories/review_photo_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
 import 'package:naarea/data/repositories/saved_repository.dart';
 import 'package:naarea/data/repositories/user_repository.dart';
+import 'package:naarea/data/services/location_service.dart';
 import 'package:naarea/data/services/photo_picker.dart';
+import 'package:naarea/domain/geo.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/domain/models/place_list.dart';
 import 'package:naarea/domain/models/review.dart';
@@ -191,6 +193,89 @@ class FakePlaceRepository implements PlaceRepository {
       for (final p in places)
         if (wanted.contains(p.id)) p.id: p,
     };
+  }
+
+  /// (lat, lng, raio) de cada [nearby].
+  final List<({double lat, double lng, double radius})> nearbyCalls = [];
+
+  /// Segura cada `nearby` até ser liberado.
+  Completer<void>? nearbyGate;
+
+  @override
+  Future<List<NearbyPlace>> nearby(
+    double lat,
+    double lng,
+    double radiusMeters,
+  ) async {
+    nearbyCalls.add((lat: lat, lng: lng, radius: radiusMeters));
+    final gate = nearbyGate;
+    if (gate != null) await gate.future;
+    if (fail) throw Exception('network');
+    final center = (lat: lat, lng: lng);
+    return [
+      for (final p in places)
+        if (p.hasCoordinates)
+          (
+            place: p,
+            distanceMeters: distanceMeters(center, (lat: p.lat!, lng: p.lng!)),
+          ),
+    ].where((n) => n.distanceMeters <= radiusMeters).toList()..sort(
+      compareNearby,
+    );
+  }
+}
+
+/// Localização controlada pelo teste. Por padrão: sem permissão até o
+/// primeiro [locate], que a concede e devolve [position].
+class FakeLocationService implements LocationService {
+  FakeLocationService({this.position, this.granted = false});
+
+  LatLng? position;
+  bool granted;
+
+  /// Próximo status de [locate] (diferente de `ok` não devolve posição).
+  LocationStatus status = LocationStatus.ok;
+  int locateCalls = 0;
+  int hasPermissionCalls = 0;
+  int openAppSettingsCalls = 0;
+  int openLocationSettingsCalls = 0;
+
+  /// Segura cada `locate` até ser liberado.
+  Completer<void>? locateGate;
+
+  @override
+  Future<bool> hasPermission() async {
+    hasPermissionCalls++;
+    return granted;
+  }
+
+  @override
+  Future<LocationResult> locate() async {
+    locateCalls++;
+    final gate = locateGate;
+    if (gate != null) await gate.future;
+    if (status != LocationStatus.ok || position == null) {
+      return (
+        status: status == LocationStatus.ok
+            ? LocationStatus.unavailable
+            : status,
+        position: null,
+      );
+    }
+    granted = true;
+    return (status: LocationStatus.ok, position: position);
+  }
+
+  @override
+  Future<bool> openAppSettings() async {
+    openAppSettingsCalls++;
+    return true;
+  }
+
+  @override
+  Future<bool> openLocationSettings() async {
+    openLocationSettingsCalls++;
+    return true;
   }
 }
 

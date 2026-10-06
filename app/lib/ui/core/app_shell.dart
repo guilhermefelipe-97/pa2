@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 /// Moldura das telas principais: barra de navegação inferior
-/// (Amigos · Quero ir · Pessoas) em volta do branch ativo.
+/// (Amigos · Perto · Quero ir · Pessoas) em volta do branch ativo.
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.navigationShell});
 
@@ -32,6 +32,11 @@ class AppShell extends StatelessWidget {
             icon: Icon(Icons.people_outline),
             selectedIcon: Icon(Icons.people),
             label: 'Amigos',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.near_me_outlined),
+            selectedIcon: Icon(Icons.near_me),
+            label: 'Perto',
           ),
           NavigationDestination(
             icon: Icon(Icons.bookmark_border),
