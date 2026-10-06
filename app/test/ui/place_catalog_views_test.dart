@@ -15,6 +15,7 @@ import 'package:naarea/ui/place/place_detail_view.dart';
 import 'package:naarea/ui/review/place_picker_view.dart';
 import 'package:naarea/ui/review/place_picker_view_model.dart';
 import 'package:naarea/ui/review/review_view.dart';
+import 'package:naarea/ui/core/follow_events.dart';
 import 'package:provider/provider.dart';
 
 import '../support/builders.dart';
@@ -174,6 +175,7 @@ void main() {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
+            ChangeNotifierProvider<FollowEvents>(create: (_) => FollowEvents()),
             ChangeNotifierProvider<AuthRepository>.value(value: auth),
             Provider<UserRepository>.value(value: users),
             Provider<PlaceRepository>.value(
@@ -210,6 +212,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          ChangeNotifierProvider<FollowEvents>(create: (_) => FollowEvents()),
           ChangeNotifierProvider<AuthRepository>.value(value: auth),
           Provider<UserRepository>.value(value: users),
           Provider<PlaceRepository>.value(value: FakePlaceRepository(_catalog)),

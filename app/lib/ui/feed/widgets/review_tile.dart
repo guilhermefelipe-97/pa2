@@ -8,10 +8,21 @@ import 'axis_scores.dart';
 /// Uma avaliação completa: autor, 3 eixos, comentário e contexto
 /// (período · companhia · tempo relativo).
 class ReviewTile extends StatelessWidget {
-  const ReviewTile({super.key, required this.review, required this.now});
+  const ReviewTile({
+    super.key,
+    required this.review,
+    required this.now,
+    this.onAuthorTap,
+  });
 
   final Review review;
   final DateTime now;
+
+  /// Toque na linha do autor (avatar + nome): abre o perfil de quem avaliou.
+  final VoidCallback? onAuthorTap;
+
+  /// Altura mínima de um alvo de toque acessível.
+  static const double minTapTarget = 48;
 
   @override
   Widget build(BuildContext context) {
@@ -21,22 +32,63 @@ class ReviewTile extends StatelessWidget {
       if (review.companion != null) review.companion!.label,
       relativeTime(review.createdAt, now),
     ].join(' · ');
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+    final tappable = onAuthorTap != null;
+
+    Widget author = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: minTapTarget),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          AuthorAvatar(
-            id: review.authorId,
-            name: review.authorName,
-            radius: 18,
+          ExcludeSemantics(
+            child: AuthorAvatar(
+              id: review.authorId,
+              name: review.authorName,
+              radius: 18,
+            ),
           ),
           const SizedBox(width: 12),
-          Expanded(
+          Flexible(
+            child: Text(
+              review.authorName,
+              style: tappable
+                  ? theme.textTheme.titleMedium?.copyWith(
+                      decoration: TextDecoration.underline,
+                      decorationColor: theme.colorScheme.outlineVariant,
+                    )
+                  : theme.textTheme.titleMedium,
+            ),
+          ),
+          if (tappable) const SizedBox(width: 8),
+        ],
+      ),
+    );
+    if (tappable) {
+      // Avatar + nome: um único alvo, lido como "Abrir perfil de Ana".
+      author = Semantics(
+        key: ValueKey('review-author-${review.id}'),
+        button: true,
+        label: 'Abrir perfil de ${review.authorName}',
+        excludeSemantics: true,
+        onTap: onAuthorTap,
+        child: InkWell(
+          onTap: onAuthorTap,
+          borderRadius: BorderRadius.circular(24),
+          child: author,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          author,
+          Padding(
+            padding: const EdgeInsets.only(left: 48),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(review.authorName, style: theme.textTheme.titleMedium),
                 Text(
                   meta,
                   style: theme.textTheme.bodySmall?.copyWith(

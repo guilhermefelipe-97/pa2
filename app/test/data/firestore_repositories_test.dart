@@ -187,6 +187,28 @@ void main() {
   });
 
   group('FirestoreReviewRepository.fetchReviewsByAuthors', () {
+    test('limit: só as N mais recentes no total, entre lotes', () async {
+      final db = FakeFirebaseFirestore();
+      final authors = List.generate(40, (i) => 'w$i'); // 2 lotes de whereIn
+      for (var i = 0; i < authors.length; i++) {
+        for (var k = 0; k < 2; k++) {
+          await _addReview(
+            db,
+            authorId: authors[i],
+            createdAt: DateTime.utc(2026, 1, 1).add(Duration(hours: i * 2 + k)),
+          );
+        }
+      }
+      final result = await FirestoreReviewRepository(
+        db,
+      ).fetchReviewsByAuthors(authors, limit: 5);
+      expect(result, hasLength(5));
+      expect(result.map((r) => r.createdAt.toUtc()), [
+        for (var h = 79; h > 74; h--)
+          DateTime.utc(2026, 1, 1).add(Duration(hours: h)),
+      ]);
+    });
+
     test(
       '65 autores (3 lotes de whereIn): junta todos, sem duplicar, mais recente primeiro',
       () async {

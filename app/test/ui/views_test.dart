@@ -7,11 +7,14 @@ import 'package:naarea/domain/models/scores.dart';
 import 'package:naarea/ui/feed/feed_view.dart';
 import 'package:naarea/ui/feed/feed_view_model.dart';
 import 'package:naarea/ui/feed/widgets/author_avatar.dart';
+import 'package:naarea/ui/feed/widgets/axis_scores.dart';
 import 'package:naarea/ui/feed/widgets/feed_card.dart';
 import 'package:naarea/ui/feed/widgets/place_photo.dart';
+import 'package:naarea/ui/feed/widgets/review_tile.dart';
 import 'package:naarea/ui/place/place_detail_view.dart';
 import 'package:naarea/ui/review/review_view.dart';
 import 'package:naarea/ui/review/review_view_model.dart';
+import 'package:naarea/ui/core/follow_events.dart';
 
 import '../support/builders.dart';
 import '../support/app_harness.dart';
@@ -29,6 +32,7 @@ FeedViewModel _feedVm({
   reviewRepository: reviews ?? FakeReviewRepository(),
   placeRepository: FakePlaceRepository(places),
   clock: () => _now,
+  followEvents: FollowEvents(),
 );
 
 /// Tela de celular alta (412x2000 dp) para as listas preguiçosas construírem
@@ -115,7 +119,7 @@ void main() {
   });
 
   testWidgets(
-    'FeedView: card com bairro, quem foi, média dos eixos, comentário mais recente e tempo relativo',
+    'FeedView: card com bairro, quem foi (eixos de cada pessoa), comentário mais recente e tempo relativo',
     (tester) async {
       final users = FakeUserRepository()..followingByUser['me'] = {'a', 'b'};
       final reviews = FakeReviewRepository()
@@ -134,6 +138,7 @@ void main() {
             placeId: 'x',
             placeName: 'Mangai',
             scores: Scores(food: 4, ambience: 3, service: 5),
+            companion: Companion.amigos,
             comment: 'Carne de sol perfeita',
             createdAt: DateTime.utc(2026, 9, 28, 13),
           ), // 10h Natal, há 2 h
@@ -155,17 +160,38 @@ void main() {
 
       expect(find.text('Mangai'), findsOneWidget);
       expect(find.text('Tirol · Restaurante'), findsOneWidget);
-      expect(find.text('Beto e Ana foram aqui'), findsOneWidget);
-      expect(find.text('🍽️ 4,5'), findsOneWidget);
-      expect(find.text('✨ 2,5'), findsOneWidget);
-      expect(find.text('🤝 4,5'), findsOneWidget);
+      expect(find.text('Quem foi'), findsOneWidget);
+      // Beto (mais recente) primeiro, com os eixos dele; depois Ana.
+      expect(find.text('Beto'), findsOneWidget);
+      expect(find.text('Ana'), findsOneWidget);
+      expect(find.text('você segue'), findsNWidgets(2));
+      Finder inRow(String uid, String text) => find.descendant(
+        of: find.byKey(ValueKey('trust-source-$uid')),
+        matching: find.text(text),
+      );
+      expect(inRow('b', '🍽️ 4'), findsOneWidget);
+      expect(inRow('b', '✨ 3'), findsOneWidget);
+      expect(inRow('b', '🤝 5'), findsOneWidget);
+      expect(inRow('b', 'com amigos de manhã'), findsOneWidget);
+      expect(inRow('a', '🍽️ 5'), findsOneWidget);
+      expect(inRow('a', '✨ 2'), findsOneWidget);
+      expect(inRow('a', '🤝 4'), findsOneWidget);
+      expect(inRow('a', 'no almoço'), findsOneWidget);
+      expect(find.text('há 2 h'), findsOneWidget);
+      expect(find.text('ontem'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Beto')).dy,
+        lessThan(tester.getTopLeft(find.text('Ana')).dy),
+      );
+      // sem média agregada no card
+      expect(find.textContaining('4,5'), findsNothing);
+      expect(find.textContaining('Média'), findsNothing);
       expect(find.textContaining('Carne de sol perfeita'), findsOneWidget);
       expect(
         find.text('— Beto · há 2 h'),
         findsOneWidget,
         reason: 'citação traz autor e tempo próprios',
       );
-      expect(find.text('Manhã · há 2 h'), findsOneWidget);
       // avatares com a inicial de quem foi
       expect(find.text('B'), findsOneWidget);
       expect(find.text('A'), findsOneWidget);
@@ -415,34 +441,41 @@ void main() {
     },
   );
 
-  testWidgets(
-    'FeedCard: rótulo "Abrir <local>" como botão e dica com o nome do eixo',
-    (tester) async {
-      final handle = tester.ensureSemantics();
-      final item = groupReviewsIntoFeed(
-        [review(placeId: 'x')],
-        places: {'x': place(id: 'x', name: 'Mangai')},
-      ).single;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: FeedCard(item: item, now: _now, onTap: () {}),
-            ),
+  testWidgets('FeedCard: rótulo "Abrir <local>" como botão', (tester) async {
+    final handle = tester.ensureSemantics();
+    final item = groupReviewsIntoFeed(
+      [review(placeId: 'x')],
+      places: {'x': place(id: 'x', name: 'Mangai')},
+    ).single;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: FeedCard(item: item, now: _now, onTap: () {}),
           ),
         ),
-      );
-      final node = tester.getSemantics(
-        find.bySemanticsLabel(RegExp('^Abrir Mangai')),
-      );
-      expect(node.label, startsWith('Abrir Mangai'));
-      expect(node, containsSemantics(isButton: true, hasTapAction: true));
-      expect(find.byTooltip('Comida'), findsOneWidget);
-      expect(find.byTooltip('Ambiente'), findsOneWidget);
-      expect(find.byTooltip('Atendimento'), findsOneWidget);
-      handle.dispose();
-    },
-  );
+      ),
+    );
+    final node = tester.getSemantics(
+      find.bySemanticsLabel(RegExp('^Abrir Mangai')),
+    );
+    expect(node.label, startsWith('Abrir Mangai'));
+    expect(node, containsSemantics(isButton: true, hasTapAction: true));
+    handle.dispose();
+  });
+
+  testWidgets('AxisScores: dica com o nome do eixo', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AxisScores.scores(Scores(food: 5, ambience: 4, service: 3)),
+        ),
+      ),
+    );
+    expect(find.byTooltip('Comida'), findsOneWidget);
+    expect(find.byTooltip('Ambiente'), findsOneWidget);
+    expect(find.byTooltip('Atendimento'), findsOneWidget);
+  });
 
   group('AuthorAvatarStack', () {
     Widget host(List<({String id, String name})> authors) => MaterialApp(
@@ -478,6 +511,57 @@ void main() {
       expect(AuthorAvatarStack.overflowLabel(5), '+5');
       expect(AuthorAvatarStack.overflowLabel(99), '+99');
       expect(AuthorAvatarStack.overflowLabel(250), '+99');
+    });
+  });
+
+  group('ReviewTile: linha do autor', () {
+    Widget host(ReviewTile tile) => MaterialApp(
+      home: Scaffold(body: Center(child: tile)),
+    );
+
+    testWidgets(
+      'com onAuthorTap: avatar + nome são um alvo só, ≥48 dp, "Abrir perfil de Ana"',
+      (tester) async {
+        final handle = tester.ensureSemantics();
+        var taps = 0;
+        final r = review(id: 'r-ana', authorId: 'a', authorName: 'Ana');
+        await tester.pumpWidget(
+          host(ReviewTile(review: r, now: _now, onAuthorTap: () => taps++)),
+        );
+        final target = find.byKey(const ValueKey('review-author-r-ana'));
+        expect(
+          tester.getSize(target).height,
+          greaterThanOrEqualTo(ReviewTile.minTapTarget),
+        );
+        final node = tester.getSemantics(
+          find.bySemanticsLabel('Abrir perfil de Ana'),
+        );
+        expect(node, containsSemantics(isButton: true, hasTapAction: true));
+
+        await tester.tap(find.text('Ana'));
+        await tester.tap(find.text('A')); // avatar
+        expect(taps, 2);
+        handle.dispose();
+      },
+    );
+
+    testWidgets('sem onAuthorTap: sem sublinhado nem semântica de botão', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        host(
+          ReviewTile(
+            review: review(id: 'r1', authorName: 'Ana'),
+            now: _now,
+          ),
+        ),
+      );
+      final name = tester.widget<Text>(find.text('Ana'));
+      expect(name.style?.decoration, isNot(TextDecoration.underline));
+      expect(find.bySemanticsLabel('Abrir perfil de Ana'), findsNothing);
+      expect(find.byKey(const ValueKey('review-author-r1')), findsNothing);
+      handle.dispose();
     });
   });
 }

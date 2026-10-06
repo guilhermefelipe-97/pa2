@@ -250,13 +250,21 @@ class FakeReviewRepository implements ReviewRepository {
   }
 
   @override
-  Future<List<Review>> fetchReviewsByAuthors(List<String> authorIds) async {
+  Future<List<Review>> fetchReviewsByAuthors(
+    List<String> authorIds, {
+    int? limit,
+  }) async {
     fetchCalls.add(authorIds);
+    fetchLimits.add(limit);
     if (fetchError != null) throw fetchError!;
     final ids = authorIds.toSet();
-    return stored.where((r) => ids.contains(r.authorId)).toList()
+    final found = stored.where((r) => ids.contains(r.authorId)).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return limit == null ? found : found.take(limit).toList();
   }
+
+  /// `limit` de cada chamada de [fetchReviewsByAuthors] (mesma posição).
+  final List<int?> fetchLimits = [];
 }
 
 class FakeSavedRepository implements SavedRepository {

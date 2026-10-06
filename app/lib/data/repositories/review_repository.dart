@@ -11,8 +11,12 @@ abstract class ReviewRepository {
   /// batch: ou as duas, ou nenhuma.
   Future<void> createReview(NewReview review, {Uint8List? photo});
 
-  /// Avaliações dos [authorIds], mais recentes primeiro.
-  Future<List<Review>> fetchReviewsByAuthors(List<String> authorIds);
+  /// Avaliações dos [authorIds], mais recentes primeiro. Com [limit], só as
+  /// [limit] mais recentes no total (ex.: o perfil mostra as 50 últimas).
+  Future<List<Review>> fetchReviewsByAuthors(
+    List<String> authorIds, {
+    int? limit,
+  });
 
   /// Avaliações de [authorIds] no local, mais recentes primeiro. Filtra no
   /// servidor (`placeId ==` + `authorId in`, lotes de [whereInLimit]): não

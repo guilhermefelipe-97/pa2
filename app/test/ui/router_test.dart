@@ -34,5 +34,12 @@ void main() {
     expect(go(Routes.feed, signedIn: true), isNull);
     expect(go(Routes.placeDetail('x'), signedIn: true), isNull);
     expect(go(Routes.placeDetail('x')), Routes.login);
+    expect(go(Routes.person('ana'), signedIn: true), isNull);
+    expect(go(Routes.person('ana')), Routes.login);
+  });
+
+  test('rota do perfil codifica o uid', () {
+    expect(Routes.person('ana'), '/pessoa/ana');
+    expect(Routes.person('a/b'), '/pessoa/a%2Fb');
   });
 }

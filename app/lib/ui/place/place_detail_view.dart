@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/models/place.dart';
+import '../../domain/models/review.dart';
 import '../../routing/routes.dart';
 import '../core/osm_credit.dart';
 import '../core/save_button.dart';
@@ -55,6 +56,14 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
       // A avaliação nova aparece no detalhe (como "Você").
       widget.viewModel.load();
     }
+  }
+
+  /// Perfil de quem avaliou ("Você" abre o próprio). Seguir/deixar de seguir
+  /// lá muda quem aparece aqui: recarrega ao voltar, se mudou.
+  Future<void> _openPerson(Review r) async {
+    await context.push(Routes.person(r.authorId));
+    if (!mounted) return;
+    widget.viewModel.reloadIfStale();
   }
 
   @override
@@ -258,8 +267,11 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
               sliver: SliverList.separated(
                 itemCount: item.reviews.length,
-                itemBuilder: (context, i) =>
-                    ReviewTile(review: item.reviews[i], now: at),
+                itemBuilder: (context, i) => ReviewTile(
+                  review: item.reviews[i],
+                  now: at,
+                  onAuthorTap: () => _openPerson(item.reviews[i]),
+                ),
                 separatorBuilder: (context, i) => const Divider(height: 1),
               ),
             ),

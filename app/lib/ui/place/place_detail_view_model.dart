@@ -5,6 +5,7 @@ import '../../data/repositories/user_repository.dart';
 import '../../domain/feed.dart';
 import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
+import '../core/follow_events.dart';
 import '../core/safe_change_notifier.dart';
 
 /// Detalhe do local, autônomo por `placeId` (F11): carrega o local e as
@@ -19,11 +20,13 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     required UserRepository userRepository,
     required PlaceRepository placeRepository,
     required ReviewRepository reviewRepository,
+    required FollowEvents followEvents,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _users = userRepository,
        _places = placeRepository,
        _reviews = reviewRepository,
+       _follow = FollowStaleness(followEvents),
        _clock = clock ?? DateTime.now {
     switch (initial) {
       case final FeedItem item when item.placeId == placeId:
@@ -45,7 +48,15 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   final UserRepository _users;
   final PlaceRepository _places;
   final ReviewRepository _reviews;
+  final FollowStaleness _follow;
   final DateTime Function() _clock;
+
+  /// Alguém foi seguido/deixado de seguir em outra tela desde a última carga
+  /// (muda quais avaliações aparecem aqui).
+  bool get isStale => _follow.isStale;
+
+  /// Ao voltar a ficar visível (ex.: do perfil de quem avaliou).
+  Future<void> reloadIfStale() => _follow.isStale ? load() : Future.value();
 
   DateTime now() => _clock();
 
@@ -109,6 +120,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
 
   Future<void> load() async {
     final seq = ++_seq;
+    _follow.clear();
     _errorMessage = null;
     _notFound = false;
     final uid = _auth.currentUserId;
@@ -167,4 +179,10 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     createdAt: r.createdAt,
     hasPhoto: r.hasPhoto,
   );
+
+  @override
+  void dispose() {
+    _follow.dispose();
+    super.dispose();
+  }
 }

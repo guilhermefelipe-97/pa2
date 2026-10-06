@@ -24,6 +24,7 @@ import 'data/services/photo_picker.dart';
 import 'firebase_config.dart';
 import 'firebase_options.dart';
 import 'routing/router.dart';
+import 'ui/core/follow_events.dart';
 import 'ui/core/theme.dart';
 import 'ui/lists/lists_store.dart';
 import 'ui/saved/saved_places_store.dart';
@@ -83,6 +84,8 @@ Future<void> main() async {
               (repo as FirestoreReviewPhotoRepository).dispose(),
         ),
         Provider<PhotoPicker>(create: (_) => ImagePickerPhotoPicker()),
+        // Seguir/deixar de seguir no perfil: o feed recarrega ao voltar.
+        ChangeNotifierProvider<FollowEvents>(create: (_) => FollowEvents()),
         Provider<SavedRepository>(create: (_) => FirestoreSavedRepository(db)),
         // "Quero ir": ids salvos carregados uma vez por sessão (segue o login).
         ChangeNotifierProvider<SavedPlacesStore>(

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:naarea/ui/core/follow_events.dart';
 import 'package:naarea/ui/feed/feed_view_model.dart';
 
 import '../support/builders.dart';
@@ -32,6 +33,7 @@ void main() {
       reviewRepository: reviews,
       placeRepository: places,
       clock: () => DateTime.utc(2026, 9, 28, 15),
+      followEvents: FollowEvents(),
     );
   });
 
@@ -206,5 +208,145 @@ void main() {
 
   test('now() usa o relógio injetado (tempo relativo testável)', () {
     expect(vm.now(), DateTime.utc(2026, 9, 28, 15));
+  });
+
+  group('F06: relação e recarga quando o following muda', () {
+    late FollowEvents events;
+    late FakeAuthRepository auth;
+    late FeedViewModel feed;
+
+    setUp(() {
+      events = FollowEvents();
+      auth = FakeAuthRepository(uid: 'me');
+      feed = FeedViewModel(
+        authRepository: auth,
+        userRepository: users,
+        reviewRepository: reviews,
+        placeRepository: places,
+        followEvents: events,
+      );
+      users.followingByUser['me'] = {'a'};
+      reviews.stored.add(review(authorId: 'a', placeId: 'x'));
+    });
+
+    tearDown(() => feed.dispose());
+
+    test(
+      'isFollowing vem do following já carregado, sem leituras extras',
+      () async {
+        await feed.load();
+        final calls = users.getFollowingCalls;
+        expect(feed.isFollowing('a'), isTrue);
+        expect(feed.isFollowing('b'), isFalse);
+        expect(feed.isFollowing('me'), isFalse);
+        expect(users.getFollowingCalls, calls);
+      },
+    );
+
+    test('reloadIfStale só recarrega depois de um aviso de mudança', () async {
+      await feed.load();
+      final calls = users.getFollowingCalls;
+
+      await feed.reloadIfStale();
+      expect(users.getFollowingCalls, calls, reason: 'nada mudou');
+
+      // Deixou de seguir Ana no perfil.
+      users.followingByUser['me'] = {};
+      events.changed();
+      expect(feed.isStale, isTrue);
+      await feed.reloadIfStale();
+      expect(users.getFollowingCalls, calls + 1);
+      expect(feed.items, isEmpty);
+      expect(feed.followsNobody, isTrue);
+      expect(feed.isStale, isFalse);
+
+      await feed.reloadIfStale();
+      expect(users.getFollowingCalls, calls + 1, reason: 'já recarregou');
+    });
+
+    test(
+      'carga em andamento que começou depois da mudança não agenda outra',
+      () async {
+        await feed.load();
+        events.changed();
+        final gate = Completer<Set<String>>();
+        users.getFollowingOverride = (_) => gate.future;
+        final calls = users.getFollowingCalls;
+
+        final running = feed.load(); // começou depois do aviso
+        await feed.reloadIfStale();
+        await feed.reloadIfStale();
+        users.getFollowingOverride = null;
+        gate.complete({'a'});
+        await running;
+        expect(users.getFollowingCalls, calls + 1);
+      },
+    );
+
+    test('aviso durante uma carga: uma única recarga depois dela', () async {
+      await feed.load();
+      final gate = Completer<Set<String>>();
+      users.getFollowingOverride = (_) => gate.future;
+      final calls = users.getFollowingCalls;
+
+      final running = feed.load();
+      events.changed(); // mudou enquanto a carga lia o estado antigo
+      final again = feed.reloadIfStale();
+      feed.reloadIfStale();
+      users.getFollowingOverride = null;
+      gate.complete({'a'});
+      await running;
+      await again;
+      expect(users.getFollowingCalls, calls + 2);
+    });
+
+    test('carga com erro não fica recarregando sozinha ao voltar', () async {
+      await feed.load();
+      events.changed();
+      users.failGetFollowing = true;
+      await feed.reloadIfStale();
+      expect(feed.errorMessage, isNotNull);
+      final calls = users.getFollowingCalls;
+
+      await feed.reloadIfStale();
+      expect(
+        users.getFollowingCalls,
+        calls,
+        reason: '"Tentar de novo" é manual',
+      );
+    });
+
+    test(
+      'falha no meio da carga não troca o following (estado coerente)',
+      () async {
+        await feed.load();
+        users.followingByUser['me'] = {'b'};
+        reviews.fetchError = Exception('network');
+        await feed.load();
+        expect(feed.errorMessage, isNotNull);
+        expect(
+          feed.isFollowing('a'),
+          isTrue,
+          reason: 'mantém a carga anterior',
+        );
+        expect(feed.isFollowing('b'), isFalse);
+        expect(feed.items.single.sources.single.authorId, 'a');
+      },
+    );
+
+    test('troca de usuário limpa a relação e os cards do anterior', () async {
+      await feed.load();
+      expect(feed.isFollowing('a'), isTrue);
+
+      auth.restoreSession('outro');
+      users.failGetFollowing = true;
+      await feed.load();
+      expect(feed.isFollowing('a'), isFalse);
+      expect(feed.items, isEmpty);
+
+      auth.restoreSession(null);
+      await feed.load();
+      expect(feed.isFollowing('a'), isFalse);
+    });
   });
 }

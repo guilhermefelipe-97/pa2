@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:naarea/domain/feed.dart';
+import 'package:naarea/ui/core/follow_events.dart';
 import 'package:naarea/ui/place/place_detail_view_model.dart';
 
 import '../support/builders.dart';
@@ -55,6 +56,7 @@ void main() {
         userRepository: users,
         placeRepository: places,
         reviewRepository: reviews,
+        followEvents: FollowEvents(),
       );
 
   test(
@@ -217,4 +219,30 @@ void main() {
     final vm = make('x', initial: place(id: 'y'));
     expect(vm.place, isNull);
   });
+
+  test(
+    'F06: deixar de seguir em outra tela marca stale; reloadIfStale tira a pessoa',
+    () async {
+      final events = FollowEvents();
+      final vm = PlaceDetailViewModel(
+        placeId: 'x',
+        authRepository: auth,
+        userRepository: users,
+        placeRepository: places,
+        reviewRepository: reviews,
+        followEvents: events,
+      );
+      await vm.load();
+      await vm.reloadIfStale();
+      expect(reviews.placeFetchCalls, hasLength(1), reason: 'nada mudou');
+
+      users.followingByUser['me'] = {'b'};
+      events.changed();
+      expect(vm.isStale, isTrue);
+      await vm.reloadIfStale();
+      expect(reviews.placeFetchCalls, hasLength(2));
+      expect(vm.reviews.map((r) => r.id), ['r2']);
+      vm.dispose();
+    },
+  );
 }

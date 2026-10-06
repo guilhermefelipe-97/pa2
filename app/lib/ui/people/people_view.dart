@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/app_shell.dart';
 import 'people_view_model.dart';
 
 class PeopleView extends StatefulWidget {
@@ -15,11 +16,21 @@ class PeopleView extends StatefulWidget {
 
 class _PeopleViewState extends State<PeopleView> {
   Timer? _debounce;
+  bool? _active;
 
   @override
   void initState() {
     super.initState();
     widget.viewModel.init();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Seguir alguém num perfil (aberto de outra aba) muda os botões daqui.
+    final active = ActiveTab.maybeOf(context);
+    if (active == true && _active == false) widget.viewModel.reloadIfStale();
+    _active = active;
   }
 
   @override

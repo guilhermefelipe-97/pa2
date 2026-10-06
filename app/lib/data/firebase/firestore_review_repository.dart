@@ -68,16 +68,25 @@ class FirestoreReviewRepository implements ReviewRepository {
   }
 
   @override
-  Future<List<Review>> fetchReviewsByAuthors(List<String> authorIds) async {
+  Future<List<Review>> fetchReviewsByAuthors(
+    List<String> authorIds, {
+    int? limit,
+  }) async {
+    assert(limit == null || limit > 0);
     final ids = authorIds.toSet().toList();
     if (ids.isEmpty) return [];
+    // Cada lote traz as suas `batchLimit` mais recentes: as `limit` mais
+    // recentes do total estão sempre na união.
+    final batchLimit = limit == null || limit > perBatchLimit
+        ? perBatchLimit
+        : limit;
     final batches = chunked(ids, ReviewRepository.whereInLimit);
     final snaps = await Future.wait(
       batches.map(
         (batch) => _reviews
             .where('authorId', whereIn: batch)
             .orderBy('createdAt', descending: true)
-            .limit(perBatchLimit)
+            .limit(batchLimit)
             .get(),
       ),
     );
@@ -96,13 +105,16 @@ class FirestoreReviewRepository implements ReviewRepository {
           oldestInBatch = r.createdAt;
         }
       }
-      if (snap.docs.length >= perBatchLimit && oldestInBatch != null) {
+      if (snap.docs.length >= batchLimit && oldestInBatch != null) {
         if (cutoff == null || oldestInBatch.isAfter(cutoff)) {
           cutoff = oldestInBatch;
         }
       }
     }
-    return applyBatchCutoff(byId.values, cutoff);
+    final result = applyBatchCutoff(byId.values, cutoff);
+    return limit == null || result.length <= limit
+        ? result
+        : result.sublist(0, limit);
   }
 
   @override

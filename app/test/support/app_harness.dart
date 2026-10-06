@@ -12,6 +12,7 @@ import 'package:naarea/data/services/photo_picker.dart';
 import 'package:naarea/domain/feed.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/routing/router.dart';
+import 'package:naarea/ui/core/follow_events.dart';
 import 'package:naarea/ui/lists/lists_store.dart';
 import 'package:naarea/ui/place/place_detail_view_model.dart';
 import 'package:naarea/ui/saved/saved_places_store.dart';
@@ -85,6 +86,7 @@ Future<TestApp> pumpApp(
         Provider<ReviewRepository>.value(value: r),
         Provider<ReviewPhotoRepository>.value(value: ph),
         Provider<PhotoPicker>.value(value: pk),
+        ChangeNotifierProvider<FollowEvents>(create: (_) => FollowEvents()),
         Provider<SavedRepository>.value(value: s),
         ChangeNotifierProvider<SavedPlacesStore>(
           lazy: false,
@@ -135,6 +137,7 @@ PlaceDetailViewModel detailVmFor(FeedItem item, {DateTime? now}) {
     userRepository: users,
     placeRepository: FakePlaceRepository([item.place]),
     reviewRepository: reviews,
+    followEvents: FollowEvents(),
     clock: now == null ? null : () => now,
   );
 }

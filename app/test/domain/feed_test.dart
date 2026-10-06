@@ -171,4 +171,92 @@ void main() {
       expect(feed.single.averages.service, 4.5);
     });
   });
+
+  group('FeedItem.sources (F06: quem foi)', () {
+    test('1 pessoa, 1 avaliação: uma fonte com 1 visita', () {
+      final r = review(authorId: 'a', authorName: 'Ana', placeId: 'x');
+      final sources = groupReviewsIntoFeed([r]).single.sources;
+      expect(sources, hasLength(1));
+      expect(sources.single.authorId, 'a');
+      expect(sources.single.authorName, 'Ana');
+      expect(sources.single.latest, same(r));
+      expect(sources.single.visits, 1);
+    });
+
+    test('várias pessoas: ordenadas pela avaliação mais recente de cada', () {
+      final feed = groupReviewsIntoFeed([
+        review(
+          authorId: 'c',
+          authorName: 'Caio',
+          placeId: 'x',
+          createdAt: t(3),
+        ),
+        review(authorId: 'a', authorName: 'Ana', placeId: 'x', createdAt: t(9)),
+        review(
+          authorId: 'd',
+          authorName: 'Duda',
+          placeId: 'x',
+          createdAt: t(1),
+        ),
+        review(authorId: 'b', authorName: 'Bia', placeId: 'x', createdAt: t(7)),
+      ]);
+      expect(feed.single.sources.map((s) => s.authorName), [
+        'Ana',
+        'Bia',
+        'Caio',
+        'Duda',
+      ]);
+    });
+
+    test('mesma pessoa voltou 3 vezes: 1 fonte, eixos da mais recente', () {
+      final feed = groupReviewsIntoFeed([
+        review(
+          id: 'old',
+          authorId: 'a',
+          placeId: 'x',
+          createdAt: t(1),
+          scores: Scores(food: 1, ambience: 1, service: 1),
+        ),
+        review(
+          id: 'new',
+          authorId: 'a',
+          placeId: 'x',
+          createdAt: t(8),
+          scores: Scores(food: 5, ambience: 4, service: 5),
+        ),
+        review(id: 'mid', authorId: 'a', placeId: 'x', createdAt: t(4)),
+        review(id: 'bia', authorId: 'b', placeId: 'x', createdAt: t(6)),
+      ]);
+      final sources = feed.single.sources;
+      expect(sources.map((s) => s.authorId), ['a', 'b']);
+      expect(sources.first.latest.id, 'new');
+      expect(
+        sources.first.latest.scores,
+        Scores(food: 5, ambience: 4, service: 5),
+      );
+      expect(sources.first.visits, 3);
+      expect(sources.last.visits, 1);
+    });
+
+    test('não depende da ordem de entrada: escolhe pela data e ordena', () {
+      // FeedItem montado direto, com reviews fora de ordem.
+      final item = FeedItem(
+        place: place(id: 'x'),
+        reviews: [
+          review(id: 'a-old', authorId: 'a', placeId: 'x', createdAt: t(2)),
+          review(id: 'b-new', authorId: 'b', placeId: 'x', createdAt: t(9)),
+          review(id: 'a-new', authorId: 'a', placeId: 'x', createdAt: t(5)),
+          review(id: 'b-old', authorId: 'b', placeId: 'x', createdAt: t(1)),
+          review(id: 'c', authorId: 'c', placeId: 'x', createdAt: t(7)),
+        ],
+      );
+      expect(item.sources.map((s) => s.latest.id), ['b-new', 'c', 'a-new']);
+      expect(item.sources.map((s) => s.visits), [2, 1, 2]);
+      expect(
+        identical(item.sources, item.sources),
+        isTrue,
+        reason: 'calculado uma vez',
+      );
+    });
+  });
 }

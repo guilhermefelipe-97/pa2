@@ -75,4 +75,29 @@ void main() {
     expect(relativeTime(at.toLocal(), seen.toLocal()), 'ontem');
     expect(relativeTime(at.toLocal(), seen), 'ontem');
   });
+
+  group('relativeTimeSpoken (por extenso, para leitor de tela)', () {
+    String spoken(Duration ago) => relativeTimeSpoken(now.subtract(ago), now);
+
+    test('mesmos limites da forma curta, sem abreviações', () {
+      expect(spoken(Duration.zero), 'agora');
+      expect(spoken(const Duration(minutes: 1)), 'há 1 minuto');
+      expect(spoken(const Duration(minutes: 5)), 'há 5 minutos');
+      expect(spoken(const Duration(hours: 1)), 'há 1 hora');
+      expect(spoken(const Duration(hours: 2, minutes: 30)), 'há 2 horas');
+      expect(relativeTimeSpoken(natal(2026, 9, 27, 20), now), 'ontem');
+      expect(relativeTimeSpoken(natal(2026, 9, 25, 20), now), 'há 3 dias');
+    });
+
+    test('depois de 7 dias: data por extenso', () {
+      expect(
+        relativeTimeSpoken(natal(2026, 9, 20, 10), now),
+        'em 20 de setembro',
+      );
+      expect(
+        relativeTimeSpoken(natal(2025, 12, 25, 10), now),
+        'em 25 de dezembro de 2025',
+      );
+    });
+  });
 }

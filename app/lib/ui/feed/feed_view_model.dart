@@ -4,6 +4,7 @@ import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../domain/feed.dart';
 import '../../domain/models/place.dart';
+import '../core/follow_events.dart';
 import '../core/safe_change_notifier.dart';
 
 /// Feed "Amigos foram aqui" (F05).
@@ -13,17 +14,20 @@ class FeedViewModel extends SafeChangeNotifier {
     required UserRepository userRepository,
     required ReviewRepository reviewRepository,
     required PlaceRepository placeRepository,
+    required FollowEvents followEvents,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _users = userRepository,
        _reviews = reviewRepository,
        _places = placeRepository,
+       _follow = FollowStaleness(followEvents),
        _clock = clock ?? DateTime.now;
 
   final AuthRepository _auth;
   final UserRepository _users;
   final ReviewRepository _reviews;
   final PlaceRepository _places;
+  final FollowStaleness _follow;
   final DateTime Function() _clock;
 
   /// "Agora" para o tempo relativo dos cards (injetável nos testes).
@@ -39,6 +43,24 @@ class FeedViewModel extends SafeChangeNotifier {
   List<FeedItem> get items => _items;
 
   bool _followsNobody = false;
+
+  Set<String> _following = const {};
+
+  /// O usuário segue [uid] (segundo a última carga): selo "você segue" no
+  /// card, sem leituras extras.
+  bool isFollowing(String uid) => _following.contains(uid);
+
+  /// Usuário da última carga bem-sucedida (troca de conta limpa o estado).
+  String? _loadedUid;
+
+  /// Alguém foi seguido/deixado de seguir em outra tela desde o início da
+  /// última carga.
+  bool get isStale => _follow.isStale;
+
+  /// Recarrega só se ficou desatualizado. Chamado quando o feed volta a ficar
+  /// visível (retorno de rota ou ativação da aba). Uma carga que começou
+  /// depois da mudança já basta: não agenda outra.
+  Future<void> reloadIfStale() => _follow.isStale ? load() : Future.value();
 
   /// Não segue ninguém: mostrar o CTA "Encontrar pessoas".
   bool get followsNobody => _followsNobody;
@@ -75,26 +97,39 @@ class FeedViewModel extends SafeChangeNotifier {
 
   Future<void> _loadOnce() async {
     final uid = _auth.currentUserId;
+    if (uid != _loadedUid) {
+      // Outra conta (ou saiu): nada do usuário anterior fica visível.
+      _following = const {};
+      _items = const [];
+      _followsNobody = false;
+      _loadedOnce = false;
+      _loadedUid = null;
+    }
     if (uid == null) return;
+    // Esta carga lê o estado atual: mudanças anteriores já entram nela.
+    _follow.clear();
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final following = await _users.getFollowing(uid);
-      following.remove(uid);
-      if (following.isEmpty) {
-        _followsNobody = true;
-        _items = const [];
-      } else {
-        _followsNobody = false;
+      // Cópia: o Set pode ser o do repositório.
+      final following = {...await _users.getFollowing(uid)}..remove(uid);
+      var items = const <FeedItem>[];
+      if (following.isNotEmpty) {
         final reviews = await _reviews.fetchReviewsByAuthors(
           following.toList(),
         );
         // Só os locais que aparecem no feed; _loadPlaces nunca lança.
         final places = await _loadPlaces({for (final r in reviews) r.placeId});
-        _items = groupReviewsIntoFeed(reviews, places: places);
+        items = groupReviewsIntoFeed(reviews, places: places);
       }
+      // Só depois de tudo dar certo: uma falha no meio mantém o estado
+      // anterior inteiro (relação, cards e CTA coerentes entre si).
+      _following = following;
+      _followsNobody = following.isEmpty;
+      _items = items;
       _loadedOnce = true;
+      _loadedUid = uid;
     } on Object {
       _errorMessage =
           'Não foi possível carregar o feed. Verifique sua conexão.';
@@ -117,4 +152,10 @@ class FeedViewModel extends SafeChangeNotifier {
   }
 
   Future<void> signOut() => _auth.signOut();
+
+  @override
+  void dispose() {
+    _follow.dispose();
+    super.dispose();
+  }
 }

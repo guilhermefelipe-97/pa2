@@ -57,8 +57,49 @@ class FeedItem {
   ];
 
   /// Média de cada um dos 3 eixos entre as avaliações do card (3 números,
-  /// nunca uma nota única).
-  AxisAverages get averages => AxisAverages.of(reviews.map((r) => r.scores));
+  /// nunca uma nota única). Só no detalhe: o card mostra as notas de cada
+  /// pessoa ([sources]). Calculada uma vez.
+  late final AxisAverages averages = AxisAverages.of(
+    reviews.map((r) => r.scores),
+  );
+
+  /// Quem foi (F06): uma fonte por autor distinto, com a avaliação mais
+  /// recente dele aqui (por `createdAt`, qualquer que seja a ordem de
+  /// [reviews]) e quantas vezes avaliou o local; da fonte mais recente para
+  /// a mais antiga (empate: por id do autor). Calculada uma vez.
+  late final List<TrustSource> sources = _sourcesOf(reviews);
+
+  static List<TrustSource> _sourcesOf(List<Review> reviews) {
+    final latest = <String, Review>{};
+    final visits = <String, int>{};
+    for (final r in reviews) {
+      final current = latest[r.authorId];
+      if (current == null || r.createdAt.isAfter(current.createdAt)) {
+        latest[r.authorId] = r;
+      }
+      visits[r.authorId] = (visits[r.authorId] ?? 0) + 1;
+    }
+    return [
+      for (final e in latest.entries)
+        TrustSource(latest: e.value, visits: visits[e.key]!),
+    ]..sort((a, b) {
+      final byDate = b.latest.createdAt.compareTo(a.latest.createdAt);
+      return byDate != 0 ? byDate : a.authorId.compareTo(b.authorId);
+    });
+  }
+}
+
+/// Uma pessoa que foi ao local: a avaliação mais recente dela ali (dona dos
+/// eixos mostrados) e quantas avaliações deixou no local.
+class TrustSource {
+  const TrustSource({required this.latest, required this.visits})
+    : assert(visits >= 1);
+
+  final Review latest;
+  final int visits;
+
+  String get authorId => latest.authorId;
+  String get authorName => latest.authorName;
 }
 
 /// Formata a frase de quem foi ao local.

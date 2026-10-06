@@ -3,10 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:naarea/domain/feed.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/routing/routes.dart';
+import 'package:naarea/ui/feed/widgets/review_tile.dart';
 import 'package:naarea/ui/feed/feed_view.dart';
 import 'package:naarea/ui/lists/add_to_list_sheet.dart';
 import 'package:naarea/ui/people/people_view.dart';
 import 'package:naarea/ui/place/place_detail_view.dart';
+import 'package:naarea/ui/profile/profile_view.dart';
 import 'package:naarea/ui/review/place_picker_view.dart';
 import 'package:naarea/ui/review/review_view.dart';
 import 'package:naarea/ui/saved/saved_view.dart';
@@ -40,6 +42,19 @@ const _mangai = Place(
     );
   return (users: users, reviews: reviews);
 }
+
+/// Na aba Pessoas: busca [name] e toca em Seguir.
+Future<void> _followInPeople(WidgetTester tester, String name) async {
+  await tester.enterText(find.byKey(const Key('people-search')), name);
+  await tester.pump(const Duration(milliseconds: 350)); // debounce
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(FilledButton, 'Seguir'));
+  await tester.pumpAndSettle();
+}
+
+/// Nome do autor num tile de avaliação do detalhe (abre o perfil).
+Finder _authorInTile(String name) =>
+    find.descendant(of: find.byType(ReviewTile), matching: find.text(name));
 
 Finder _tab(String label) => find.descendant(
   of: find.byKey(const Key('app-nav')),
@@ -136,11 +151,11 @@ void main() {
       await tester.tap(find.text('Encontrar pessoas'));
       await tester.pumpAndSettle();
       expect(find.byType(PeopleView), findsOneWidget);
-      data.users.followingByUser['me'] = {'a'};
+      await _followInPeople(tester, 'Ana');
 
       await tester.tap(_tab('Amigos'));
       await tester.pumpAndSettle();
-      expect(find.text('Ana foi aqui'), findsOneWidget);
+      expect(find.byKey(const ValueKey('trust-source-a')), findsOneWidget);
     });
 
     testWidgets('aba vazia: "Ver onde os amigos foram" leva ao feed', (
@@ -532,6 +547,277 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(SavedCard), findsOneWidget);
       expect(find.text('Mangai'), findsOneWidget);
+    });
+  });
+
+  group('F06: fonte de confiança e perfil', () {
+    // Celular alto: o card inteiro (e o bloco "Quem foi") fica na tela.
+    setUp(() {
+      final view =
+          TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
+      view.physicalSize = const Size(412, 2000);
+      view.devicePixelRatio = 1;
+    });
+    tearDown(() {
+      TestWidgetsFlutterBinding.instance.platformDispatcher.views.first.reset();
+    });
+
+    Future<TestApp> pumpAna(WidgetTester tester, {bool following = true}) {
+      final data = _anaFoiNoMangai();
+      if (!following) data.users.followingByUser['me'] = {};
+      return pumpApp(
+        tester,
+        users: data.users,
+        reviews: data.reviews,
+        places: [_mangai],
+      );
+    }
+
+    Finder anaCard() => find.byKey(const ValueKey('trust-source-a'));
+
+    testWidgets(
+      'AC: no card, tocar em "Ana" abre o perfil dela com as avaliações',
+      (tester) async {
+        await pumpAna(tester);
+        expect(
+          find.descendant(of: anaCard(), matching: find.text('você segue')),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.descendant(of: anaCard(), matching: find.text('Ana')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ProfileView), findsOneWidget);
+        expect(
+          tester.widget<ProfileView>(find.byType(ProfileView)).viewModel.uid,
+          'a',
+        );
+        expect(find.text('Ana'), findsWidgets);
+        expect(find.text('Seguindo'), findsOneWidget);
+        expect(find.text('Mangai'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'deixar de seguir no perfil: ao voltar o feed recarrega sem Ana',
+      (tester) async {
+        await pumpAna(tester);
+        await tester.tap(anaCard());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Seguindo'));
+        await tester.pumpAndSettle();
+        expect(find.text('Seguir'), findsOneWidget);
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.byType(FeedView), findsOneWidget);
+        expect(anaCard(), findsNothing);
+        expect(find.text('Encontrar pessoas'), findsOneWidget);
+      },
+    );
+
+    testWidgets('seguir Ana no perfil: ao voltar o feed mostra o card dela', (
+      tester,
+    ) async {
+      final app = await pumpAna(tester, following: false);
+      expect(find.text('Encontrar pessoas'), findsOneWidget);
+
+      app.router.push(Routes.person('a'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Seguir'));
+      await tester.pumpAndSettle();
+      expect(find.text('Seguindo'), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(anaCard(), findsOneWidget);
+    });
+
+    testWidgets(
+      'perfil aberto pela aba Quero ir: deixar de seguir e trocar para Amigos recarrega',
+      (tester) async {
+        final app = await pumpAna(tester);
+        expect(anaCard(), findsOneWidget);
+
+        await tester.tap(_tab('Quero ir'));
+        await tester.pumpAndSettle();
+        app.router.push(Routes.person('a'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Seguindo'));
+        await tester.pumpAndSettle();
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.byType(SavedView), findsOneWidget);
+
+        await tester.tap(_tab('Amigos'));
+        await tester.pumpAndSettle();
+        expect(anaCard(), findsNothing);
+        expect(find.text('Encontrar pessoas'), findsOneWidget);
+      },
+    );
+
+    testWidgets('aba Pessoas reflete o deixar de seguir feito no perfil', (
+      tester,
+    ) async {
+      await pumpAna(tester);
+      await tester.tap(_tab('Pessoas'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('people-search')), 'Ana');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(OutlinedButton, 'Seguindo'), findsOneWidget);
+
+      await tester.tap(_tab('Amigos'));
+      await tester.pumpAndSettle();
+      await tester.tap(anaCard());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Seguindo'));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await tester.tap(_tab('Pessoas'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(FilledButton, 'Seguir'), findsOneWidget);
+    });
+
+    testWidgets(
+      'perfil empilhado (Ana, local, Ana, deixar de seguir, voltar) mostra "Seguir"',
+      (tester) async {
+        final app = await pumpAna(tester);
+        app.router.push(Routes.person('a'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Mangai')); // avaliação dela: detalhe
+        await tester.pumpAndSettle();
+        expect(find.byType(PlaceDetailView), findsOneWidget);
+        await tester.tap(_authorInTile('Ana'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ProfileView), findsOneWidget);
+        await tester.tap(find.text('Seguindo'));
+        await tester.pumpAndSettle();
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.text('Nenhum amigo avaliou ainda'), findsOneWidget);
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.byType(ProfileView), findsOneWidget);
+        expect(find.widgetWithText(FilledButton, 'Seguir'), findsOneWidget);
+        expect(find.text('Seguindo'), findsNothing);
+      },
+    );
+
+    testWidgets('voltar do perfil sem mudar nada não recarrega o feed', (
+      tester,
+    ) async {
+      final app = await pumpAna(tester);
+      final before = app.reviews.fetchCalls.length;
+      await tester.tap(anaCard());
+      await tester.pumpAndSettle();
+      // o perfil lê as avaliações dela (1 leitura)
+      expect(app.reviews.fetchCalls.length, before + 1);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(app.reviews.fetchCalls.length, before + 1);
+    });
+
+    testWidgets(
+      'detalhe, perfil e voltar sem mudança não recarrega o detalhe',
+      (tester) async {
+        final app = await pumpAna(tester);
+        await tester.tap(find.text('Mangai'));
+        await tester.pumpAndSettle();
+        expect(find.byType(PlaceDetailView), findsOneWidget);
+        final placeReads = app.reviews.placeFetchCalls.length;
+        final authorReads = app.reviews.fetchCalls.length;
+
+        await tester.tap(_authorInTile('Ana'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ProfileView), findsOneWidget);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(PlaceDetailView), findsOneWidget);
+        expect(app.reviews.placeFetchCalls.length, placeReads);
+        expect(
+          app.reviews.fetchCalls.length,
+          authorReads + 1,
+          reason: 'só a leitura do perfil',
+        );
+      },
+    );
+
+    testWidgets(
+      'no detalhe, deixar de seguir no perfil recarrega o detalhe e o feed',
+      (tester) async {
+        await pumpAna(tester);
+        await tester.tap(find.text('Mangai'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(_authorInTile('Ana'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Seguindo'));
+        await tester.pumpAndSettle();
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.byType(PlaceDetailView), findsOneWidget);
+        expect(find.text('Nenhum amigo avaliou ainda'), findsOneWidget);
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.byType(FeedView), findsOneWidget);
+        expect(find.text('Encontrar pessoas'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'perfil próprio a partir do detalhe ("Você"): sem botão Seguir',
+      (tester) async {
+        final data = _anaFoiNoMangai();
+        data.reviews.stored.add(
+          review(
+            authorId: 'me',
+            authorName: 'Eu',
+            placeId: 'mangai',
+            placeName: 'Mangai',
+          ),
+        );
+        final app = await pumpApp(
+          tester,
+          users: data.users,
+          reviews: data.reviews,
+          places: [_mangai],
+        );
+        app.router.push(Routes.placeDetail('mangai'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(_authorInTile('Você'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ProfileView), findsOneWidget);
+        expect(find.text('Você'), findsWidgets);
+        expect(find.byKey(const Key('profile-follow')), findsNothing);
+        expect(find.text('Mangai'), findsOneWidget);
+      },
+    );
+
+    testWidgets('link direto para uid inexistente: "Pessoa não encontrada"', (
+      tester,
+    ) async {
+      final app = await pumpApp(tester);
+      app.router.go(Routes.person('fantasma'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pessoa não encontrada'), findsOneWidget);
+
+      await tester.tap(find.text('Voltar'));
+      await tester.pumpAndSettle();
+      expect(find.byType(FeedView), findsOneWidget);
     });
   });
 }

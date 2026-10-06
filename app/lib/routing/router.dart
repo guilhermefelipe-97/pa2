@@ -7,6 +7,7 @@ import '../domain/models/place.dart';
 import '../ui/auth/auth_view.dart';
 import '../ui/auth/auth_view_model.dart';
 import '../ui/core/app_shell.dart';
+import '../ui/core/follow_events.dart';
 import '../ui/core/view_model_host.dart';
 import '../ui/feed/feed_view.dart';
 import '../ui/feed/feed_view_model.dart';
@@ -15,6 +16,8 @@ import '../ui/place/place_detail_view.dart';
 import '../ui/place/place_detail_view_model.dart';
 import '../ui/people/people_view.dart';
 import '../ui/people/people_view_model.dart';
+import '../ui/profile/profile_view.dart';
+import '../ui/profile/profile_view_model.dart';
 import '../ui/review/place_picker_view.dart';
 import '../ui/review/place_picker_view_model.dart';
 import '../ui/review/review_view.dart';
@@ -86,6 +89,7 @@ GoRouter buildRouter(AuthRepository auth) {
                     userRepository: context.read(),
                     reviewRepository: context.read(),
                     placeRepository: context.read(),
+                    followEvents: context.read<FollowEvents>(),
                   ),
                   builder: (context, vm) => FeedView(viewModel: vm),
                 ),
@@ -115,6 +119,7 @@ GoRouter buildRouter(AuthRepository auth) {
                   create: (context) => PeopleViewModel(
                     authRepository: context.read(),
                     userRepository: context.read(),
+                    followEvents: context.read<FollowEvents>(),
                   ),
                   builder: (context, vm) => PeopleView(viewModel: vm),
                 ),
@@ -139,8 +144,27 @@ GoRouter buildRouter(AuthRepository auth) {
               userRepository: context.read(),
               placeRepository: context.read(),
               reviewRepository: context.read(),
+              followEvents: context.read<FollowEvents>(),
             ),
             builder: (context, vm) => PlaceDetailView(viewModel: vm),
+          );
+        },
+      ),
+      // Perfil simples de uma pessoa (F06), fora do shell como o detalhe.
+      GoRoute(
+        path: Routes.personPattern,
+        builder: (context, state) {
+          final uid = state.pathParameters['uid']!;
+          return ViewModelHost<ProfileViewModel>(
+            key: ValueKey('person-$uid'),
+            create: (context) => ProfileViewModel(
+              uid: uid,
+              authRepository: context.read(),
+              userRepository: context.read(),
+              reviewRepository: context.read(),
+              followEvents: context.read<FollowEvents>(),
+            ),
+            builder: (context, vm) => ProfileView(viewModel: vm),
           );
         },
       ),

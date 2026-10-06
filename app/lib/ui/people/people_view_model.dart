@@ -1,6 +1,7 @@
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../domain/models/user_profile.dart';
+import '../core/follow_events.dart';
 import '../core/safe_change_notifier.dart';
 
 enum PeopleInitState { loading, ready, error }
@@ -10,11 +11,20 @@ class PeopleViewModel extends SafeChangeNotifier {
   PeopleViewModel({
     required AuthRepository authRepository,
     required UserRepository userRepository,
+    required FollowEvents followEvents,
   }) : _auth = authRepository,
-       _users = userRepository;
+       _users = userRepository,
+       _follow = FollowStaleness(followEvents);
 
   final AuthRepository _auth;
   final UserRepository _users;
+  final FollowStaleness _follow;
+
+  /// Alguém foi seguido/deixado de seguir em outra tela (ex.: perfil).
+  bool get isStale => _follow.isStale;
+
+  /// Ao voltar a ficar visível: relê quem é seguido se mudou fora daqui.
+  Future<void> reloadIfStale() => _follow.isStale ? init() : Future.value();
 
   static const String initErrorMessage =
       'Não foi possível carregar quem você segue.';
@@ -56,6 +66,7 @@ class PeopleViewModel extends SafeChangeNotifier {
     final uid = _auth.currentUserId;
     if (uid == null) return;
     final seq = ++_initSeq;
+    _follow.clear();
     _initState = PeopleInitState.loading;
     _localChanges.clear();
     notifyListeners();
@@ -129,6 +140,8 @@ class PeopleViewModel extends SafeChangeNotifier {
         _following.add(targetUid);
       }
       if (!isReady) _localChanges[targetUid] = !wasFollowing;
+      // Feed, detalhe e perfis abertos ficam desatualizados.
+      _follow.announce();
     } on Object {
       _errorMessage = wasFollowing
           ? 'Não foi possível deixar de seguir.'
@@ -144,5 +157,11 @@ class PeopleViewModel extends SafeChangeNotifier {
       _busy.remove(targetUid);
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _follow.dispose();
+    super.dispose();
   }
 }

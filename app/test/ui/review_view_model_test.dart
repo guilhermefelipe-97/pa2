@@ -11,6 +11,7 @@ import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/domain/models/scores.dart';
 import 'package:naarea/ui/feed/feed_view_model.dart';
 import 'package:naarea/ui/review/review_view_model.dart';
+import 'package:naarea/ui/core/follow_events.dart';
 
 import '../support/fakes.dart';
 
@@ -139,6 +140,7 @@ void main() {
         userRepository: users,
         reviewRepository: reviews,
         placeRepository: FakePlaceRepository([_place]),
+        followEvents: FollowEvents(),
       );
       await feed.load();
       final r = feed.items.single.reviews.single;
@@ -203,6 +205,7 @@ void main() {
         userRepository: users,
         reviewRepository: reviews,
         placeRepository: FakePlaceRepository([_place]),
+        followEvents: FollowEvents(),
       );
       await feed.load();
       expect(feed.items.single.latestComment?.comment, 'Vale cada centavo');
@@ -499,6 +502,7 @@ void main() {
           userRepository: users,
           reviewRepository: reviews,
           placeRepository: FakePlaceRepository([_place]),
+          followEvents: FollowEvents(),
         );
         await feed.load();
         final cover = feed.items.single.latestPhoto!;

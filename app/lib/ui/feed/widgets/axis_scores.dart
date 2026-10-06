@@ -5,12 +5,12 @@ import '../../../domain/models/scores.dart';
 /// Os 3 eixos lado a lado: 🍽️ comida, ✨ ambiente, 🤝 atendimento. Sempre
 /// três valores — nunca uma nota única.
 class AxisScores extends StatelessWidget {
-  AxisScores.scores(Scores scores, {super.key})
+  AxisScores.scores(Scores scores, {super.key, this.dense = false})
     : food = '${scores.food}',
       ambience = '${scores.ambience}',
       service = '${scores.service}';
 
-  AxisScores.averages(AxisAverages averages, {super.key})
+  AxisScores.averages(AxisAverages averages, {super.key, this.dense = false})
     : food = formatAverage(averages.food),
       ambience = formatAverage(averages.ambience),
       service = formatAverage(averages.service);
@@ -19,15 +19,23 @@ class AxisScores extends StatelessWidget {
   final String ambience;
   final String service;
 
+  /// Pílulas menores (linhas compactas do card).
+  final bool dense;
+
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 8,
-      runSpacing: 6,
+      spacing: dense ? 4 : 8,
+      runSpacing: dense ? 4 : 6,
       children: [
-        _AxisPill(emoji: '🍽️', label: 'Comida', value: food),
-        _AxisPill(emoji: '✨', label: 'Ambiente', value: ambience),
-        _AxisPill(emoji: '🤝', label: 'Atendimento', value: service),
+        _AxisPill(emoji: '🍽️', label: 'Comida', value: food, dense: dense),
+        _AxisPill(emoji: '✨', label: 'Ambiente', value: ambience, dense: dense),
+        _AxisPill(
+          emoji: '🤝',
+          label: 'Atendimento',
+          value: service,
+          dense: dense,
+        ),
       ],
     );
   }
@@ -38,11 +46,13 @@ class _AxisPill extends StatelessWidget {
     required this.emoji,
     required this.label,
     required this.value,
+    required this.dense,
   });
 
   final String emoji;
   final String label;
   final String value;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +66,9 @@ class _AxisPill extends StatelessWidget {
         label: '$label $value de 5',
         excludeSemantics: true,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          padding: dense
+              ? const EdgeInsets.symmetric(horizontal: 7, vertical: 1)
+              : const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
             color: scheme.secondaryContainer,
             borderRadius: BorderRadius.circular(20),
@@ -65,7 +77,7 @@ class _AxisPill extends StatelessWidget {
             '$emoji $value',
             style: TextStyle(
               color: scheme.onSecondaryContainer,
-              fontSize: 14,
+              fontSize: dense ? 12 : 14,
               fontWeight: FontWeight.w700,
             ),
           ),

@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../domain/feed.dart';
 import '../../../domain/relative_time.dart';
 import '../../core/save_button.dart';
-import 'author_avatar.dart';
-import 'axis_scores.dart';
 import 'place_photo.dart';
+import 'trust_sources.dart';
 
 /// "Bairro · Categoria", pulando partes vazias.
 String placeSubtitle(String neighborhood, String category) =>
@@ -27,21 +26,27 @@ class FeedCard extends StatelessWidget {
     required this.item,
     required this.now,
     this.onTap,
+    this.isFollowing,
+    this.onOpenPerson,
   });
 
   final FeedItem item;
   final DateTime now;
   final VoidCallback? onTap;
 
+  /// Quem o leitor segue (selo "você segue" no bloco "Quem foi").
+  final bool Function(String uid)? isFollowing;
+
+  /// Toque numa pessoa do bloco "Quem foi": abre o perfil dela.
+  final void Function(TrustSource source)? onOpenPerson;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final place = item.place;
-    final latest = item.reviews.first;
     final commented = item.latestComment;
     final subtitle = placeSubtitle(place.neighborhood, place.category);
-    final cardColor = theme.cardTheme.color ?? scheme.surfaceContainerLow;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -95,32 +100,19 @@ class FeedCard extends StatelessWidget {
                             ],
                           ),
                         ],
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            AuthorAvatarStack(
-                              authors: distinctAuthors(item),
-                              ringColor: cardColor,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                item.headline,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: scheme.primary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 10),
+                        // Quem foi: cada nota tem dono (sem média no card).
+                        TrustSources(
+                          item: item,
+                          now: now,
+                          isFollowing: isFollowing,
+                          onOpenPerson: onOpenPerson,
+                          onShowAll: onTap,
                         ),
-                        const SizedBox(height: 12),
-                        AxisScores.averages(item.averages),
-                        // O comentário citado pode não ser da visita mais recente:
-                        // leva o próprio autor e tempo para não ser confundido com
-                        // o rodapé (que é sempre a última visita).
+                        // O comentário citado pode não ser da visita mais
+                        // recente: leva o próprio autor e tempo.
                         if (commented != null) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -154,13 +146,6 @@ class FeedCard extends StatelessWidget {
                             ),
                           ),
                         ],
-                        const SizedBox(height: 10),
-                        Text(
-                          '${latest.dayPeriod.label} · ${relativeTime(latest.createdAt, now)}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
                       ],
                     ),
                   ),

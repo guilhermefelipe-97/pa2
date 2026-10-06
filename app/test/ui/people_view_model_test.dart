@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:naarea/domain/models/user_profile.dart';
+import 'package:naarea/ui/core/follow_events.dart';
 import 'package:naarea/ui/feed/feed_view_model.dart';
 import 'package:naarea/ui/people/people_view_model.dart';
 
@@ -20,7 +21,11 @@ void main() {
       ..addUser('biazinha', 'Biazinha')
       ..addUser('toni', 'Toni');
     auth = FakeAuthRepository(uid: 'me');
-    vm = PeopleViewModel(authRepository: auth, userRepository: users);
+    vm = PeopleViewModel(
+      authRepository: auth,
+      userRepository: users,
+      followEvents: FollowEvents(),
+    );
   });
 
   test('busca "bia" encontra por prefixo e não lista a si mesmo', () async {
@@ -170,6 +175,7 @@ void main() {
         userRepository: users,
         reviewRepository: reviews,
         placeRepository: FakePlaceRepository(const []),
+        followEvents: FollowEvents(),
       );
       await feed.load();
       expect(feed.followsNobody, isTrue);
@@ -183,4 +189,48 @@ void main() {
       expect(feed.items.single.headline, 'Bianca foi aqui');
     },
   );
+
+  group('F06: FollowEvents', () {
+    late FollowEvents events;
+    late PeopleViewModel people;
+
+    setUp(() {
+      events = FollowEvents();
+      people = PeopleViewModel(
+        authRepository: auth,
+        userRepository: users,
+        followEvents: events,
+      );
+    });
+
+    test('seguir aqui avisa as outras telas, sem se marcar', () async {
+      await people.init();
+      await people.toggleFollow('bianca');
+      expect(events.version, 1);
+      expect(people.isStale, isFalse);
+
+      users.failFollow = true;
+      await people.toggleFollow('toni');
+      expect(events.version, 1, reason: 'falha não avisa');
+    });
+
+    test(
+      'mudança feita no perfil: reloadIfStale relê quem é seguido',
+      () async {
+        await people.init();
+        expect(people.isFollowing('bianca'), isFalse);
+        final calls = users.getFollowingCalls;
+
+        await people.reloadIfStale();
+        expect(users.getFollowingCalls, calls, reason: 'nada mudou');
+
+        users.followingByUser['me'] = {'bianca'};
+        events.changed();
+        await people.reloadIfStale();
+        expect(people.isFollowing('bianca'), isTrue);
+        expect(users.getFollowingCalls, calls + 1);
+        people.dispose();
+      },
+    );
+  });
 }

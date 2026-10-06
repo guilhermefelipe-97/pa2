@@ -28,9 +28,11 @@ class _FeedViewState extends State<FeedView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Seguir alguém acontece na aba Pessoas: ao voltar para Amigos, recarrega.
+    // Seguir alguém acontece em Pessoas ou num perfil: ao voltar para
+    // Amigos (troca de aba ou retorno de uma rota por cima), recarrega se
+    // isso mudou quem aparece aqui.
     final active = ActiveTab.maybeOf(context);
-    if (active == true && _active == false) widget.viewModel.load();
+    if (active == true && _active == false) widget.viewModel.reloadIfStale();
     _active = active;
   }
 
@@ -60,8 +62,14 @@ class _FeedViewState extends State<FeedView> {
     widget.viewModel.load();
   }
 
+  // Ao voltar destas telas a aba fica ativa de novo (ActiveTab) e recarrega
+  // se alguém foi seguido/deixado de seguir no caminho.
   void _openPlace(FeedItem item) {
     context.push(Routes.placeDetail(item.placeId), extra: item);
+  }
+
+  void _openPerson(TrustSource source) {
+    context.push(Routes.person(source.authorId));
   }
 
   @override
@@ -169,6 +177,8 @@ class _FeedViewState extends State<FeedView> {
                   item: item,
                   now: now,
                   onTap: () => _openPlace(item),
+                  isFollowing: vm.isFollowing,
+                  onOpenPerson: _openPerson,
                 );
               },
             ),

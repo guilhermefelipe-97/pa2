@@ -18,8 +18,11 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Uma rota fora do shell (detalhe, perfil) por cima deixa as abas
+    // invisíveis; ao voltar, a aba atual fica ativa de novo ([ActiveTab]).
+    final shellIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     return Scaffold(
-      body: navigationShell,
+      body: _ShellVisibility(isCurrent: shellIsCurrent, child: navigationShell),
       bottomNavigationBar: NavigationBar(
         key: const Key('app-nav'),
         selectedIndex: navigationShell.currentIndex,
@@ -63,6 +66,7 @@ class AppBranchStack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final shellIsCurrent = _ShellVisibility.isCurrentOf(context);
     return IndexedStack(
       index: currentIndex,
       children: [
@@ -74,7 +78,7 @@ class AppBranchStack extends StatelessWidget {
               child: HeroMode(
                 enabled: i == currentIndex,
                 child: ActiveTab(
-                  isActive: i == currentIndex,
+                  isActive: i == currentIndex && shellIsCurrent,
                   child: children[i],
                 ),
               ),
@@ -85,8 +89,27 @@ class AppBranchStack extends StatelessWidget {
   }
 }
 
-/// Diz a uma aba se ela é a visível (ex.: o feed recarrega ao voltar para
-/// ele, já que seguir alguém acontece na aba Pessoas).
+/// O shell é a rota do topo (nenhuma rota de fora dele por cima).
+class _ShellVisibility extends InheritedWidget {
+  const _ShellVisibility({required this.isCurrent, required super.child});
+
+  final bool isCurrent;
+
+  static bool isCurrentOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<_ShellVisibility>()
+          ?.isCurrent ??
+      true;
+
+  @override
+  bool updateShouldNotify(_ShellVisibility oldWidget) =>
+      oldWidget.isCurrent != isCurrent;
+}
+
+/// Diz a uma aba se ela é a visível: aba selecionada e sem outra rota por
+/// cima do shell. Voltar a ficar ativa (troca de aba ou retorno de rota) é
+/// quando feed e Pessoas recarregam se seguir/deixar de seguir os deixou
+/// desatualizados.
 class ActiveTab extends InheritedWidget {
   const ActiveTab({super.key, required this.isActive, required super.child});
 
