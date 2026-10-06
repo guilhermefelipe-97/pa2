@@ -34,6 +34,11 @@ import 'ui/saved/saved_places_store.dart';
 /// (auth :9099, firestore :8080) em vez do projeto real.
 const bool useEmulator = bool.fromEnvironment('USE_EMULATOR');
 
+/// Host dos emuladores. Vazio = padrão (10.0.2.2 no emulador Android,
+/// localhost no resto). Num celular físico, passe o IP do PC na rede local:
+/// `--dart-define=EMULATOR_HOST=192.168.0.10`.
+const String emulatorHost = String.fromEnvironment('EMULATOR_HOST');
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -53,7 +58,9 @@ Future<void> main() async {
   final auth = FirebaseAuth.instance;
   final db = FirebaseFirestore.instance;
   if (useEmulator) {
-    final host = defaultTargetPlatform == TargetPlatform.android && !kIsWeb
+    final host = emulatorHost.isNotEmpty
+        ? emulatorHost
+        : defaultTargetPlatform == TargetPlatform.android && !kIsWeb
         ? '10.0.2.2'
         : 'localhost';
     await auth.useAuthEmulator(host, 9099);
