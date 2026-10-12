@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mock_exceptions/mock_exceptions.dart';
 import 'package:naarea/data/firebase/firestore_place_repository.dart';
 import 'package:naarea/data/firebase/firestore_review_repository.dart';
 import 'package:naarea/data/firebase/firestore_user_repository.dart';
@@ -200,6 +201,90 @@ void main() {
       ).createReview(_newReview(comment: '  Fila grande, valeu a pena. '));
       final data = (await db.collection('reviews').get()).docs.single.data();
       expect(data['comment'], 'Fila grande, valeu a pena.');
+    });
+  });
+
+  group('FirestoreReviewRepository: trava do F03', () {
+    test('a trava vai no mesmo batch: users/{uid}/reviewLocks/{placeId}, '
+        '3 chaves, reviewId da avaliação', () async {
+      final db = FakeFirebaseFirestore();
+      await FirestoreReviewRepository(db).createReview(_newReview());
+      final review = (await db.collection('reviews').get()).docs.single;
+      final locks = (await db.collectionGroup('reviewLocks').get()).docs;
+      expect(locks, hasLength(1));
+      expect(locks.single.reference.path, 'users/alice/reviewLocks/mangai');
+      expect(locks.single.data().keys.toSet(), {
+        'lastAt',
+        'reviewId',
+        'placeId',
+      });
+      expect(locks.single.data()['reviewId'], review.id);
+      expect(locks.single.data()['placeId'], 'mangai');
+      expect(locks.single.data()['lastAt'], isA<Timestamp>());
+    });
+
+    test('com foto: review, foto e trava no mesmo batch', () async {
+      final db = FakeFirebaseFirestore();
+      await FirestoreReviewRepository(db).createReview(
+        _newReview(),
+        photo: Uint8List.fromList([0xFF, 0xD8, 0xFF, 1]),
+      );
+      final review = (await db.collection('reviews').get()).docs.single;
+      final lock = (await db.doc('users/alice/reviewLocks/mangai').get())
+          .data()!;
+      expect(lock['reviewId'], review.id);
+    });
+
+    test(
+      'ack perdido (batch gravado, commit com erro): relê a própria review e '
+      'conclui com sucesso, sem reenviar',
+      () async {
+        final db = FakeFirebaseFirestore();
+        // O fake grava o batch em ordem: review e foto entram, a trava (última
+        // escrita) lança — como um commit que chegou ao servidor sem ack.
+        whenCalling(Invocation.method(#set, null))
+            .on(db.doc('users/alice/reviewLocks/mangai'))
+            .thenThrow(
+              FirebaseException(plugin: 'cloud_firestore', code: 'unavailable'),
+            );
+        final result = await FirestoreReviewRepository(db).createReview(
+          _newReview(),
+          photo: Uint8List.fromList([0xFF, 0xD8, 0xFF, 1]),
+        );
+        expect(result.placeCreated, isFalse);
+        final reviews = (await db.collection('reviews').get()).docs;
+        expect(reviews, hasLength(1), reason: 'sem reenvio com outro id');
+        expect(
+          (await db.collection('reviewPhotos').get()).docs.single.id,
+          reviews.single.id,
+        );
+      },
+    );
+
+    test('reviewLockOf: null sem trava; lastAt com trava', () async {
+      final db = FakeFirebaseFirestore();
+      final repo = FirestoreReviewRepository(db);
+      expect(await repo.reviewLockOf('alice', 'mangai'), isNull);
+      final at = DateTime.utc(2030, 10, 12, 23);
+      await db.doc('users/alice/reviewLocks/mangai').set({
+        'lastAt': Timestamp.fromDate(at),
+        'reviewId': 'r1',
+        'placeId': 'mangai',
+      });
+      expect((await repo.reviewLockOf('alice', 'mangai'))!.toUtc(), at);
+      // Por usuário e por local.
+      expect(await repo.reviewLockOf('bob', 'mangai'), isNull);
+      expect(await repo.reviewLockOf('alice', 'camaroes'), isNull);
+    });
+
+    test('reviewLockOf: lastAt fora do formato = sem trava (as Rules '
+        'decidem)', () async {
+      final db = FakeFirebaseFirestore();
+      await db.doc('users/alice/reviewLocks/mangai').set({'lastAt': 'ontem'});
+      expect(
+        await FirestoreReviewRepository(db).reviewLockOf('alice', 'mangai'),
+        isNull,
+      );
     });
   });
 

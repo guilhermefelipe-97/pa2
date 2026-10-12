@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/review_repository.dart';
@@ -6,6 +10,7 @@ import '../../domain/feed.dart';
 import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart' as scores;
+import '../../domain/review_lock.dart';
 import '../core/follow_events.dart';
 import '../core/safe_change_notifier.dart';
 
@@ -88,6 +93,52 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     return uid != null && reviews.any((r) => r.authorId == uid);
   }
 
+  DateTime? _lockLastAt;
+  Timer? _unlockTimer;
+  int _lockSeq = 0;
+
+  /// Hora da última avaliação do usuário aqui, enquanto ainda dentro do
+  /// período mínimo (F03); `null` = pode avaliar.
+  DateTime? get reviewBlockedSince =>
+      isReviewBlocked(_lockLastAt, now()) ? _lockLastAt : null;
+
+  /// "Pode avaliar de novo a partir de 11/11 às 20h" no lugar do CTA (F03).
+  String? get reviewAgainLabel {
+    final since = reviewBlockedSince;
+    return since == null ? null : reviewAgainFromLabel(since);
+  }
+
+  void _setLock(DateTime? lastAt) {
+    _lockLastAt = lastAt;
+    _unlockTimer?.cancel();
+    _unlockTimer = null;
+    if (lastAt == null || !isReviewBlocked(lastAt, now())) return;
+    // Na hora da liberação, o CTA volta sem precisar recarregar.
+    _unlockTimer = Timer(
+      reviewAllowedAt(lastAt).difference(now()),
+      notifyListeners,
+    );
+  }
+
+  /// Trava do F03 em paralelo com o resto (os dados não esperam por ela).
+  /// Erro ou mais de [reviewLockTimeout]: sem trava (não mostra uma trava
+  /// velha; o formulário confere de novo e as Rules decidem).
+  Future<void> _loadLock(String uid) async {
+    final seq = ++_lockSeq;
+    DateTime? lastAt;
+    try {
+      lastAt = await _reviews
+          .reviewLockOf(uid, placeId)
+          .timeout(reviewLockTimeout);
+    } on Object catch (e) {
+      debugPrint('Trava de avaliação indisponível no detalhe: $e');
+      lastAt = null;
+    }
+    if (seq != _lockSeq) return;
+    _setLock(lastAt);
+    notifyListeners();
+  }
+
   /// "2 avaliações de amigos"; com a do próprio usuário, só "3 avaliações".
   String get reviewCountLabel {
     final n = reviews.length;
@@ -126,6 +177,9 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     _notFound = false;
     final uid = _auth.currentUserId;
     if (uid == null) {
+      // Sem sessão: nenhuma trava (de outra conta) fica na tela.
+      _lockSeq++;
+      _setLock(null);
       // Sem sessão não há como ler: erro em vez de spinner eterno.
       _isLoading = false;
       if (_place == null || _visibleReviews == null) _errorMessage = errorText;
@@ -134,6 +188,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     }
     _isLoading = true;
     notifyListeners();
+    final lock = _loadLock(uid);
     try {
       final results = await Future.wait([
         _places.getPlaces([placeId]),
@@ -166,6 +221,8 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
         notifyListeners();
       }
     }
+    // O Future de load() inclui a trava; a tela não espera por ela.
+    await lock;
   }
 
   static Review _asYou(Review r) => Review(
@@ -183,6 +240,8 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
 
   @override
   void dispose() {
+    _unlockTimer?.cancel();
+    _lockSeq++;
     _follow.dispose();
     super.dispose();
   }

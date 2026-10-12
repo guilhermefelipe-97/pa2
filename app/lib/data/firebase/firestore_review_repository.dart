@@ -27,8 +27,32 @@ class FirestoreReviewRepository implements ReviewRepository {
   /// Coleção das fotos (bytes no Firestore; id = id da avaliação).
   static const String reviewPhotosCollection = 'reviewPhotos';
 
+  /// Subcoleção das travas do F03: `users/{uid}/reviewLocks/{placeId}`.
+  static const String reviewLocksCollection = 'reviewLocks';
+
   CollectionReference<Map<String, dynamic>> get _reviews =>
       _db.collection('reviews');
+
+  DocumentReference<Map<String, dynamic>> _lockRef(
+    String uid,
+    String placeId,
+  ) => _db
+      .collection('users')
+      .doc(uid)
+      .collection(reviewLocksCollection)
+      .doc(placeId);
+
+  @override
+  Future<DateTime?> reviewLockOf(String uid, String placeId) async {
+    // Do servidor: a trava muda fora deste aparelho (outro aparelho, corrida)
+    // e um cache velho abriria um formulário que as Rules negam.
+    final snap = await _lockRef(
+      uid,
+      placeId,
+    ).get(const GetOptions(source: Source.server));
+    final lastAt = snap.data()?['lastAt'];
+    return lastAt is Timestamp ? lastAt.toDate() : null;
+  }
 
   @override
   Future<CreateReviewResult> createReview(
@@ -76,7 +100,10 @@ class FirestoreReviewRepository implements ReviewRepository {
       );
       return (placeCreated: createPlace);
     } on Object catch (error, stack) {
-      // Ack perdido: a avaliação foi gravada mas a resposta não chegou.
+      // Ack perdido: o batch foi gravado (review + trava) mas a resposta não
+      // chegou. Reenviar com o mesmo id seria negado (a review já existe e a
+      // trava acabou de nascer); o caminho certo é reler a própria review e,
+      // se ela existe, concluir com sucesso.
       if (await _existsOnServer(ref) == true) {
         return (placeCreated: createPlace);
       }
@@ -154,6 +181,19 @@ class FirestoreReviewRepository implements ReviewRepository {
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
+    // F03: trava criada/renovada no mesmo batch, apontando para esta
+    // avaliação. Dentro dos 30 dias as Rules negam a trava e a review juntas.
+    // Retry: só acontece quando a review NÃO foi gravada (ver createReview),
+    // então o mesmo id ainda é novo para as Rules.
+    // Offline: o batch fica enfileirado no cache local e o commit só conclui
+    // ao sincronizar; até lá a trava não existe no servidor (outro aparelho
+    // ainda pode avaliar) e, se as Rules negarem na sincronização, o SDK
+    // desfaz as escritas locais.
+    batch.set(_lockRef(review.authorId, review.placeId), {
+      'lastAt': FieldValue.serverTimestamp(),
+      'reviewId': ref.id,
+      'placeId': review.placeId,
+    });
     return batch.commit();
   }
 

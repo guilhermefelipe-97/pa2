@@ -221,14 +221,17 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                     const SizedBox(height: 6),
                     AxisScores.averages(item.averages),
                     const SizedBox(height: 16),
-                    FilledButton.tonalIcon(
-                      key: const Key('place-review'),
-                      onPressed: () => _review(place),
-                      icon: const Icon(Icons.rate_review),
-                      label: Text(
-                        vm.hasOwnReview ? 'Avaliar de novo' : 'Avaliar',
+                    if (vm.reviewAgainLabel != null)
+                      _ReviewAgainLater(label: vm.reviewAgainLabel!)
+                    else
+                      FilledButton.tonalIcon(
+                        key: const Key('place-review'),
+                        onPressed: () => _review(place),
+                        icon: const Icon(Icons.rate_review),
+                        label: Text(
+                          vm.hasOwnReview ? 'Avaliar de novo' : 'Avaliar',
+                        ),
                       ),
-                    ),
                     if (item.photoReviews.isNotEmpty) ...[
                       const SizedBox(height: 20),
                       ReviewPhotoStrip(
@@ -245,7 +248,10 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                     ),
                     const Divider(height: 20),
                   ] else if (vm.reviewsKnown)
-                    _NoFriendReviews(onReview: () => _review(place))
+                    _NoFriendReviews(
+                      onReview: () => _review(place),
+                      reviewAgainLabel: vm.reviewAgainLabel,
+                    )
                   else if (vm.errorMessage != null)
                     _CenteredMessage(
                       icon: Icons.wifi_off,
@@ -287,9 +293,13 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
 
 /// Nenhum amigo avaliou o local ainda: convite para ser o primeiro.
 class _NoFriendReviews extends StatelessWidget {
-  const _NoFriendReviews({required this.onReview});
+  const _NoFriendReviews({required this.onReview, this.reviewAgainLabel});
 
   final VoidCallback onReview;
+
+  /// F03: avaliou há menos de 30 dias (ex.: avaliação que ainda não chegou
+  /// na leitura): outro título e texto no lugar do botão.
+  final String? reviewAgainLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -300,18 +310,52 @@ class _NoFriendReviews extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Nenhum amigo avaliou ainda',
+            // Com trava, a avaliação do usuário existe (talvez ainda não
+            // apareça na leitura): o convite "ninguém avaliou" seria falso.
+            reviewAgainLabel != null
+                ? 'Você já avaliou este lugar'
+                : 'Nenhum amigo avaliou ainda',
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: 12),
-          FilledButton.icon(
-            key: const Key('place-review'),
-            onPressed: onReview,
-            icon: const Icon(Icons.rate_review),
-            label: const Text('Avaliar'),
-          ),
+          if (reviewAgainLabel != null)
+            _ReviewAgainLater(label: reviewAgainLabel!)
+          else
+            FilledButton.icon(
+              key: const Key('place-review'),
+              onPressed: onReview,
+              icon: const Icon(Icons.rate_review),
+              label: const Text('Avaliar'),
+            ),
         ],
       ),
+    );
+  }
+}
+
+/// F03: no lugar do CTA "Avaliar de novo", quando a última avaliação do
+/// usuário aqui tem menos de 30 dias.
+class _ReviewAgainLater extends StatelessWidget {
+  const _ReviewAgainLater({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.onSurfaceVariant;
+    return Row(
+      key: const Key('place-review-locked'),
+      children: [
+        Icon(Icons.event_repeat, size: 20, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(color: color),
+          ),
+        ),
+      ],
     );
   }
 }

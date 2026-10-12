@@ -28,6 +28,8 @@ class _ReviewViewState extends State<ReviewView> {
   @override
   void initState() {
     super.initState();
+    // F03: avaliou há menos de 30 dias → explica em vez do formulário.
+    viewModel.checkLock();
     // Android: foto tirada antes de o sistema encerrar o app (no-op nas
     // outras plataformas).
     viewModel.recoverLostPhoto();
@@ -47,6 +49,13 @@ class _ReviewViewState extends State<ReviewView> {
         listenable: viewModel,
         builder: (context, _) {
           final vm = viewModel;
+          if (vm.isCheckingLock) {
+            return const Center(
+              key: Key('review-lock-checking'),
+              child: CircularProgressIndicator(),
+            );
+          }
+          if (vm.isBlocked) return _BlockedReview(message: vm.blockedMessage!);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -172,6 +181,44 @@ class _ReviewViewState extends State<ReviewView> {
           );
         },
       ),
+    );
+  }
+}
+
+/// F03: o usuário avaliou o local há menos de 30 dias. Sem formulário de
+/// notas: só a explicação com as datas.
+class _BlockedReview extends StatelessWidget {
+  const _BlockedReview({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Icon(
+          Icons.event_repeat,
+          size: 48,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          message,
+          key: const Key('review-blocked'),
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Assim cada avaliação conta uma experiência de verdade.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }

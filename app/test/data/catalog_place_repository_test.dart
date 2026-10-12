@@ -626,6 +626,12 @@ void main() {
         )).data()!;
         expect(data['name'], 'Bar do Zé (de outra pessoa)');
         expect(data.containsKey('createdBy'), isFalse);
+        // F03: o retry grava a trava apontando para a mesma review.
+        final lock =
+            (await env.db.doc('users/bianca/reviewLocks/osm-n123').get())
+                .data()!;
+        expect(lock['reviewId'], reviews.single.id);
+        expect(lock['placeId'], 'osm-n123');
       },
     );
 

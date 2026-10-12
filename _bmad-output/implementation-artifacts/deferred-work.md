@@ -83,3 +83,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-g2-catalogo-brasil-photon.md`
   summary: Categoria por cozinha para locais descobertos (Photon não traz `cuisine`; pizzaria vira "Restaurante" e fica gravado assim).
   evidence: O app nunca edita locais; a categoria do 1º registro permanece.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-f03-bloqueio-reavaliacao.md`
+  summary: Limpar trava de reavaliação quando a avaliação for removida por moderação/LGPD/exclusão de conta.
+  evidence: Trava não é apagável pelas Rules; uma review removida pelo admin deixa o autor bloqueado por até 30 dias.

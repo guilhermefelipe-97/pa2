@@ -210,6 +210,34 @@ Outra instância do Photon (ex.: uma própria):
 flutter run --dart-define=PHOTON_URL=https://photon.exemplo.br
 ```
 
+### 3.4 Período mínimo entre avaliações (F03)
+
+Um usuário só avalia de novo o mesmo local 30 dias depois da última avaliação.
+A garantia é das Rules: cada avaliação nasce no mesmo batch que cria ou renova
+`users/{uid}/reviewLocks/{placeId}` (`lastAt` do servidor + `reviewId`), e a
+renovação só passa depois de 30 dias. O app lê a trava (timeout de 5 s) para
+explicar o bloqueio em vez de abrir o formulário.
+
+Avaliações anteriores ao F03 não têm trava. O backfill cria as travas delas
+(`lastAt` = `createdAt` da avaliação mais recente de cada autor/local), usando
+as mesmas variáveis do seed:
+
+```bash
+cd ../firebase
+# Só mostra o que mudaria:
+GOOGLE_APPLICATION_CREDENTIALS=/caminho/fora/do/repo/sa.json GCLOUD_PROJECT=<id> npm run backfill:locks -- --dry-run
+# Grava (idempotente: rodar de novo não muda nada):
+GOOGLE_APPLICATION_CREDENTIALS=/caminho/fora/do/repo/sa.json GCLOUD_PROJECT=<id> npm run backfill:locks
+```
+
+**Ordem de deploy em produção:**
+
+1. **Juntos:** Rules (`firebase deploy --only firestore:rules --project prod`)
+   e o APK novo. A partir das Rules novas, um app antigo (que não grava a
+   trava) tem toda avaliação negada; distribua o APK novo na mesma janela.
+2. **Depois:** o backfill (comandos acima). Até ele rodar, quem avaliou antes
+   do F03 pode fazer uma (só uma) avaliação nova sem esperar os 30 dias.
+
 ## 4. Testes
 
 App (ViewModels com fakes escritos à mão; repositórios Firestore com

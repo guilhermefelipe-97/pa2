@@ -220,6 +220,7 @@ GoRouter buildRouter(AuthRepository auth) {
                 photoPicker: context.read(),
                 placeRepository: context.read(),
                 compress: compressPhotoInBackground,
+                clock: context.read<AppClock?>()?.now,
               ),
               builder: (context, vm) => ReviewView(viewModel: vm),
             ),

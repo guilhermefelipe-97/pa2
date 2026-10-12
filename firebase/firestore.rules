@@ -47,6 +47,23 @@ service cloud.firestore {
       // "Quero ir" (F11): privado — só o dono lê e escreve. Doc só com o
       // createdAt do servidor; sem notas nem listas (F12). Salvar de novo um
       // local já salvo seria update: negado (o cliente só cria ou apaga).
+      // Trava do F03: período mínimo entre avaliações do mesmo usuário no
+      // mesmo local (Fase 1, "Não faz"). `lastAt` = hora da última avaliação
+      // (sempre do servidor). Só nasce/renova no mesmo batch que cria a
+      // avaliação nova `reviewId` do mesmo autor e local. Avaliações
+      // anteriores ao F03 sem trava não bloqueiam a 1ª nova (o backfill
+      // `seed/backfill-review-locks.js` cria as travas delas pelo Admin SDK).
+      // MESMO período de `reviewCooldown` em app/lib/domain/review_lock.dart
+      // (teste de paridade lê este arquivo).
+      match /reviewLocks/{placeId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && validLock(placeId, request.resource.data);
+        allow update: if isOwner(uid)
+          && validLock(placeId, request.resource.data)
+          && request.time >= resource.data.lastAt + duration.value(30, 'd');
+        allow delete: if false;
+      }
+
       match /saved/{placeId} {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid)
@@ -72,6 +89,25 @@ service cloud.firestore {
           && request.resource.data.updatedAt == request.time;
         allow delete: if isOwner(uid);
       }
+    }
+
+    function lockKeys() {
+      return ['lastAt', 'reviewId', 'placeId'];
+    }
+
+    // A avaliação `reviewId` é nova, nasce neste batch, do mesmo autor e local.
+    function validLock(placeId, data) {
+      let reviewPath = /databases/$(database)/documents/reviews/$(data.reviewId);
+      let review = getAfter(reviewPath);
+      return data.keys().hasOnly(lockKeys())
+        && data.keys().hasAll(lockKeys())
+        && data.placeId == placeId
+        && data.reviewId is string
+        && data.lastAt == request.time
+        && !exists(reviewPath)
+        && review != null
+        && review.data.authorId == request.auth.uid
+        && review.data.placeId == placeId;
     }
 
     function listKeys() {
@@ -226,9 +262,15 @@ service cloud.firestore {
             && (data.hasPhoto == false || existsAfter(photoPath(reviewId))));
     }
 
+    function lockPath(uid, placeId) {
+      return /databases/$(database)/documents/users/$(uid)/reviewLocks/$(placeId);
+    }
+
     function validReview(data, reviewId) {
       let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
       let placePath = /databases/$(database)/documents/places/$(data.placeId);
+      // F03: uma leitura só da trava (estado ao fim do batch).
+      let lock = getAfter(lockPath(request.auth.uid, data.placeId));
       return data.keys().hasOnly(reviewKeys())
         && data.keys().hasAll(reviewRequiredKeys())
         && data.authorId == request.auth.uid
@@ -241,6 +283,12 @@ service cloud.firestore {
         && validCompanion(data.companion)
         && validComment(data.comment)
         && validHasPhoto(data, reviewId)
+        // F03: a trava `users/{uid}/reviewLocks/{placeId}` é criada ou
+        // renovada no MESMO batch, apontando para esta avaliação (as Rules da
+        // trava exigem o intervalo de 30 dias desde a anterior).
+        && lock != null
+        && lock.data.lastAt == request.time
+        && lock.data.reviewId == reviewId
         && data.createdAt == request.time;
     }
 

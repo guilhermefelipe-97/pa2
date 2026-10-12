@@ -99,6 +99,7 @@ void main() {
     _tallPhone(tester);
     final vm = reviewVm();
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
+    await tester.pump(); // trava do F03 (checkLock)
 
     FilledButton submit() =>
         tester.widget<FilledButton>(find.byKey(const Key('review-submit')));
@@ -153,6 +154,7 @@ void main() {
     final handle = tester.ensureSemantics();
     final vm = reviewVm();
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
+    await tester.pump(); // trava do F03 (checkLock)
 
     expect(
       tester.getSemantics(find.bySemanticsLabel('Comida 4 de 5')),
@@ -191,6 +193,7 @@ void main() {
     final gate = Completer<void>();
     final vm = reviewVm(reviews: _GatedReviewRepository(gate.future));
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
+    await tester.pump(); // trava do F03 (checkLock)
     await tester.tap(find.byKey(const Key('axis-food-4')));
     await tester.pump();
 
@@ -336,6 +339,7 @@ void main() {
       compress: (b) async => b,
     );
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
+    await tester.pump(); // trava do F03 (checkLock)
 
     final field = find.byKey(const Key('review-comment'));
     await tester.ensureVisible(field);

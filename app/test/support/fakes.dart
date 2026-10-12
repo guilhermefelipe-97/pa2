@@ -16,6 +16,7 @@ import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/domain/models/place_list.dart';
 import 'package:naarea/domain/models/review.dart';
 import 'package:naarea/domain/models/user_profile.dart';
+import 'package:naarea/domain/review_lock.dart';
 import 'package:naarea/domain/search_tokens.dart';
 
 class FakeAuthRepository extends AuthRepository {
@@ -368,6 +369,31 @@ class FakeReviewRepository implements ReviewRepository {
   /// veio um [newPlace]).
   bool? placeCreated;
 
+  /// Travas do F03 (`users/{uid}/reviewLocks/{placeId}`): `lastAt` por
+  /// `'{uid}/{placeId}'`. [createReview] grava e respeita como as Rules.
+  final Map<String, DateTime> locks = {};
+
+  /// Erro de [reviewLockOf] (ex.: sem conexão).
+  Object? lockError;
+
+  /// Se definido, [reviewLockOf] devolve este futuro (ex.: um que nunca
+  /// completa, para o timeout).
+  Future<DateTime?>? pendingLock;
+
+  /// Chamadas de [reviewLockOf] (`'{uid}/{placeId}'`).
+  final List<String> lockCalls = [];
+
+  void lock(String uid, String placeId, DateTime lastAt) =>
+      locks['$uid/$placeId'] = lastAt;
+
+  @override
+  Future<DateTime?> reviewLockOf(String uid, String placeId) async {
+    lockCalls.add('$uid/$placeId');
+    if (pendingLock != null) return pendingLock!;
+    if (lockError != null) throw lockError!;
+    return locks['$uid/$placeId'];
+  }
+
   @override
   Future<CreateReviewResult> createReview(
     NewReview review, {
@@ -375,6 +401,13 @@ class FakeReviewRepository implements ReviewRepository {
     Place? newPlace,
   }) async {
     if (createError != null) throw createError!;
+    final lockId = '${review.authorId}/${review.placeId}';
+    final now = clock();
+    if (isReviewBlocked(locks[lockId], now)) {
+      // Como as Rules: permission-denied dentro do período mínimo.
+      throw StateError('permission-denied: trava do F03');
+    }
+    locks[lockId] = now;
     created.add(review);
     createdPhotos.add(photo);
     createdNewPlaces.add(newPlace);

@@ -10,6 +10,7 @@ import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart';
 import '../../domain/photo_compression.dart';
+import '../../domain/review_lock.dart';
 import '../core/messages.dart';
 import '../core/safe_change_notifier.dart';
 
@@ -18,7 +19,8 @@ Future<Uint8List> compressPhotoInBackground(Uint8List bytes) =>
     compute(compressPhoto, bytes);
 
 /// Avaliação em 3 eixos (F01), cada um opcional com mínimo de 1 (F14), com
-/// contexto (F02), comentário e foto opcionais (G1).
+/// contexto (F02), comentário e foto opcionais (G1). Respeita o período
+/// mínimo entre avaliações do mesmo local (F03): ver [checkLock].
 class ReviewViewModel extends SafeChangeNotifier {
   ReviewViewModel({
     required this.place,
@@ -29,7 +31,9 @@ class ReviewViewModel extends SafeChangeNotifier {
     required Future<Uint8List> Function(Uint8List original) compress,
     PlaceRepository? placeRepository,
     TargetPlatform? platform,
+    DateTime Function()? clock,
   }) : _auth = authRepository,
+       _clock = clock ?? DateTime.now,
        _places = placeRepository,
        _users = userRepository,
        _reviews = reviewRepository,
@@ -45,6 +49,7 @@ class ReviewViewModel extends SafeChangeNotifier {
   final Future<Uint8List> Function(Uint8List original) _compress;
   final PlaceRepository? _places;
   final TargetPlatform _platform;
+  final DateTime Function() _clock;
 
   static const String saveError = saveFailureMessage;
 
@@ -73,6 +78,49 @@ class ReviewViewModel extends SafeChangeNotifier {
         'Sem acesso $what. Para liberar, abra Configurações › Apps › '
             'NaÁrea › Permissões e permita $allow.',
     };
+  }
+
+  bool _isCheckingLock = false;
+
+  /// Consultando a trava do F03 (o formulário ainda não aparece).
+  bool get isCheckingLock => _isCheckingLock;
+
+  DateTime? _blockedSince;
+
+  /// Hora da última avaliação, quando ainda dentro do período mínimo (F03);
+  /// `null` = pode avaliar.
+  DateTime? get blockedSince => _blockedSince;
+
+  /// Avaliou o local há menos de [reviewCooldown]: sem formulário.
+  bool get isBlocked => _blockedSince != null;
+
+  /// "Você avaliou este lugar em 12/10. Pode avaliar de novo a partir de
+  /// 11/11 às 20h."
+  String? get blockedMessage {
+    final since = _blockedSince;
+    return since == null ? null : reviewBlockedMessage(since);
+  }
+
+  /// Consulta a trava do F03 antes de mostrar o formulário (com
+  /// [showProgress], o formulário fica oculto enquanto consulta). Erro ou
+  /// mais de [reviewLockTimeout]: segue sem trava, e as Rules negam o envio
+  /// se ainda estiver travado.
+  Future<void> checkLock({bool showProgress = true}) async {
+    final uid = _auth.currentUserId;
+    if (uid == null || _isCheckingLock) return;
+    _isCheckingLock = showProgress;
+    if (showProgress) notifyListeners();
+    try {
+      final lastAt = await _reviews
+          .reviewLockOf(uid, place.id)
+          .timeout(reviewLockTimeout);
+      _blockedSince = isReviewBlocked(lastAt, _clock()) ? lastAt : null;
+    } on Object catch (e) {
+      debugPrint('Trava de avaliação indisponível: $e');
+    } finally {
+      _isCheckingLock = false;
+      notifyListeners();
+    }
   }
 
   int? _food;
@@ -125,6 +173,8 @@ class ReviewViewModel extends SafeChangeNotifier {
       Scores.isValidCombination(_food, _ambience, _service);
 
   bool get canSubmit =>
+      !_isCheckingLock &&
+      !isBlocked &&
       !_isSubmitting &&
       !_isPicking &&
       !_isProcessingPhoto &&
@@ -281,8 +331,11 @@ class ReviewViewModel extends SafeChangeNotifier {
       }
       return true;
     } on Object {
-      // Inclui permission-denied das Rules.
-      _errorMessage = saveError;
+      // Inclui permission-denied das Rules. Uma causa comum é a trava do F03
+      // ter nascido depois de abrir o formulário (outro aparelho, corrida):
+      // confere de novo e, se travou, mostra a tela de bloqueio com as datas.
+      await checkLock(showProgress: false);
+      if (!isBlocked) _errorMessage = saveError;
       return false;
     } finally {
       _isSubmitting = false;
