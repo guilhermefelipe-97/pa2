@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:naarea/data/repositories/place_repository.dart';
 import 'package:naarea/data/repositories/saved_repository.dart';
 import 'package:naarea/ui/saved/saved_places_store.dart';
 
@@ -313,5 +315,93 @@ void main() {
     expect(store.entries.last.savedAt, DateTime.utc(2026, 9, 1));
     repo.writeGate!.complete();
     await pumpEventQueue();
+  });
+
+  group('local descoberto (G2): cria places antes do salvo', () {
+    test('salvar chama persistPlace e só depois grava o salvo', () async {
+      final order = <String>[];
+      final store = SavedPlacesStore(
+        authRepository: auth,
+        savedRepository: repo,
+        clock: () => now,
+        persistPlace: (uid, placeId) async =>
+            order.add('persist:$uid:$placeId'),
+      );
+      await pumpEventQueue();
+      expect(await store.setSaved('osm-n1', true), isTrue);
+      order.addAll(repo.writes);
+      expect(order, ['persist:me:osm-n1', 'save:osm-n1']);
+      expect(store.isSaved('osm-n1'), isTrue);
+    });
+
+    test('falha ao criar o local: não grava o salvo e reverte', () async {
+      final store = SavedPlacesStore(
+        authRepository: auth,
+        savedRepository: repo,
+        clock: () => now,
+        persistPlace: (_, _) async => throw Exception('permission-denied'),
+      );
+      await pumpEventQueue();
+      final done = store.setSaved('osm-n1', true);
+      expect(store.isSaved('osm-n1'), isTrue); // otimista
+      expect(await done, isFalse);
+      expect(store.isSaved('osm-n1'), isFalse);
+      expect(repo.writes, isEmpty);
+    });
+
+    test('remover não chama persistPlace', () async {
+      var calls = 0;
+      final store = SavedPlacesStore(
+        authRepository: auth,
+        savedRepository: repo,
+        clock: () => now,
+        persistPlace: (_, _) async => calls++,
+      );
+      await pumpEventQueue();
+      expect(await store.setSaved('novo', false), isTrue);
+      expect(calls, 0);
+    });
+
+    test(
+      'criação do local demora mais de 10 s: desiste, reverte e não grava',
+      () {
+        fakeAsync((async) {
+          final store = SavedPlacesStore(
+            authRepository: auth,
+            savedRepository: repo,
+            clock: () => now,
+            persistPlace: (_, _) => Completer<void>().future,
+          );
+          async.flushMicrotasks();
+          bool? ok;
+          store.setSaved('osm-n1', true).then((v) => ok = v);
+          async.elapse(const Duration(seconds: 9));
+          expect(ok, isNull);
+          expect(store.isSaved('osm-n1'), isTrue);
+          async.elapse(const Duration(seconds: 2));
+          expect(ok, isFalse);
+          expect(store.isSaved('osm-n1'), isFalse);
+          expect(repo.writes, isEmpty);
+        });
+      },
+    );
+
+    test(
+      'local fora do catálogo (nem descoberto nem gravado): falha sem gravar',
+      () async {
+        final places = FakePlaceRepository([]);
+        final store = SavedPlacesStore(
+          authRepository: auth,
+          savedRepository: repo,
+          clock: () => now,
+          persistPlace: (uid, placeId) =>
+              ensurePlaceForSave(places, uid: uid, placeId: placeId),
+        );
+        await pumpEventQueue();
+        expect(await store.setSaved('osm-n404', true), isFalse);
+        expect(store.isSaved('osm-n404'), isFalse);
+        expect(repo.writes, isEmpty);
+      },
+    );
   });
 }

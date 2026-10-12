@@ -15,6 +15,10 @@ typedef SaveChange = ({bool saved, Future<bool> done});
 /// listas, F12, que também o tira de todas as listas).
 typedef SavedRemover = Future<void> Function(String uid, String placeId);
 
+/// Garante `places/{placeId}` antes de salvar (G2: local só descoberto pelo
+/// Photon nasce no 1º salvamento). As Rules de `saved` exigem o local.
+typedef PlacePersister = Future<void> Function(String uid, String placeId);
+
 /// Fonte única do "Quero ir" (F11): ids salvos do usuário logado, carregados
 /// uma vez por sessão. Feed, detalhe, seletor e aba leem daqui, então o
 /// marcador fica consistente em todas as telas.
@@ -29,6 +33,7 @@ class SavedPlacesStore extends ChangeNotifier {
     required SavedRepository savedRepository,
     DateTime Function()? clock,
     Duration waitTimeout = const Duration(seconds: 10),
+    this.persistPlace,
   }) : _auth = authRepository,
        _repo = savedRepository,
        _clock = clock ?? DateTime.now,
@@ -69,6 +74,13 @@ class SavedPlacesStore extends ChangeNotifier {
 
   Future<void>? _loading;
   bool _disposed = false;
+
+  /// Chamado antes de cada gravação de salvo: cria o local descoberto em
+  /// `places` (G2). Se falhar, o salvamento falha e é revertido.
+  final PlacePersister? persistPlace;
+
+  /// Quanto esperar a criação do local antes de desistir do salvo.
+  static const persistTimeout = Duration(seconds: 10);
 
   /// Substitui o `remove` do repositório quando há listas (F12): remover do
   /// "Quero ir" tira o local de todas as listas no mesmo batch.
@@ -239,6 +251,20 @@ class SavedPlacesStore extends ChangeNotifier {
         final want = _entries[placeId];
         try {
           if (want != null) {
+            // Sem `await` quando não há hook: não muda a ordem das escritas
+            // (serialização por id).
+            final persist = persistPlace;
+            if (persist != null) {
+              try {
+                await persist(uid, placeId).timeout(persistTimeout);
+              } on Object {
+                // O local não pôde ser criado/confirmado em `places` (rede,
+                // Rules, tempo esgotado, local fora do catálogo). Sem ele as
+                // Rules negam o salvo: nem tenta gravar. Sobe para o catch
+                // externo, que reverte o otimismo ("Não foi possível salvar").
+                rethrow;
+              }
+            }
             DateTime? serverAt;
             try {
               await _repo.save(uid: uid, placeId: placeId);

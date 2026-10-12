@@ -55,9 +55,13 @@ class _GatedReviewRepository extends FakeReviewRepository {
   final Future<void> gate;
 
   @override
-  Future<void> createReview(NewReview review, {Uint8List? photo}) async {
+  Future<CreateReviewResult> createReview(
+    NewReview review, {
+    Uint8List? photo,
+    Place? newPlace,
+  }) async {
     await gate;
-    return super.createReview(review, photo: photo);
+    return super.createReview(review, photo: photo, newPlace: newPlace);
   }
 }
 

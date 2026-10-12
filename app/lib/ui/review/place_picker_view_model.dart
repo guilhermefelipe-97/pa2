@@ -1,20 +1,50 @@
 import 'dart:async';
 
+import '../../data/photon/photon_client.dart';
 import '../../data/repositories/place_repository.dart';
+import '../../data/services/location_service.dart';
+import '../../domain/geo.dart';
 import '../../domain/models/place.dart';
 import '../../domain/search_tokens.dart';
 import '../core/safe_change_notifier.dart';
 
-/// Escolha do local a avaliar: busca por nome no catálogo (~600 locais) sem
-/// ler a coleção inteira. Busca curta (0–1 letra) mostra sugestões (curados
-/// com foto).
+/// Escolha do local a avaliar: busca por nome no catálogo do Brasil (G2:
+/// gravados + descobertos pelo Photon) sem ler a coleção inteira. Busca curta
+/// (0–1 letra) mostra sugestões (curados com foto).
+///
+/// A posição (se a permissão JÁ foi dada; o seletor nunca pede) só dá o viés
+/// da descoberta: os lugares mais perto aparecem primeiro.
 class PlacePickerViewModel extends SafeChangeNotifier {
   PlacePickerViewModel({
     required PlaceRepository placeRepository,
+    LocationService? locationService,
     this.debounce = const Duration(milliseconds: 300),
-  }) : _places = placeRepository;
+  }) : _places = placeRepository,
+       _location = locationService;
 
   final PlaceRepository _places;
+  final LocationService? _location;
+
+  static const loadErrorMessage =
+      'Não foi possível carregar os locais. Verifique sua conexão.';
+  static const searchErrorMessage =
+      'Não foi possível buscar os locais. Verifique sua conexão.';
+
+  /// Última posição conhecida para o viés (sem pedido do sistema). Só uma
+  /// posição obtida fica guardada: sem ela, a próxima busca tenta de novo.
+  LatLng? _near;
+
+  Future<LatLng?> _bias() async {
+    final known = _near;
+    if (known != null) return known;
+    final location = _location;
+    if (location == null) return null;
+    try {
+      return _near = await location.lastKnownPositionIfGranted();
+    } on Object {
+      return null;
+    }
+  }
 
   /// Espera depois da última tecla antes de consultar.
   final Duration debounce;
@@ -77,8 +107,11 @@ class PlacePickerViewModel extends SafeChangeNotifier {
       !isShowingSuggestions &&
       _results.isEmpty;
 
-  /// Carga inicial: sugestões.
-  Future<void> load() => _loadSuggestions();
+  /// Carga inicial: sugestões (e já começa a buscar a posição do viés).
+  Future<void> load() {
+    unawaited(_bias());
+    return _loadSuggestions();
+  }
 
   void setQuery(String value) {
     if (value == _query) return;
@@ -124,7 +157,7 @@ class PlacePickerViewModel extends SafeChangeNotifier {
       _suggestionsLoaded = true;
     } on Object {
       if (seq != _seq) return;
-      _errorMessage = 'Não foi possível carregar os locais.';
+      _errorMessage = loadErrorMessage;
     }
     _isLoading = false;
     notifyListeners();
@@ -136,13 +169,17 @@ class PlacePickerViewModel extends SafeChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final list = await _places.search(_query);
+      final near = await _bias();
+      if (seq != _seq) return;
+      final list = await _places.search(_query, near: near);
       if (seq != _seq) return;
       _results = list;
-    } on Object {
+    } on Object catch (e) {
       if (seq != _seq) return;
       _results = const [];
-      _errorMessage = 'Não foi possível buscar os locais.';
+      _errorMessage = e is PhotonRateLimitedException
+          ? PhotonRateLimitedException.userMessage
+          : searchErrorMessage;
     }
     _isLoading = false;
     notifyListeners();

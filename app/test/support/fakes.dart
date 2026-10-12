@@ -150,15 +150,56 @@ class FakePlaceRepository implements PlaceRepository {
   final List<Set<String>> getCalls = [];
   final List<bool> refreshMissingCalls = [];
 
+  /// Viés de posição de cada [search] (mesma posição de [searchCalls]).
+  final List<LatLng?> searchNear = [];
+
   /// Permite controlar quando/como cada busca responde (ex.: Completer).
   Future<List<Place>> Function(String query)? searchOverride;
+
+  /// Descobertos (Photon) por id: [discoveredPlace] e [ensurePersisted].
+  final Map<String, Place> discovered = {};
+
+  /// Ids passados a [ensurePersisted] (com o uid).
+  final List<String> persistCalls = [];
+  final List<String> markedPersisted = [];
+  Object? persistError;
+
+  /// Segura cada [ensurePersisted] até ser liberado.
+  Completer<void>? persistGate;
+
+  @override
+  Future<void> ensurePersisted(Place place, {required String uid}) async {
+    persistCalls.add('$uid:${place.id}');
+    final gate = persistGate;
+    if (gate != null) await gate.future;
+    if (persistError != null) throw persistError!;
+    discovered.remove(place.id);
+  }
+
+  @override
+  Place? discoveredPlace(String placeId) => discovered[placeId];
+
+  final List<String> invalidated = [];
+
+  @override
+  void invalidate(String placeId) {
+    invalidated.add(placeId);
+    discovered.remove(placeId);
+  }
+
+  @override
+  void markPersisted(Place place) {
+    markedPersisted.add(place.id);
+    discovered.remove(place.id);
+  }
 
   /// Segura cada `getPlaces` até ser liberado.
   Completer<void>? getGate;
 
   @override
-  Future<List<Place>> search(String query) async {
+  Future<List<Place>> search(String query, {LatLng? near}) async {
     searchCalls.add(query);
+    searchNear.add(near);
     if (searchOverride != null) return searchOverride!(query);
     if (fail) throw Exception('network');
     final terms = normalizeQuery(query);
@@ -201,8 +242,16 @@ class FakePlaceRepository implements PlaceRepository {
   /// Segura cada `nearby` até ser liberado.
   Completer<void>? nearbyGate;
 
+  /// Próximos resultados de [nearby] marcados como parciais (Photon falhou)
+  /// ou no limite.
+  bool nearbyPartial = false;
+  bool nearbyCapped = false;
+
+  /// Erro de [nearby] (no lugar do `Exception('network')` de [fail]).
+  Object? nearbyError;
+
   @override
-  Future<List<NearbyPlace>> nearby(
+  Future<NearbyResult> nearby(
     double lat,
     double lng,
     double radiusMeters,
@@ -210,18 +259,23 @@ class FakePlaceRepository implements PlaceRepository {
     nearbyCalls.add((lat: lat, lng: lng, radius: radiusMeters));
     final gate = nearbyGate;
     if (gate != null) await gate.future;
+    if (nearbyError != null) throw nearbyError!;
     if (fail) throw Exception('network');
     final center = (lat: lat, lng: lng);
-    return [
-      for (final p in places)
-        if (p.hasCoordinates)
-          (
-            place: p,
-            distanceMeters: distanceMeters(center, (lat: p.lat!, lng: p.lng!)),
-          ),
-    ].where((n) => n.distanceMeters <= radiusMeters).toList()..sort(
-      compareNearby,
-    );
+    final list =
+        [
+            for (final p in places)
+              if (p.hasCoordinates)
+                (
+                  place: p,
+                  distanceMeters: distanceMeters(center, (
+                    lat: p.lat!,
+                    lng: p.lng!,
+                  )),
+                ),
+          ].where((n) => n.distanceMeters <= radiusMeters).toList()
+          ..sort(compareNearby);
+    return NearbyResult(list, partial: nearbyPartial, capped: nearbyCapped);
   }
 }
 
@@ -266,6 +320,19 @@ class FakeLocationService implements LocationService {
     return (status: LocationStatus.ok, position: position);
   }
 
+  int lastKnownCalls = 0;
+
+  /// Última posição conhecida (padrão: [position]).
+  LatLng? lastKnown;
+  bool useLastKnown = false;
+
+  @override
+  Future<LatLng?> lastKnownPositionIfGranted() async {
+    lastKnownCalls++;
+    if (!granted) return null;
+    return useLastKnown ? lastKnown : position;
+  }
+
   @override
   Future<bool> openAppSettings() async {
     openAppSettingsCalls++;
@@ -294,11 +361,23 @@ class FakeReviewRepository implements ReviewRepository {
   DateTime Function() clock = () =>
       DateTime.utc(2026, 9, 10, 23); // 20h em Natal
 
+  /// Local novo enviado com cada avaliação de [created] (mesma posição).
+  final List<Place?> createdNewPlaces = [];
+
+  /// O que [createReview] informa sobre o local novo (`null` = criou se
+  /// veio um [newPlace]).
+  bool? placeCreated;
+
   @override
-  Future<void> createReview(NewReview review, {Uint8List? photo}) async {
+  Future<CreateReviewResult> createReview(
+    NewReview review, {
+    Uint8List? photo,
+    Place? newPlace,
+  }) async {
     if (createError != null) throw createError!;
     created.add(review);
     createdPhotos.add(photo);
+    createdNewPlaces.add(newPlace);
     final id = 'r${stored.length + 1}';
     if (photo != null) photos[id] = photo;
     stored.add(
@@ -315,6 +394,7 @@ class FakeReviewRepository implements ReviewRepository {
         hasPhoto: photo != null,
       ),
     );
+    return (placeCreated: placeCreated ?? newPlace != null);
   }
 
   final List<String> placeFetchCalls = [];

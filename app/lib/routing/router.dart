@@ -3,9 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../data/repositories/auth_repository.dart';
+import '../data/services/location_service.dart';
 import '../domain/models/place.dart';
 import '../ui/auth/auth_view.dart';
 import '../ui/auth/auth_view_model.dart';
+import '../ui/core/app_clock.dart';
 import '../ui/core/app_shell.dart';
 import '../ui/core/follow_events.dart';
 import '../ui/core/view_model_host.dart';
@@ -170,6 +172,7 @@ GoRouter buildRouter(AuthRepository auth) {
               placeRepository: context.read(),
               reviewRepository: context.read(),
               followEvents: context.read<FollowEvents>(),
+              clock: context.read<AppClock?>()?.now,
             ),
             builder: (context, vm) => PlaceDetailView(viewModel: vm),
           );
@@ -196,8 +199,10 @@ GoRouter buildRouter(AuthRepository auth) {
       GoRoute(
         path: Routes.pickPlace,
         builder: (context, state) => ViewModelHost<PlacePickerViewModel>(
-          create: (context) =>
-              PlacePickerViewModel(placeRepository: context.read()),
+          create: (context) => PlacePickerViewModel(
+            placeRepository: context.read(),
+            locationService: context.read<LocationService?>(),
+          ),
           builder: (context, vm) => PlacePickerView(viewModel: vm),
         ),
         routes: [
@@ -213,6 +218,7 @@ GoRouter buildRouter(AuthRepository auth) {
                 userRepository: context.read(),
                 reviewRepository: context.read(),
                 photoPicker: context.read(),
+                placeRepository: context.read(),
                 compress: compressPhotoInBackground,
               ),
               builder: (context, vm) => ReviewView(viewModel: vm),

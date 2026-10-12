@@ -3,11 +3,13 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../domain/models/companion.dart';
+import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart';
 import '../../domain/photo_compression.dart';
 import '../chunk.dart';
 import '../repositories/review_repository.dart';
+import 'place_doc.dart';
 
 class FirestoreReviewRepository implements ReviewRepository {
   FirestoreReviewRepository(
@@ -29,7 +31,11 @@ class FirestoreReviewRepository implements ReviewRepository {
       _db.collection('reviews');
 
   @override
-  Future<void> createReview(NewReview review, {Uint8List? photo}) {
+  Future<CreateReviewResult> createReview(
+    NewReview review, {
+    Uint8List? photo,
+    Place? newPlace,
+  }) async {
     if (photo != null && (photo.isEmpty || photo.length > maxPhotoBytes)) {
       throw ArgumentError.value(
         photo.length,
@@ -37,9 +43,92 @@ class FirestoreReviewRepository implements ReviewRepository {
         'precisa ter de 1 a $maxPhotoBytes bytes',
       );
     }
+    if (newPlace != null && newPlace.id != review.placeId) {
+      throw ArgumentError.value(newPlace.id, 'newPlace', 'outro local');
+    }
     // Id gerado no cliente: a foto usa o mesmo id da avaliação.
     final ref = _reviews.doc();
+    final placeRef = newPlace != null && newPlace.discovered
+        ? _db.collection(placesCollection).doc(newPlace.id)
+        : null;
+    var placeName = review.placeName;
+    var createPlace = false;
+    if (placeRef != null) {
+      try {
+        final existing = await placeRef.get();
+        createPlace = !existing.exists;
+        // O local já existe (outra pessoa criou; nome do OSM pode ter mudado
+        // desde então): as Rules exigem o `name` do doc gravado.
+        placeName = _storedName(existing) ?? placeName;
+      } on Object {
+        // Sem ler, tenta criar: se já existir, o batch falha e o ramo de
+        // corrida abaixo resolve.
+        createPlace = true;
+      }
+    }
+    try {
+      await _commit(
+        ref,
+        review,
+        placeName,
+        photo,
+        createPlace ? newPlace : null,
+      );
+      return (placeCreated: createPlace);
+    } on Object catch (error, stack) {
+      // Ack perdido: a avaliação foi gravada mas a resposta não chegou.
+      if (await _existsOnServer(ref) == true) {
+        return (placeCreated: createPlace);
+      }
+      if (!createPlace) Error.throwWithStackTrace(error, stack);
+      // Corrida: o local nasceu entre a leitura e o commit (o set dele virou
+      // update, negado, e derrubou o batch). Com o doc lá, grava sem ele, com
+      // o nome que está gravado.
+      final DocumentSnapshot<Map<String, dynamic>> existing;
+      try {
+        existing = await placeRef!.get(const GetOptions(source: Source.server));
+      } on Object {
+        // A releitura falhou: o erro que importa é o do commit.
+        Error.throwWithStackTrace(error, stack);
+      }
+      if (!existing.exists) Error.throwWithStackTrace(error, stack);
+      placeName = _storedName(existing) ?? placeName;
+      await _commit(ref, review, placeName, photo, null);
+      return (placeCreated: false);
+    }
+  }
+
+  static String? _storedName(DocumentSnapshot<Map<String, dynamic>> snap) {
+    final name = snap.data()?['name'];
+    return snap.exists && name is String ? name : null;
+  }
+
+  /// `true`/`false` lido no servidor; `null` se a leitura falhou.
+  static Future<bool?> _existsOnServer(
+    DocumentReference<Map<String, dynamic>> ref,
+  ) async {
+    try {
+      return (await ref.get(const GetOptions(source: Source.server))).exists;
+    } on Object {
+      return null;
+    }
+  }
+
+  Future<void> _commit(
+    DocumentReference<Map<String, dynamic>> ref,
+    NewReview review,
+    String placeName,
+    Uint8List? photo,
+    Place? createPlace,
+  ) {
     final batch = _db.batch();
+    if (createPlace != null) {
+      // Mesmo batch: as Rules da review exigem o local ao fim dele.
+      batch.set(
+        _db.collection(placesCollection).doc(createPlace.id),
+        newPlaceData(createPlace, uid: review.authorId),
+      );
+    }
     // Schema exato (11 chaves) validado pelas Rules (hasOnly/hasAll). O período
     // do dia NÃO é gravado; createdAt é sempre o timestamp do servidor.
     // Eixo não avaliado vai como null (F14): a chave está sempre presente.
@@ -48,7 +137,7 @@ class FirestoreReviewRepository implements ReviewRepository {
       'authorId': review.authorId,
       'authorName': review.authorName,
       'placeId': review.placeId,
-      'placeName': review.placeName,
+      'placeName': placeName,
       'food': review.scores.food,
       'ambience': review.scores.ambience,
       'service': review.scores.service,

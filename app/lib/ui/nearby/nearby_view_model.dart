@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../data/photon/photon_client.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/review_repository.dart';
@@ -119,8 +120,9 @@ NearbySuggestion? pickSuggestion(
 /// Aba "Perto" (F10): o que está a 300 m / 1 km / 3 km de onde a pessoa
 /// está agora, com uma sugestão em 1 toque.
 ///
-/// A posição fica só em memória ([position]); ao servidor vão apenas os
-/// prefixos de geohash da consulta.
+/// A posição fica só em memória ([position]): ao Firestore vão apenas os
+/// prefixos de geohash e ao Photon (G2), só o centro da célula de geohash 7
+/// da posição (~150 m), nunca a posição exata. Nada é gravado.
 class NearbyViewModel extends SafeChangeNotifier {
   NearbyViewModel({
     required LocationService locationService,
@@ -180,7 +182,23 @@ class NearbyViewModel extends SafeChangeNotifier {
   bool isSaved(String placeId) => _saved?.isSaved(placeId) ?? false;
 
   /// Resultados por (geohash 7 da posição, raio), durante a sessão.
-  final Map<String, List<NearbyPlace>> _cache = {};
+  final Map<String, NearbyResult> _cache = {};
+
+  bool _partial = false;
+
+  /// A descoberta ao vivo falhou: a lista tem só os lugares já conhecidos
+  /// (aviso discreto + "Tentar de novo").
+  bool get partial => _partial;
+
+  bool _capped = false;
+
+  /// A descoberta devolveu o máximo: "Mostrando os 50 mais próximos".
+  bool get capped => _capped;
+
+  bool _rateLimited = false;
+
+  /// A falha foi o Photon pedindo para esperar (HTTP 429).
+  bool get rateLimited => _rateLimited;
 
   /// placeId → nomes de quem o usuário segue que foi lá. `null`: ainda não
   /// carregado (ou falhou: tenta de novo na próxima carga).
@@ -286,19 +304,31 @@ class NearbyViewModel extends SafeChangeNotifier {
 
   Future<void> _load(LatLng position, int gen) async {
     final radius = _radius;
+    _rateLimited = false;
     _phase = NearbyPhase.loading;
     notifyListeners();
     _follow?.clear();
+    // Fora do Brasil não há o que buscar (G2): nem vai à rede.
+    if (!inServiceArea(position)) {
+      _items = const [];
+      _partial = false;
+      _capped = false;
+      _phase = NearbyPhase.ready;
+      notifyListeners();
+      return;
+    }
     try {
       final results = await Future.wait([
         _nearby(position, radius),
         _loadFriends(),
       ]);
       if (gen != _generation) return;
-      final found = results[0] as List<NearbyPlace>;
+      final result = results[0] as NearbyResult;
       final friends = results[1] as Map<String, List<String>>;
+      _partial = result.partial;
+      _capped = result.capped;
       _items = [
-        for (final n in found)
+        for (final n in result.places)
           NearbyItem(
             place: n.place,
             distanceMeters: n.distanceMeters,
@@ -306,9 +336,12 @@ class NearbyViewModel extends SafeChangeNotifier {
           ),
       ];
       _phase = NearbyPhase.ready;
-    } on Object {
+    } on Object catch (e) {
       if (gen != _generation) return;
       _items = const [];
+      _partial = false;
+      _capped = false;
+      _rateLimited = e is PhotonRateLimitedException;
       _phase = NearbyPhase.loadError;
     }
     notifyListeners();
@@ -316,10 +349,7 @@ class NearbyViewModel extends SafeChangeNotifier {
 
   /// Locais a até [radius] de [position], do cache quando a posição cai na
   /// mesma célula de geohash 7 já consultada com esse raio.
-  Future<List<NearbyPlace>> _nearby(
-    LatLng position,
-    NearbyRadius radius,
-  ) async {
+  Future<NearbyResult> _nearby(LatLng position, NearbyRadius radius) async {
     final cell = geohashEncode(
       position.lat,
       position.lng,
@@ -334,17 +364,23 @@ class NearbyViewModel extends SafeChangeNotifier {
         center.lng,
         radius.meters + cacheCellSlackMeters,
       );
-      _cache[key] = candidates;
+      // Parcial (Photon falhou) não fica no cache: "Tentar de novo" busca
+      // tudo outra vez.
+      if (!candidates.partial) _cache[key] = candidates;
     }
     // Filtro final pela distância real a partir da posição exata.
     final out = <NearbyPlace>[];
-    for (final c in candidates) {
+    for (final c in candidates.places) {
       final p = c.place;
       if (!p.hasCoordinates) continue;
       final d = distanceMeters(position, (lat: p.lat!, lng: p.lng!));
       if (d <= radius.meters) out.add((place: p, distanceMeters: d));
     }
-    return out..sort(compareNearby);
+    return NearbyResult(
+      out..sort(compareNearby),
+      partial: candidates.partial,
+      capped: candidates.capped,
+    );
   }
 
   /// Sinal "foi aqui": avaliações de quem o usuário segue (mesma fonte do

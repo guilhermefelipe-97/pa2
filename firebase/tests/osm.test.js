@@ -424,3 +424,33 @@ describe('geohash do seed = geofire-common (fixture compartilhada com o app)', (
     });
   }
 });
+
+describe('categoria: paridade com o app e com as Rules (G2)', () => {
+  const catFixture = require('./fixtures/osm-category.json');
+  const { AMENITIES } = require('../seed/osm/category');
+
+  it('vocabulário e amenities iguais aos da fixture compartilhada com o Dart', () => {
+    assert.deepEqual(CATEGORIES, catFixture.categories);
+    assert.deepEqual(AMENITIES, catFixture.amenities);
+  });
+
+  it('categoryFor dá o resultado da fixture em todos os casos', () => {
+    for (const c of catFixture.category) {
+      assert.equal(categoryFor(c.amenity, c.cuisine ?? undefined), c.expected, JSON.stringify(c));
+    }
+  });
+
+  it('cuisineLabel dá o resultado da fixture em todos os casos', () => {
+    for (const c of catFixture.cuisine) {
+      assert.equal(cuisineLabel(c.input ?? undefined), c.expected, JSON.stringify(c));
+    }
+  });
+
+  it('placeCategories() das Rules = CATEGORIES (o app só cria local com categoria do vocabulário)', () => {
+    const rules = fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8');
+    const body = rules.match(/function placeCategories\(\) \{\s*return \[([\s\S]*?)\];/);
+    assert.ok(body, 'placeCategories() não encontrada em firestore.rules');
+    const inRules = [...body[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    assert.deepEqual(inRules, CATEGORIES);
+  });
+});

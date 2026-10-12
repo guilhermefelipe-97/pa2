@@ -1,26 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/photon/photon_client.dart';
 import '../../domain/geo.dart';
 import '../../domain/models/place.dart';
 import '../../routing/routes.dart';
 import '../core/app_shell.dart';
+import '../core/osm_credit.dart';
 import '../core/save_button.dart';
 import '../feed/widgets/place_photo.dart';
 import 'nearby_view_model.dart';
 
-/// "120 m · Restaurante".
+/// Categoria e bairro do local (o que houver).
+List<String> _placeDetails(Place place) => [
+  if (place.category.trim().isNotEmpty) place.category.trim(),
+  if (place.neighborhood.trim().isNotEmpty) place.neighborhood.trim(),
+];
+
+/// "120 m · Restaurante · Ponta Negra".
 String nearbySubtitle(NearbyItem item) => [
   formatDistance(item.distanceMeters),
-  if (item.place.category.trim().isNotEmpty) item.place.category.trim(),
+  ..._placeDetails(item.place),
 ].join(' · ');
 
 /// O que o leitor de tela diz de um item: "Mangai, a 120 metros,
-/// Restaurante, está no Quero ir, Ana foi aqui".
+/// Restaurante, Ponta Negra, está no Quero ir, Ana foi aqui".
 String nearbySemanticsLabel(NearbyItem item, {required bool saved}) => [
   item.place.name,
   spokenDistance(item.distanceMeters),
-  if (item.place.category.trim().isNotEmpty) item.place.category.trim(),
+  ..._placeDetails(item.place),
   if (saved) 'está no Quero ir',
   ?item.friendsLabel,
 ].join(', ');
@@ -41,7 +49,8 @@ class NearbyView extends StatefulWidget {
   static const explainTitle = 'Para mostrar o que está perto de você';
   static const explainBody =
       'O NaÁrea usa sua localização só agora, para buscar os lugares em '
-      'volta. Ela não é guardada nem compartilhada.';
+      'volta. Sua localização aproximada é usada para buscar lugares no '
+      'OpenStreetMap (serviço Photon) e não fica guardada.';
   static const useLocationLabel = 'Usar minha localização';
   static const retryLabel = 'Tentar de novo';
   static const openSettingsLabel = 'Abrir configurações';
@@ -53,9 +62,11 @@ class NearbyView extends StatefulWidget {
   static const serviceOffMessage = 'Ative a localização do aparelho';
   static const locationErrorMessage =
       'Não foi possível descobrir onde você está.';
-  static const loadErrorMessage =
-      'Não foi possível carregar os lugares. Verifique sua conexão.';
-  static const outOfAreaMessage = 'Ainda não temos lugares por aqui';
+  static const loadErrorMessage = 'Não foi possível buscar lugares por perto';
+  static const outOfAreaMessage = 'O NaÁrea funciona só no Brasil por enquanto';
+  static const partialMessage =
+      'Mostrando só lugares já conhecidos — não foi possível buscar todos agora';
+  static const cappedMessage = 'Mostrando os 50 mais próximos';
 
   static String emptyMessage(NearbyRadius r) => 'Nada a ${r.label}';
   static String widenLabel(NearbyRadius r) => 'Ampliar para ${r.label}';
@@ -195,12 +206,25 @@ class _NearbyViewState extends State<NearbyView> {
     if (vm.phase == NearbyPhase.loadError) {
       return _Message(
         icon: Icons.wifi_off,
-        title: NearbyView.loadErrorMessage,
+        title: vm.rateLimited
+            ? PhotonRateLimitedException.userMessage
+            : NearbyView.loadErrorMessage,
         actionLabel: NearbyView.retryLabel,
         onAction: vm.retry,
       );
     }
     final items = vm.items;
+    if (items.isEmpty && vm.partial) {
+      // Sem a descoberta ao vivo e sem nada conhecido por perto: não dá para
+      // dizer "nada a 300 m".
+      return _Message(
+        key: const Key('nearby-partial-empty'),
+        icon: Icons.cloud_off,
+        title: NearbyView.partialMessage,
+        actionLabel: NearbyView.retryLabel,
+        onAction: vm.retry,
+      );
+    }
     if (items.isEmpty) {
       if (vm.outOfArea) {
         return const _Message(
@@ -218,19 +242,39 @@ class _NearbyViewState extends State<NearbyView> {
       );
     }
     final suggestion = vm.suggestion;
+    final header = <Widget>[
+      if (vm.partial) PartialNotice(onRetry: vm.retry),
+      if (suggestion != null)
+        SuggestionCard(
+          suggestion: suggestion,
+          onOpen: () => _open(suggestion.item.place),
+        ),
+    ];
+    final footer = <Widget>[
+      if (vm.capped)
+        Padding(
+          key: const Key('nearby-capped'),
+          padding: const EdgeInsets.only(top: 4, bottom: 4),
+          child: Text(
+            NearbyView.cappedMessage,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      // Dados do OpenStreetMap na tela (Photon ou seed): crédito ODbL no fim.
+      if (items.any((i) => i.place.hasOsmData))
+        const OsmCredit(padding: EdgeInsets.only(top: 4)),
+    ];
     return ListView.builder(
       key: const Key('nearby-list'),
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-      itemCount: items.length + (suggestion == null ? 0 : 1),
+      itemCount: header.length + items.length + footer.length,
       itemBuilder: (context, i) {
-        if (suggestion != null && i == 0) {
-          return SuggestionCard(
-            suggestion: suggestion,
-            onOpen: () => _open(suggestion.item.place),
-          );
+        if (i < header.length) return header[i];
+        if (i >= header.length + items.length) {
+          return footer[i - header.length - items.length];
         }
-        final item = items[i - (suggestion == null ? 0 : 1)];
+        final item = items[i - header.length];
         return NearbyTile(
           key: ValueKey('nearby-${item.place.id}'),
           item: item,
@@ -339,8 +383,7 @@ class SuggestionCard extends StatelessWidget {
                     Semantics(
                       label: [
                         spokenDistance(item.distanceMeters),
-                        if (place.category.trim().isNotEmpty)
-                          place.category.trim(),
+                        ..._placeDetails(place),
                       ].join(', '),
                       excludeSemantics: true,
                       child: Text(
@@ -550,6 +593,43 @@ class _Message extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Aviso discreto: a descoberta ao vivo falhou e a lista tem só os lugares
+/// já conhecidos (gravados).
+class PartialNotice extends StatelessWidget {
+  const PartialNotice({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      key: const Key('nearby-partial'),
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(
+            Icons.cloud_off,
+            size: 18,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              NearbyView.partialMessage,
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          TextButton(
+            onPressed: onRetry,
+            child: const Text(NearbyView.retryLabel),
+          ),
+        ],
       ),
     );
   }

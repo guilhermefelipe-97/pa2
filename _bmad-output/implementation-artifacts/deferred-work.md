@@ -71,3 +71,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-g1-foto-de-quem-avaliou.md`
   summary: Documentar capacidade das fotos no Firestore (Spark: 1 GiB, 50 mil leituras/dia) com alerta de cota e plano de migração para Storage quando houver Blaze.
   evidence: Cada foto ~≤150 KB e 1 leitura por sessão por usuário; algumas milhares de fotos esgotam o armazenamento gratuito.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-g2-catalogo-brasil-photon.md`
+  summary: Verificar no servidor que um local criado pelo cliente existe no OSM (e limitar criações por usuário).
+  evidence: Sem Cloud Functions (Blaze) as Rules só validam formato; qualquer usuário logado pode criar `places/osm-…` com dados plausíveis porém falsos.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-g2-catalogo-brasil-photon.md`
+  summary: Instância própria do Photon (ou outro provedor) quando o uso passar do "fair use" da instância pública da Komoot.
+  evidence: photon.komoot.io não tem SLA; bloqueio ou 429 deixam Perto/busca dependentes só dos locais já gravados.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-g2-catalogo-brasil-photon.md`
+  summary: Categoria por cozinha para locais descobertos (Photon não traz `cuisine`; pizzaria vira "Restaurante" e fica gravado assim).
+  evidence: O app nunca edita locais; a categoria do 1º registro permanece.

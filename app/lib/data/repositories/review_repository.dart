@@ -1,6 +1,10 @@
 import 'dart:typed_data';
 
+import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
+
+/// Resultado de [ReviewRepository.createReview].
+typedef CreateReviewResult = ({bool placeCreated});
 
 abstract class ReviewRepository {
   /// Limite do operador `whereIn` do Firestore.
@@ -9,7 +13,17 @@ abstract class ReviewRepository {
   /// Grava a avaliação. Com [photo] (JPEG já recodificado, ≤ 150.000 bytes),
   /// grava `reviews/{id}` com `hasPhoto: true` e `reviewPhotos/{id}` num único
   /// batch: ou as duas, ou nenhuma.
-  Future<void> createReview(NewReview review, {Uint8List? photo});
+  ///
+  /// Com [newPlace] (local só descoberto pelo Photon, G2) e sem doc em
+  /// `places/{id}`, o local é criado no MESMO batch (as Rules exigem o local
+  /// ao fim do batch). Se outra pessoa o criou antes (corrida), a avaliação
+  /// é gravada sem recriá-lo — com o nome que está gravado no local.
+  /// [CreateReviewResult.placeCreated] diz se ESTA chamada criou o local.
+  Future<CreateReviewResult> createReview(
+    NewReview review, {
+    Uint8List? photo,
+    Place? newPlace,
+  });
 
   /// Avaliações dos [authorIds], mais recentes primeiro. Com [limit], só as
   /// [limit] mais recentes no total (ex.: o perfil mostra as 50 últimas).

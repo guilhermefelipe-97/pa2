@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:naarea/data/photon/photon_client.dart';
 import 'package:naarea/data/services/location_service.dart';
 import 'package:naarea/domain/geo.dart';
 import 'package:naarea/domain/models/place.dart';
@@ -185,14 +186,18 @@ void main() {
       expect(NearbyRadius.km3.wider, isNull);
     });
 
-    test('fora de Natal (50 km): fora da área, sem itens', () async {
-      final env = _Env(granted: true, position: (lat: -6.24, lng: -35.211));
-      final vm = env.vm();
-      await vm.start();
-      expect(vm.phase, NearbyPhase.ready);
-      expect(vm.items, isEmpty);
-      expect(vm.outOfArea, isTrue);
-    });
+    test(
+      'fora do Brasil (Lisboa): fora da área, sem itens nem consulta',
+      () async {
+        final env = _Env(granted: true, position: (lat: 38.7223, lng: -9.1393));
+        final vm = env.vm();
+        await vm.start();
+        expect(vm.phase, NearbyPhase.ready);
+        expect(vm.items, isEmpty);
+        expect(vm.outOfArea, isTrue);
+        expect(env.places.nearbyCalls, isEmpty);
+      },
+    );
 
     test('falha de rede: loadError; "Tentar de novo" recupera', () async {
       final env = _Env(granted: true);
@@ -208,6 +213,46 @@ void main() {
       expect(vm.items, hasLength(6));
       // Mesma posição: não pediu de novo.
       expect(env.location.locateCalls, 1);
+    });
+
+    test(
+      'Photon falhou (parcial): mostra os gravados, não guarda no cache; "Tentar de novo" busca tudo',
+      () async {
+        final env = _Env(granted: true);
+        env.places.nearbyPartial = true;
+        final vm = env.vm();
+        await vm.start();
+        expect(vm.phase, NearbyPhase.ready);
+        expect(vm.partial, isTrue);
+        expect(vm.items, hasLength(6));
+        env.places.nearbyPartial = false;
+        await vm.retry();
+        expect(vm.partial, isFalse);
+        expect(env.places.nearbyCalls, hasLength(2));
+        // Agora completo: fica no cache.
+        await vm.retry();
+        expect(env.places.nearbyCalls, hasLength(2));
+      },
+    );
+
+    test('limite do Photon: capped', () async {
+      final env = _Env(granted: true);
+      env.places.nearbyCapped = true;
+      final vm = env.vm();
+      await vm.start();
+      expect(vm.capped, isTrue);
+    });
+
+    test('HTTP 429 nas duas fontes: loadError com rateLimited', () async {
+      final env = _Env(granted: true);
+      env.places.nearbyError = const PhotonRateLimitedException();
+      final vm = env.vm();
+      await vm.start();
+      expect(vm.phase, NearbyPhase.loadError);
+      expect(vm.rateLimited, isTrue);
+      env.places.nearbyError = Exception('rede');
+      await vm.retry();
+      expect(vm.rateLimited, isFalse);
     });
 
     test('resposta antiga é descartada (troca de raio no meio)', () async {

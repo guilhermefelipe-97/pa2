@@ -6,6 +6,7 @@ import '../../domain/models/place.dart';
 import '../../domain/search_tokens.dart';
 import '../chunk.dart';
 import '../repositories/place_repository.dart';
+import 'place_doc.dart';
 
 class FirestorePlaceRepository implements PlaceRepository {
   FirestorePlaceRepository(this._db);
@@ -21,8 +22,9 @@ class FirestorePlaceRepository implements PlaceRepository {
   /// Limite do `whereIn`.
   static const _whereInLimit = 30;
 
-  /// `places` é somente leitura para o cliente: o que já foi lido (inclusive
-  /// "não existe" → null) vale para a sessão inteira. Guardar o Future
+  /// O cliente nunca edita `places` (só cria, G2): o que já foi lido
+  /// (inclusive "não existe" → null) vale para a sessão inteira, até
+  /// [markPersisted]/[ensurePersisted]. Guardar o Future
   /// deduplica leituras em andamento.
   final Map<String, Future<Place?>> _byId = {};
 
@@ -46,10 +48,17 @@ class FirestorePlaceRepository implements PlaceRepository {
   static bool _validId(String id) => id.isNotEmpty && !id.contains('/');
 
   CollectionReference<Map<String, dynamic>> get _col =>
-      _db.collection('places');
+      _db.collection(placesCollection);
+
+  /// Criações em andamento por id (dedupe de toques/telas simultâneos).
+  final Map<String, Future<void>> _creating = {};
+
+  /// Documentos criados por [ensurePersisted] (para testes).
+  @visibleForTesting
+  int createCount = 0;
 
   @override
-  Future<List<Place>> search(String query) async {
+  Future<List<Place>> search(String query, {LatLng? near}) async {
     final terms = normalizeQuery(query);
     final term = serverTerm(terms);
     if (term == null) return const [];
@@ -75,7 +84,7 @@ class FirestorePlaceRepository implements PlaceRepository {
   }
 
   @override
-  Future<List<NearbyPlace>> nearby(
+  Future<NearbyResult> nearby(
     double lat,
     double lng,
     double radiusMeters,
@@ -99,11 +108,13 @@ class FirestorePlaceRepository implements PlaceRepository {
     for (final snap in snaps) {
       for (final p in _parse(snap.docs)) {
         if (!seen.add(p.id) || !p.hasCoordinates) continue;
+        // O geohash só escolhe candidatos; quem decide é a distância real
+        // sobre lat/lng (um geohash forjado não põe ninguém no raio).
         final d = distanceMeters(center, (lat: p.lat!, lng: p.lng!));
         if (d <= radiusMeters) out.add((place: p, distanceMeters: d));
       }
     }
-    return out..sort(compareNearby);
+    return NearbyResult(out..sort(compareNearby));
   }
 
   @override
@@ -130,6 +141,83 @@ class FirestorePlaceRepository implements PlaceRepository {
       for (final id in wanted) _byId[id]!.then((p) => MapEntry(id, p)),
     ]);
     return {for (final e in entries) e.key: ?e.value};
+  }
+
+  @override
+  Future<void> ensurePersisted(Place place, {required String uid}) {
+    if (!place.discovered) return Future.value();
+    final running = _creating[place.id];
+    if (running != null) return running;
+    final future = _create(place, uid).whenComplete(() {
+      _creating.remove(place.id);
+    });
+    _creating[place.id] = future;
+    return future;
+  }
+
+  Future<void> _create(Place place, String uid) async {
+    final ref = _col.doc(place.id);
+    // Já existe (seed, outra pessoa ou outra tela): usa o que está lá. Se a
+    // leitura falhar, tenta criar assim mesmo (as Rules impedem duplicar).
+    bool? exists;
+    try {
+      exists = await _readExisting(ref);
+    } on Object {
+      exists = null;
+    }
+    if (exists == true) return;
+    try {
+      createCount++;
+      await ref.set(newPlaceData(place, uid: uid));
+    } on Object catch (error, stack) {
+      // Corrida: alguém criou entre a leitura e a escrita (o create virou
+      // update, negado). Se o doc está lá (no servidor), segue.
+      try {
+        if (await _readExisting(ref, fromServer: true)) return;
+      } on Object {
+        // A releitura também falhou: o erro que importa é o da criação.
+      }
+      Error.throwWithStackTrace(error, stack);
+    }
+    markPersisted(place);
+  }
+
+  /// Lê `places/{id}`; se existir, guarda no cache e devolve `true`. Doc
+  /// existente mas malformado: limpa o cache do id (a próxima leitura tenta
+  /// de novo) e também devolve `true` — ele existe, não há o que criar.
+  Future<bool> _readExisting(
+    DocumentReference<Map<String, dynamic>> ref, {
+    bool fromServer = false,
+  }) async {
+    final snap = fromServer
+        ? await ref.get(const GetOptions(source: Source.server))
+        : await ref.get();
+    final data = snap.data();
+    if (!snap.exists || data == null) return false;
+    final existing = placeFromData(ref.id, data);
+    if (existing != null) {
+      _byId[existing.id] = Future.value(existing);
+      _absent.remove(existing.id);
+    } else {
+      invalidate(ref.id);
+    }
+    return true;
+  }
+
+  @override
+  void invalidate(String placeId) {
+    _byId.remove(placeId);
+    _absent.remove(placeId);
+  }
+
+  /// Os gravados nunca são "descobertos".
+  @override
+  Place? discoveredPlace(String placeId) => null;
+
+  @override
+  void markPersisted(Place place) {
+    _byId[place.id] = Future.value(place.asPersisted());
+    _absent.remove(place.id);
   }
 
   /// Uma consulta por lote. Em erro, os ids saem do cache (nova tentativa na

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/services/photo_picker.dart';
@@ -26,8 +27,10 @@ class ReviewViewModel extends SafeChangeNotifier {
     required ReviewRepository reviewRepository,
     required PhotoPicker photoPicker,
     required Future<Uint8List> Function(Uint8List original) compress,
+    PlaceRepository? placeRepository,
     TargetPlatform? platform,
   }) : _auth = authRepository,
+       _places = placeRepository,
        _users = userRepository,
        _reviews = reviewRepository,
        _picker = photoPicker,
@@ -40,6 +43,7 @@ class ReviewViewModel extends SafeChangeNotifier {
   final ReviewRepository _reviews;
   final PhotoPicker _picker;
   final Future<Uint8List> Function(Uint8List original) _compress;
+  final PlaceRepository? _places;
   final TargetPlatform _platform;
 
   static const String saveError = saveFailureMessage;
@@ -251,7 +255,9 @@ class ReviewViewModel extends SafeChangeNotifier {
     try {
       final profile = await _users.getProfile(uid);
       if (profile == null) throw StateError('perfil ausente');
-      await _reviews.createReview(
+      // Local só descoberto (Photon, G2): nasce no mesmo batch da avaliação.
+      final newPlace = place.discovered ? place : null;
+      final result = await _reviews.createReview(
         NewReview(
           authorId: uid,
           authorName: profile.displayName,
@@ -262,7 +268,17 @@ class ReviewViewModel extends SafeChangeNotifier {
           comment: _comment, // NewReview normaliza: trim, vazio → null
         ),
         photo: _photo,
+        newPlace: newPlace,
       );
+      if (newPlace != null) {
+        if (result.placeCreated) {
+          _places?.markPersisted(newPlace);
+        } else {
+          // Outra pessoa criou o local (dados dela, talvez outro nome): a
+          // próxima leitura busca o doc gravado.
+          _places?.invalidate(newPlace.id);
+        }
+      }
       return true;
     } on Object {
       // Inclui permission-denied das Rules.

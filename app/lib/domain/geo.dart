@@ -231,13 +231,26 @@ String spokenDistance(double meters) {
   return r.km == '1' ? 'a 1 quilômetro' : 'a ${r.km} quilômetros';
 }
 
-/// Centro de Natal/RN: referência para "Ainda não temos lugares por aqui".
+/// Centro de Natal/RN (seed do catálogo, G0).
 const LatLng natalCenter = (lat: -5.7945, lng: -35.2110);
 
-/// Raio em volta de [natalCenter] que o catálogo cobre (o município tem
-/// ~20 km de norte a sul; folga para a Grande Natal).
-const double serviceAreaRadiusMeters = 25000;
+/// Retângulo APROXIMADO do Brasil (com Fernando de Noronha e Trindade): onde
+/// o app descobre lugares (Photon, G2) e onde as Rules aceitam criar um
+/// local. Por ser um retângulo, inclui pedaços de países vizinhos (Uruguai,
+/// Paraguai, Bolívia...); lá o filtro `countrycode == BR` do Photon descarta
+/// os resultados. MESMOS limites de `inBrazilBounds()` em
+/// `firebase/firestore.rules` (teste de paridade em `geo_test.dart`).
+const brazilBounds = (south: -34.0, north: 5.5, west: -74.0, east: -28.5);
 
-/// [position] está na área que o catálogo cobre.
-bool inServiceArea(LatLng position) =>
-    distanceMeters(position, natalCenter) <= serviceAreaRadiusMeters;
+/// Centro aproximado do Brasil: viés da busca quando não há posição.
+const LatLng brazilCenter = (lat: -14.235, lng: -51.9253);
+
+/// [position] está dentro do retângulo aproximado [brazilBounds].
+bool inBrazilBounds(LatLng position) =>
+    position.lat >= brazilBounds.south &&
+    position.lat <= brazilBounds.north &&
+    position.lng >= brazilBounds.west &&
+    position.lng <= brazilBounds.east;
+
+/// [position] está na área que o catálogo cobre (o Brasil, G2).
+bool inServiceArea(LatLng position) => inBrazilBounds(position);

@@ -416,10 +416,146 @@ describe('places', () => {
     await assertFails(getDoc(doc(anon(), 'places/camaroes')));
   });
 
-  it('cliente nunca escreve', async () => {
+  it('cliente nunca edita nem apaga local existente', async () => {
     await assertFails(setDoc(doc(alice(), 'places/novo'), { name: 'X' }));
     await assertFails(updateDoc(doc(alice(), 'places/camaroes'), { name: 'X' }));
     await assertFails(deleteDoc(doc(alice(), 'places/camaroes')));
+  });
+});
+
+/// Local descoberto pelo Photon (G2), como o app grava na 1ª interação.
+function newPlace(overrides = {}) {
+  return {
+    name: 'Bar do Zé',
+    category: 'Bar',
+    neighborhood: 'Sé',
+    city: 'São Paulo',
+    address: 'Praça da Sé, 1',
+    lat: -23.5503,
+    lng: -46.6339,
+    geohash: '6gyf4bf1x',
+    osmId: 'node/123',
+    source: 'osm',
+    createdBy: 'alice',
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+describe('places: criação pelo app (G2)', () => {
+  it('logado cria local OSM válido (node, way, relation)', async () => {
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace()));
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-w45'), newPlace({ osmId: 'way/45' })));
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-r7'), newPlace({ osmId: 'relation/7' })));
+  });
+
+  it('campos de texto vazios são aceitos (Photon sem bairro/cidade/endereço)', async () => {
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ neighborhood: '', city: '', address: '' })));
+  });
+
+  it('anônimo não cria', async () => {
+    await assertFails(setDoc(doc(anon(), 'places/osm-n123'), newPlace()));
+  });
+
+  it('id fora do padrão osm-[nwr][1-9][0-9]* é negado (inclusive zero à esquerda)', async () => {
+    for (const id of ['novo', 'osm-x123', 'osm-n', 'osm-n12a', 'mangai-natal', 'osm-N123', 'xosm-n123', 'osm-n0', 'osm-n0123']) {
+      await assertFails(setDoc(doc(alice(), 'places/' + id), newPlace()));
+    }
+  });
+
+  it('zero à esquerda é negado mesmo com osmId coerente (seria duplicata de osm-n123)', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n0123'), newPlace({ osmId: 'node/0123' })));
+  });
+
+  it('osmId precisa casar com o id', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ osmId: 'node/124' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ osmId: 'way/123' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-w123'), newPlace({ osmId: 'node/123' })));
+  });
+
+  it('coordenadas fora do Brasil ou não numéricas são negadas', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: 38.7223, lng: -9.1393 }))); // Lisboa
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: -34.9, lng: -56.16 }))); // Montevidéu
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: 6, lng: -60 })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: -10, lng: -75 })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: '-23.5', lng: -46.6 })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: null })));
+  });
+
+  it('chave extra ou faltando é negada', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ photoUrl: 'https://x/y.jpg' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ updatedAt: serverTimestamp() })));
+    // Campos de busca não são do cliente.
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ searchTokens: ['ba', 'bar'] })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ nameLower: 'bar do ze' })));
+    const { address: _a, ...missing } = newPlace();
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), missing));
+  });
+
+  it('nome: 1–120 caracteres, aparado', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ name: '' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ name: ' Bar ' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ name: 'x'.repeat(121) })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ name: 42 })));
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ name: 'x'.repeat(120) })));
+  });
+
+  it('categoria precisa ser do vocabulário', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ category: 'Local' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ category: 'Boate' })));
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ category: 'Praça de alimentação' })));
+  });
+
+  it('geohash: 9 caracteres base32', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: '6gyf4bf8' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: '6gyf4bf8ma' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: '6gyf4bf8a' }))); // "a" não é base32
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: 123456789 })));
+  });
+
+  it('source "osm", createdBy = uid e createdAt do servidor', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ source: 'curated' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ createdBy: 'bob' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ createdAt: Timestamp.now() })));
+  });
+
+  it('corrida: create num doc que já existe vira update e é negado (o app segue)', async () => {
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace()));
+    await assertFails(setDoc(doc(bob(), 'places/osm-n123'), newPlace({ createdBy: 'bob' })));
+    const snap = await assertSucceeds(getDoc(doc(bob(), 'places/osm-n123')));
+    if (snap.data().createdBy !== 'alice') throw new Error('o doc da 1ª criação deveria ficar');
+  });
+
+  it('update e delete do local criado são negados (inclusive ao criador)', async () => {
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace()));
+    await assertFails(updateDoc(doc(alice(), 'places/osm-n123'), { name: 'Outro' }));
+    await assertFails(deleteDoc(doc(alice(), 'places/osm-n123')));
+  });
+
+  it('avaliação e local novo no mesmo batch', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace());
+    batch.set(doc(db, 'reviews/nova'), validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    await assertSucceeds(batch.commit());
+  });
+
+  it('avaliação de local inexistente continua negada', async () => {
+    await assertFails(setDoc(doc(alice(), 'reviews/nova'), validReview({ placeId: 'osm-n999', placeName: 'Bar do Zé' })));
+  });
+
+  it('batch com local forjado derruba a avaliação junto', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace({ lat: 38.7, lng: -9.1 }));
+    batch.set(doc(db, 'reviews/nova'), validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    await assertFails(batch.commit());
+  });
+
+  it('salvar no Quero ir depois de criar o local', async () => {
+    await assertFails(setDoc(doc(alice(), 'users/alice/saved/osm-n123'), { createdAt: serverTimestamp() }));
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace()));
+    await assertSucceeds(setDoc(doc(alice(), 'users/alice/saved/osm-n123'), { createdAt: serverTimestamp() }));
   });
 });
 

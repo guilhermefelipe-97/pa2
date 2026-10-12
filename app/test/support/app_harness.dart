@@ -13,6 +13,7 @@ import 'package:naarea/data/services/photo_picker.dart';
 import 'package:naarea/domain/feed.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/routing/router.dart';
+import 'package:naarea/ui/core/app_clock.dart';
 import 'package:naarea/ui/core/follow_events.dart';
 import 'package:naarea/ui/lists/lists_store.dart';
 import 'package:naarea/ui/place/place_detail_view_model.dart';
@@ -85,6 +86,7 @@ Future<TestApp> pumpApp(
   await tester.pumpWidget(
     MultiProvider(
       providers: [
+        Provider<AppClock>.value(value: AppClock(clock)),
         ChangeNotifierProvider<AuthRepository>.value(value: auth),
         Provider<UserRepository>.value(value: u),
         Provider<PlaceRepository>.value(value: p),
@@ -100,6 +102,9 @@ Future<TestApp> pumpApp(
             authRepository: auth,
             savedRepository: s,
             clock: clock,
+            // Igual ao main.dart (G2): local descoberto nasce antes do salvo.
+            persistPlace: (uid, placeId) =>
+                ensurePlaceForSave(p, uid: uid, placeId: placeId),
           ),
         ),
         Provider<ListsRepository>.value(value: l),

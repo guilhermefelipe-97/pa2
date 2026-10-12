@@ -97,10 +97,78 @@ service cloud.firestore {
         && data.placeIds.size() <= 200;
     }
 
-    // ---------- places (somente seed/admin escreve) ----------
+    // ---------- places ----------
+    // Seed/admin grava Natal (ignora as Rules). Fora disso (G2), o app cria o
+    // local descoberto pelo Photon/OSM na 1ª interação (avaliar ou salvar):
+    // só create, nunca update/delete; id `osm-{n|w|r}{id}` (sem zero à
+    // esquerda) = mesmo esquema do
+    // seed, então o mesmo local nunca vira dois docs (o 2º create de uma
+    // corrida é um update, negado, e o app segue com o doc que já existe).
+    // Sem `nameLower`/`searchTokens`: o cliente não grava campos de busca
+    // (não dá para validá-los e um forjado poluiria a busca de todos). Fora
+    // de Natal, a busca acha os locais criados pelo Photon.
+    function placeKeys() {
+      return ['name', 'category', 'neighborhood', 'city', 'address', 'lat',
+              'lng', 'geohash', 'osmId', 'source', 'createdBy', 'createdAt'];
+    }
+
+    // MESMO vocabulário de `CATEGORIES` em firebase/seed/osm/category.js e
+    // `osmCategories` em app/lib/domain/osm_category.dart (teste de paridade
+    // em firebase/tests/osm.test.js).
+    function placeCategories() {
+      return ['Restaurante', 'Lanchonete', 'Pub', 'Bar', 'Café', 'Sorveteria',
+              'Praça de alimentação', 'Cervejaria', 'Pizzaria', 'Hamburgueria',
+              'Japonês', 'Churrascaria', 'Frutos do mar', 'Padaria',
+              'Tapiocaria', 'Açaí', 'Comida regional', 'Comida brasileira',
+              'Italiano', 'Chinês', 'Árabe', 'Mexicano', 'Vegetariano', 'Vegano',
+              'Mercado', 'Feira'];
+    }
+
+    function osmTypeName(letter) {
+      return {'n': 'node', 'w': 'way', 'r': 'relation'}.get(letter, '');
+    }
+
+    function optionalText(v) {
+      return v is string && v.size() <= 120;
+    }
+
+    // Retângulo APROXIMADO do Brasil (com Fernando de Noronha e Trindade;
+    // inclui pedaços de países vizinhos). MESMO de `brazilBounds` em
+    // app/lib/domain/geo.dart (teste de paridade lê este arquivo).
+    function inBrazilBounds(lat, lng) {
+      return lat is number && lng is number
+        && lat >= -34.0 && lat <= 5.5
+        && lng >= -74.0 && lng <= -28.5;
+    }
+
+    function validNewPlace(data, placeId) {
+      return placeId.matches('osm-[nwr][1-9][0-9]*')
+        && data.keys().hasOnly(placeKeys())
+        && data.keys().hasAll(placeKeys())
+        && data.name is string
+        && data.name == data.name.trim()
+        && data.name.size() >= 1
+        && data.name.size() <= 120
+        && data.category in placeCategories()
+        && optionalText(data.neighborhood)
+        && optionalText(data.city)
+        && optionalText(data.address)
+        && inBrazilBounds(data.lat, data.lng)
+        // Só o formato: um geohash forjado não tem efeito, porque o "Perto"
+        // usa o geohash apenas para escolher candidatos e sempre filtra pela
+        // distância real (haversine) sobre lat/lng, que são validados acima.
+        && data.geohash is string
+        && data.geohash.matches('[0-9b-hjkmnp-z]{9}')
+        && data.osmId == osmTypeName(placeId[4]) + '/' + placeId[5:placeId.size()]
+        && data.source == 'osm'
+        && data.createdBy == request.auth.uid
+        && data.createdAt == request.time;
+    }
+
     match /places/{placeId} {
       allow read: if signedIn();
-      allow write: if false;
+      allow create: if signedIn() && validNewPlace(request.resource.data, placeId);
+      allow update, delete: if false;
     }
 
     // ---------- reviews ----------
@@ -166,8 +234,9 @@ service cloud.firestore {
         && data.authorId == request.auth.uid
         && data.authorName == profile.data.displayName
         && data.placeId is string
-        && exists(placePath)
-        && data.placeName == get(placePath).data.name
+        // `After`: o local pode nascer no mesmo batch da avaliação (G2).
+        && existsAfter(placePath)
+        && data.placeName == getAfter(placePath).data.name
         && validAxes(data)
         && validCompanion(data.companion)
         && validComment(data.comment)

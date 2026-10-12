@@ -471,7 +471,9 @@ void main() {
           seed: (l) => l.seed('me', 'l', 'Lista'),
         );
         places.getGate = Completer();
-        await app.listsStore(tester).setMembership('l', 'd', true);
+        // Salvar confirma o local no catálogo antes de gravar (G2), e essa
+        // leitura também espera o portão: não dá para esperar o salvo aqui.
+        final adding = app.listsStore(tester).setMembership('l', 'd', true);
         await tester.pump();
         await tester.tap(_chip('l'));
         await tester.pump();
@@ -480,6 +482,7 @@ void main() {
 
         places.getGate!.complete();
         await tester.pumpAndSettle();
+        await adding;
         expect(_cardNames(tester), ['Novo']);
       },
     );
