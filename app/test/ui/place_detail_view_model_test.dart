@@ -57,6 +57,7 @@ void main() {
         placeRepository: places,
         reviewRepository: reviews,
         followEvents: FollowEvents(),
+        visitRepository: FakeVisitRepository(),
       );
 
   test(
@@ -186,7 +187,7 @@ void main() {
   test(
     'FeedItem de local fora do catálogo continua (não vira "não encontrado")',
     () async {
-      final item = groupReviewsIntoFeed([
+      final item = groupActivitiesIntoFeed([
         review(authorId: 'a', placeId: 'sumiu', placeName: 'Sumiu'),
       ]).single;
       final vm = make('sumiu', initial: item);
@@ -205,7 +206,7 @@ void main() {
       await bare.load();
       expect(bare.errorMessage, PlaceDetailViewModel.errorText);
 
-      final item = groupReviewsIntoFeed([
+      final item = groupActivitiesIntoFeed([
         review(authorId: 'a', placeId: 'x'),
       ]).single;
       final ready = make('x', initial: item);
@@ -231,6 +232,7 @@ void main() {
         placeRepository: places,
         reviewRepository: reviews,
         followEvents: events,
+        visitRepository: FakeVisitRepository(),
       );
       await vm.load();
       await vm.reloadIfStale();

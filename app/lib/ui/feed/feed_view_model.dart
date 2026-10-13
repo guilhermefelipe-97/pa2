@@ -2,12 +2,15 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
+import '../../data/repositories/visit_repository.dart';
 import '../../domain/feed.dart';
 import '../../domain/models/place.dart';
 import '../core/follow_events.dart';
+import '../core/load_visits.dart';
 import '../core/safe_change_notifier.dart';
 
-/// Feed "Amigos foram aqui" (F05).
+/// Feed "Amigos foram aqui" (F05): avaliações e visitas ("Voltei aqui",
+/// F15) de quem o usuário segue, por local.
 class FeedViewModel extends SafeChangeNotifier {
   FeedViewModel({
     required AuthRepository authRepository,
@@ -15,11 +18,13 @@ class FeedViewModel extends SafeChangeNotifier {
     required ReviewRepository reviewRepository,
     required PlaceRepository placeRepository,
     required FollowEvents followEvents,
+    required VisitRepository visitRepository,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _users = userRepository,
        _reviews = reviewRepository,
        _places = placeRepository,
+       _visits = visitRepository,
        _follow = FollowStaleness(followEvents),
        _clock = clock ?? DateTime.now;
 
@@ -27,6 +32,7 @@ class FeedViewModel extends SafeChangeNotifier {
   final UserRepository _users;
   final ReviewRepository _reviews;
   final PlaceRepository _places;
+  final VisitRepository _visits;
   final FollowStaleness _follow;
   final DateTime Function() _clock;
 
@@ -116,12 +122,18 @@ class FeedViewModel extends SafeChangeNotifier {
       final following = {...await _users.getFollowing(uid)}..remove(uid);
       var items = const <FeedItem>[];
       if (following.isNotEmpty) {
-        final reviews = await _reviews.fetchReviewsByAuthors(
-          following.toList(),
+        // Falha só das visitas: cards só com as avaliações.
+        final read = await loadFriendActivities(
+          reviews: _reviews,
+          visits: _visits,
+          authors: following.toList(),
+          where: 'feed',
         );
         // Só os locais que aparecem no feed; _loadPlaces nunca lança.
-        final places = await _loadPlaces({for (final r in reviews) r.placeId});
-        items = groupReviewsIntoFeed(reviews, places: places);
+        final places = await _loadPlaces({
+          for (final a in read.activities) a.placeId,
+        });
+        items = groupActivitiesIntoFeed(read.activities, places: places);
       }
       // Só depois de tudo dar certo: uma falha no meio mantém o estado
       // anterior inteiro (relação, cards e CTA coerentes entre si).

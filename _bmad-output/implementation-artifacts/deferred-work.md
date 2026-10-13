@@ -87,3 +87,11 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-f03-bloqueio-reavaliacao.md`
   summary: Limpar trava de reavaliação quando a avaliação for removida por moderação/LGPD/exclusão de conta.
   evidence: Trava não é apagável pelas Rules; uma review removida pelo admin deixa o autor bloqueado por até 30 dias.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-f15-recorrencia.md`
+  summary: Restringir leitura de visitas (e avaliações) a quem segue o autor, ou atrasar/arredondar o horário exibido, para não virar sinal de presença em tempo real.
+  evidence: `visits` é legível por qualquer logado com `createdAt` do servidor; consultas `whereIn authorId` não permitem regra por seguidor no Firestore, exigindo outro modelo (fan-out ou Functions).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-f15-recorrencia.md`
+  summary: Prova de presença na visita (checar proximidade no cliente) e limite global de visitas por dia; desfazer visita acidental e exclusão por LGPD.
+  evidence: Hoje dá para registrar "Voltei aqui" de casa a cada 12 h por local; visita e trava são imutáveis.

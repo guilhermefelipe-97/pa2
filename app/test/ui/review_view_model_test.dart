@@ -177,6 +177,7 @@ void main() {
         reviewRepository: reviews,
         placeRepository: FakePlaceRepository([_place]),
         followEvents: FollowEvents(),
+        visitRepository: FakeVisitRepository(),
       );
       await feed.load();
       final r = feed.items.single.reviews.single;
@@ -199,6 +200,7 @@ void main() {
       reviewRepository: reviews,
       placeRepository: FakePlaceRepository([_place]),
       followEvents: FollowEvents(),
+      visitRepository: FakeVisitRepository(),
     );
     await feed.load();
     final r = feed.items.single.reviews.single;
@@ -261,6 +263,7 @@ void main() {
         reviewRepository: reviews,
         placeRepository: FakePlaceRepository([_place]),
         followEvents: FollowEvents(),
+        visitRepository: FakeVisitRepository(),
       );
       await feed.load();
       expect(feed.items.single.latestComment?.comment, 'Vale cada centavo');
@@ -558,6 +561,7 @@ void main() {
           reviewRepository: reviews,
           placeRepository: FakePlaceRepository([_place]),
           followEvents: FollowEvents(),
+          visitRepository: FakeVisitRepository(),
         );
         await feed.load();
         final cover = feed.items.single.latestPhoto!;

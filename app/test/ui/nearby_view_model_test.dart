@@ -58,6 +58,7 @@ class _Env {
   final FakeLocationService location;
   final users = FakeUserRepository();
   final reviews = FakeReviewRepository();
+  final visits = FakeVisitRepository();
   final auth = FakeAuthRepository(uid: 'me');
   final saved = FakeSavedRepository();
   final follow = FollowEvents();
@@ -71,6 +72,7 @@ class _Env {
     reviewRepository: reviews,
     followEvents: follow,
     savedStore: store,
+    visitRepository: visits,
   );
 }
 
@@ -331,6 +333,74 @@ void main() {
         );
         expect(i.distanceMeters, lessThanOrEqualTo(300));
       }
+    });
+  });
+
+  group('F15: visitas no sinal de amigos', () {
+    test(
+      'quem só registrou visita conta como "foi aqui" e na sugestão',
+      () async {
+        final env = _Env(granted: true);
+        env.users.followingByUser['me'] = {'ana'};
+        env.visits.stored.addAll([
+          visit(authorId: 'ana', authorName: 'Ana', placeId: 'p160'),
+          // Quem não sigo não conta.
+          visit(authorId: 'bia', authorName: 'Bia', placeId: 'p80'),
+        ]);
+        final vm = env.vm();
+        await vm.start();
+        final s = vm.suggestion!;
+        expect(s.item.place.id, 'p160');
+        expect(s.reason, SuggestionReason.friend);
+        expect(s.item.friendsLabel, 'Ana foi aqui');
+        expect(s.item.recurrence, isNull);
+        expect(env.visits.fetchCalls.single, ['ana']);
+      },
+    );
+
+    test('recorrência: avaliação + visita da mesma pessoa = "🔁 Ana voltou 2 '
+        'vezes", sem repetir o nome', () async {
+      final env = _Env(granted: true);
+      env.users.followingByUser['me'] = {'ana', 'bia'};
+      env.reviews.stored.add(
+        review(
+          authorId: 'ana',
+          authorName: 'Ana',
+          placeId: 'p120',
+          createdAt: DateTime.utc(2026, 9, 1),
+        ),
+      );
+      env.visits.stored.addAll([
+        visit(
+          authorId: 'ana',
+          authorName: 'Ana',
+          placeId: 'p120',
+          createdAt: DateTime.utc(2026, 9, 5),
+        ),
+        visit(
+          authorId: 'bia',
+          authorName: 'Bia',
+          placeId: 'p120',
+          createdAt: DateTime.utc(2026, 9, 3),
+        ),
+      ]);
+      final vm = env.vm();
+      await vm.start();
+      final item = vm.items.firstWhere((i) => i.place.id == 'p120');
+      expect(item.friends, ['Ana', 'Bia']);
+      expect(item.recurrence, 'Ana voltou 2 vezes');
+    });
+
+    test('falha só das visitas: sinal com as avaliações', () async {
+      final env = _Env(granted: true);
+      env.users.followingByUser['me'] = {'ana'};
+      env.reviews.stored.add(
+        review(authorId: 'ana', authorName: 'Ana', placeId: 'p160'),
+      );
+      env.visits.fetchError = StateError('offline');
+      final vm = env.vm();
+      await vm.start();
+      expect(vm.suggestion!.item.friendsLabel, 'Ana foi aqui');
     });
   });
 

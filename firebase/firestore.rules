@@ -64,6 +64,22 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Trava do F15 ("Voltei aqui"): no máximo 1 visita a cada 12 h por
+      // usuário e local. Mesmo padrão do F03: `lastAt` do servidor, só
+      // nasce/renova no mesmo batch que cria a visita nova `visitId` do mesmo
+      // autor e local; nunca apagável. Separada da trava de avaliação: quem
+      // está no período do F03 pode registrar visita.
+      // MESMO período de `visitCooldown` em app/lib/domain/visit_lock.dart
+      // (teste de paridade lê este arquivo).
+      match /visitLocks/{placeId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && validVisitLock(placeId, request.resource.data);
+        allow update: if isOwner(uid)
+          && validVisitLock(placeId, request.resource.data)
+          && request.time >= resource.data.lastAt + duration.value(12, 'h');
+        allow delete: if false;
+      }
+
       match /saved/{placeId} {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid)
@@ -108,6 +124,25 @@ service cloud.firestore {
         && review != null
         && review.data.authorId == request.auth.uid
         && review.data.placeId == placeId;
+    }
+
+    function visitLockKeys() {
+      return ['lastAt', 'visitId', 'placeId'];
+    }
+
+    // A visita `visitId` é nova, nasce neste batch, do mesmo autor e local.
+    function validVisitLock(placeId, data) {
+      let visitPath = /databases/$(database)/documents/visits/$(data.visitId);
+      let visit = getAfter(visitPath);
+      return data.keys().hasOnly(visitLockKeys())
+        && data.keys().hasAll(visitLockKeys())
+        && data.placeId == placeId
+        && data.visitId is string
+        && data.lastAt == request.time
+        && !exists(visitPath)
+        && visit != null
+        && visit.data.authorId == request.auth.uid
+        && visit.data.placeId == placeId;
     }
 
     function listKeys() {
@@ -296,6 +331,44 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && validReview(request.resource.data, reviewId);
       // Editar/excluir fica para F03/F04.
+      allow update, delete: if false;
+    }
+
+    // ---------- visits (F15: "Voltei aqui") ----------
+    // Ida leve ao local: sem notas, companhia opcional, período derivado do
+    // `createdAt` (F02). Nunca anônima (autor e nome do perfil validados
+    // como na review), imutável e limitada a 1 a cada 12 h por usuário e
+    // local pela trava `users/{uid}/visitLocks/{placeId}` do mesmo batch.
+    function visitKeys() {
+      return ['authorId', 'authorName', 'placeId', 'placeName', 'companion', 'createdAt'];
+    }
+
+    function visitLockPath(uid, placeId) {
+      return /databases/$(database)/documents/users/$(uid)/visitLocks/$(placeId);
+    }
+
+    function validVisit(data, visitId) {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let placePath = /databases/$(database)/documents/places/$(data.placeId);
+      let lock = getAfter(visitLockPath(request.auth.uid, data.placeId));
+      return data.keys().hasOnly(visitKeys())
+        && data.keys().hasAll(visitKeys())
+        && data.authorId == request.auth.uid
+        && data.authorName == profile.data.displayName
+        && data.placeId is string
+        // `After`: o local pode nascer no mesmo batch da visita (G2).
+        && existsAfter(placePath)
+        && data.placeName == getAfter(placePath).data.name
+        && validCompanion(data.companion)
+        && lock != null
+        && lock.data.lastAt == request.time
+        && lock.data.visitId == visitId
+        && data.createdAt == request.time;
+    }
+
+    match /visits/{visitId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validVisit(request.resource.data, visitId);
       allow update, delete: if false;
     }
 

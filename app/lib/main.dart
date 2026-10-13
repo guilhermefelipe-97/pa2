@@ -14,6 +14,7 @@ import 'data/firebase/firestore_review_photo_repository.dart';
 import 'data/firebase/firestore_review_repository.dart';
 import 'data/firebase/firestore_saved_repository.dart';
 import 'data/firebase/firestore_user_repository.dart';
+import 'data/firebase/firestore_visit_repository.dart';
 import 'data/photon/photon_client.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/lists_repository.dart';
@@ -22,6 +23,7 @@ import 'data/repositories/review_photo_repository.dart';
 import 'data/repositories/review_repository.dart';
 import 'data/repositories/saved_repository.dart';
 import 'data/repositories/user_repository.dart';
+import 'data/repositories/visit_repository.dart';
 import 'data/services/location_service.dart';
 import 'data/services/photo_picker.dart';
 import 'firebase_config.dart';
@@ -105,6 +107,8 @@ Future<void> main() async {
         Provider<ReviewRepository>(
           create: (_) => FirestoreReviewRepository(db),
         ),
+        // "Voltei aqui" (F15): visitas sem nota, contam como recorrência.
+        Provider<VisitRepository>(create: (_) => FirestoreVisitRepository(db)),
         // Fotos de quem avaliou (G1): cache em memória, limpo na troca de usuário.
         Provider<ReviewPhotoRepository>(
           create: (_) => FirestoreReviewPhotoRepository(

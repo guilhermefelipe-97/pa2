@@ -14,8 +14,8 @@ String placeSubtitle(String neighborhood, String category) =>
 List<({String id, String name})> distinctAuthors(FeedItem item) {
   final seen = <String>{};
   return [
-    for (final r in item.reviews)
-      if (seen.add(r.authorId)) (id: r.authorId, name: r.authorName),
+    for (final a in item.activities)
+      if (seen.add(a.authorId)) (id: a.authorId, name: a.authorName),
   ];
 }
 

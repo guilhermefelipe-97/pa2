@@ -8,6 +8,8 @@ import '../../data/services/photo_picker.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/models/review.dart';
 import '../feed/widgets/axis_scores.dart' show noScoresLabel;
+import '../visit/visit_sheet.dart';
+import '../visit/visit_view_model.dart';
 import 'review_view_model.dart';
 
 /// Dica abaixo do Enviar enquanto nenhum eixo tem nota (F14).
@@ -40,6 +42,18 @@ class _ReviewViewState extends State<ReviewView> {
     if (ok && context.mounted) context.pop(true);
   }
 
+  /// F15: bloqueado pelo F03, a alternativa é registrar a visita (mesmo
+  /// fluxo do detalhe). Registrada, avisa e volta com `false` (nenhuma
+  /// avaliação nova, mas quem abriu recarrega para mostrar a visita).
+  Future<void> _registerVisit(BuildContext context) async {
+    final registered = await showVisitSheet(context, place: viewModel.place);
+    if (!registered || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text(VisitViewModel.successMessage)),
+    );
+    context.pop(false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -55,7 +69,12 @@ class _ReviewViewState extends State<ReviewView> {
               child: CircularProgressIndicator(),
             );
           }
-          if (vm.isBlocked) return _BlockedReview(message: vm.blockedMessage!);
+          if (vm.isBlocked) {
+            return _BlockedReview(
+              message: vm.blockedMessage!,
+              onRegisterVisit: () => _registerVisit(context),
+            );
+          }
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -186,11 +205,13 @@ class _ReviewViewState extends State<ReviewView> {
 }
 
 /// F03: o usuário avaliou o local há menos de 30 dias. Sem formulário de
-/// notas: só a explicação com as datas.
+/// notas: a explicação com as datas e, como alternativa, "Registrar visita"
+/// (F15: voltar conta como recorrência, sem nota).
 class _BlockedReview extends StatelessWidget {
-  const _BlockedReview({required this.message});
+  const _BlockedReview({required this.message, required this.onRegisterVisit});
 
   final String message;
+  final VoidCallback onRegisterVisit;
 
   @override
   Widget build(BuildContext context) {
@@ -216,6 +237,21 @@ class _BlockedReview extends StatelessWidget {
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Voltou aqui? Registre a visita: ela conta para quem segue você.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: FilledButton.icon(
+            key: const Key('review-register-visit'),
+            onPressed: onRegisterVisit,
+            icon: const Icon(Icons.replay),
+            label: const Text('Registrar visita'),
           ),
         ),
       ],

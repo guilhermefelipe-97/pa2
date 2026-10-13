@@ -34,6 +34,7 @@ void main() {
       placeRepository: places,
       clock: () => DateTime.utc(2026, 9, 28, 15),
       followEvents: FollowEvents(),
+      visitRepository: FakeVisitRepository(),
     );
   });
 
@@ -224,6 +225,7 @@ void main() {
         reviewRepository: reviews,
         placeRepository: places,
         followEvents: events,
+        visitRepository: FakeVisitRepository(),
       );
       users.followingByUser['me'] = {'a'};
       reviews.stored.add(review(authorId: 'a', placeId: 'x'));

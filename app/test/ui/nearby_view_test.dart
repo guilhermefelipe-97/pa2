@@ -33,6 +33,7 @@ Future<TestApp> _openNearby(
   FakeLocationService? location,
   FakeUserRepository? users,
   FakeReviewRepository? reviews,
+  FakeVisitRepository? visits,
 }) async {
   final app = await pumpApp(
     tester,
@@ -40,6 +41,7 @@ Future<TestApp> _openNearby(
     location: location,
     users: users,
     reviews: reviews,
+    visits: visits,
   );
   await tester.tap(_tab('Perto'));
   await tester.pumpAndSettle();
@@ -144,6 +146,50 @@ void main() {
       expect(app.places.nearbyCalls, hasLength(1));
     },
   );
+
+  testWidgets('F15: item mostra "🔁 Ana voltou 2 vezes" (avaliação + visita)', (
+    tester,
+  ) async {
+    final users = FakeUserRepository()
+      ..addUser('me', 'Bianca')
+      ..addUser('ana', 'Ana')
+      ..followingByUser['me'] = {'ana'};
+    final reviews = FakeReviewRepository()
+      ..stored.add(
+        review(authorId: 'ana', authorName: 'Ana', placeId: 'perto240'),
+      );
+    final visits = FakeVisitRepository()
+      ..stored.add(
+        visit(
+          authorId: 'ana',
+          authorName: 'Ana',
+          placeId: 'perto240',
+          createdAt: DateTime.utc(2026, 9, 2),
+        ),
+      );
+    await _openNearby(
+      tester,
+      places: _places,
+      users: users,
+      reviews: reviews,
+      visits: visits,
+      location: FakeLocationService(position: pontaNegra, granted: true),
+    );
+    final item = find.byKey(const ValueKey('nearby-perto240'));
+    expect(
+      find.descendant(of: item, matching: find.text('Ana voltou 2 vezes')),
+      findsOneWidget,
+    );
+    // Ícone decorativo ao lado do texto.
+    expect(
+      find.descendant(of: item, matching: find.text('🔁')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: item, matching: find.text('Ana foi aqui')),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('AC: nada em 300 m → "Ampliar para 1 km" mostra até 1 km', (
     tester,

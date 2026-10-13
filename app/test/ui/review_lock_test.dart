@@ -170,6 +170,7 @@ void main() {
           placeRepository: FakePlaceRepository([_mangai]),
           reviewRepository: reviews,
           followEvents: FollowEvents(),
+          visitRepository: FakeVisitRepository(),
           clock: clock,
         );
 
@@ -326,8 +327,8 @@ void main() {
         )
         .first;
 
-    testWidgets('formulário bloqueado: mensagem com datas, sem notas nem '
-        'outras ações', (tester) async {
+    testWidgets('formulário bloqueado: mensagem com datas, sem notas; só a '
+        'alternativa ativa "Registrar visita" (F15)', (tester) async {
       final reviews = FakeReviewRepository()..lock('toni', 'mangai', _today);
       final vm = formVm(reviews, _today.add(const Duration(hours: 1)));
       await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
@@ -336,7 +337,10 @@ void main() {
       expect(find.text(_blockedText), findsOneWidget);
       expect(find.byKey(const Key('axis-food-1')), findsNothing);
       expect(find.byKey(const Key('review-submit')), findsNothing);
-      expect(find.byKey(const Key('review-register-visit')), findsNothing);
+      final visit = tester.widget<ButtonStyleButton>(
+        find.byKey(const Key('review-register-visit')),
+      );
+      expect(visit.onPressed, isNotNull);
       expect(find.byType(OutlinedButton), findsNothing);
     });
 

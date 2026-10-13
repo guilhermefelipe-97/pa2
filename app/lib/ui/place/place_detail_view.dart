@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/models/place.dart';
-import '../../domain/models/review.dart';
+import '../../domain/models/place_activity.dart';
 import '../../routing/routes.dart';
 import '../core/osm_credit.dart';
 import '../core/save_button.dart';
@@ -11,6 +11,10 @@ import '../feed/widgets/axis_scores.dart';
 import '../feed/widgets/feed_card.dart';
 import '../feed/widgets/place_photo.dart';
 import '../feed/widgets/review_tile.dart';
+import '../feed/widgets/trust_sources.dart' show RecurrenceBadge;
+import '../feed/widgets/visit_tile.dart';
+import '../visit/visit_sheet.dart';
+import '../visit/visit_view_model.dart';
 import 'place_detail_view_model.dart';
 import 'review_photo_strip.dart';
 
@@ -53,14 +57,30 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
           content: Text('Avaliação enviada! Quem segue você já pode ver.'),
         ),
       );
-      // A avaliação nova aparece no detalhe (como "Você").
-      widget.viewModel.load();
     }
+    // `true`: avaliação nova; `false`: a tela de bloqueio do F03 registrou
+    // uma visita (F15). As duas aparecem no detalhe (como "Você").
+    if (sent == false) widget.viewModel.markVisited();
+    if (sent != null) widget.viewModel.load();
+  }
+
+  /// "Voltei aqui" (F15): sheet com companhia opcional; registrada, avisa e
+  /// recarrega (a visita aparece como "Você" e conta na recorrência).
+  Future<void> _visit(Place place) async {
+    final registered = await showVisitSheet(context, place: place);
+    if (!mounted || !registered) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text(VisitViewModel.successMessage)),
+    );
+    // Trava local já (o botão desabilita sem esperar a releitura).
+    widget.viewModel
+      ..markVisited()
+      ..load();
   }
 
   /// Perfil de quem avaliou ("Você" abre o próprio). Seguir/deixar de seguir
   /// lá muda quem aparece aqui: recarrega ao voltar, se mudou.
-  Future<void> _openPerson(Review r) async {
+  Future<void> _openPerson(PlaceActivity r) async {
     await context.push(Routes.person(r.authorId));
     if (!mounted) return;
     widget.viewModel.reloadIfStale();
@@ -216,22 +236,46 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text('Média dos amigos', style: theme.textTheme.labelLarge),
-                    const SizedBox(height: 6),
-                    AxisScores.averages(item.averages),
-                    const SizedBox(height: 16),
-                    if (vm.reviewAgainLabel != null)
-                      _ReviewAgainLater(label: vm.reviewAgainLabel!)
-                    else
-                      FilledButton.tonalIcon(
-                        key: const Key('place-review'),
-                        onPressed: () => _review(place),
-                        icon: const Icon(Icons.rate_review),
-                        label: Text(
-                          vm.hasOwnReview ? 'Avaliar de novo' : 'Avaliar',
-                        ),
+                    // F15: recorrência acima das notas.
+                    if (vm.recurrenceLabel != null) ...[
+                      const SizedBox(height: 12),
+                      RecurrenceBadge(
+                        key: const Key('place-recurrence'),
+                        label: vm.recurrenceLabel!,
                       ),
+                    ],
+                    if (item.averages != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Média dos amigos',
+                        style: theme.textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 6),
+                      AxisScores.averages(item.averages!),
+                    ],
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (vm.reviewAgainLabel != null)
+                          _ReviewAgainLater(label: vm.reviewAgainLabel!)
+                        else
+                          FilledButton.tonalIcon(
+                            key: const Key('place-review'),
+                            onPressed: () => _review(place),
+                            icon: const Icon(Icons.rate_review),
+                            label: Text(
+                              vm.hasOwnReview ? 'Avaliar de novo' : 'Avaliar',
+                            ),
+                          ),
+                        _VisitAction(
+                          blockedLabel: vm.visitBlockedLabel,
+                          onVisit: () => _visit(place),
+                        ),
+                      ],
+                    ),
                     if (item.photoReviews.isNotEmpty) ...[
                       const SizedBox(height: 20),
                       ReviewPhotoStrip(
@@ -251,6 +295,10 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                     _NoFriendReviews(
                       onReview: () => _review(place),
                       reviewAgainLabel: vm.reviewAgainLabel,
+                      visitAction: _VisitAction(
+                        blockedLabel: vm.visitBlockedLabel,
+                        onVisit: () => _visit(place),
+                      ),
                     )
                   else if (vm.errorMessage != null)
                     _CenteredMessage(
@@ -272,12 +320,21 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
               sliver: SliverList.separated(
-                itemCount: item.reviews.length,
-                itemBuilder: (context, i) => ReviewTile(
-                  review: item.reviews[i],
-                  now: at,
-                  onAuthorTap: () => _openPerson(item.reviews[i]),
-                ),
+                // Avaliações e visitas (sem nota) na ordem em que aconteceram.
+                itemCount: item.activities.length,
+                itemBuilder: (context, i) => switch (item.activities[i]) {
+                  final Review r => ReviewTile(
+                    review: r,
+                    now: at,
+                    onAuthorTap: () => _openPerson(r),
+                  ),
+                  final Visit v => VisitTile(
+                    visit: v,
+                    now: at,
+                    isOwn: vm.isOwn(v),
+                    onAuthorTap: () => _openPerson(v),
+                  ),
+                },
                 separatorBuilder: (context, i) => const Divider(height: 1),
               ),
             ),
@@ -293,9 +350,16 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
 
 /// Nenhum amigo avaliou o local ainda: convite para ser o primeiro.
 class _NoFriendReviews extends StatelessWidget {
-  const _NoFriendReviews({required this.onReview, this.reviewAgainLabel});
+  const _NoFriendReviews({
+    required this.onReview,
+    required this.visitAction,
+    this.reviewAgainLabel,
+  });
 
   final VoidCallback onReview;
+
+  /// "Voltei aqui" (F15) ao lado do convite.
+  final Widget visitAction;
 
   /// F03: avaliou há menos de 30 dias (ex.: avaliação que ainda não chegou
   /// na leitura): outro título e texto no lugar do botão.
@@ -318,15 +382,23 @@ class _NoFriendReviews extends StatelessWidget {
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: 12),
-          if (reviewAgainLabel != null)
-            _ReviewAgainLater(label: reviewAgainLabel!)
-          else
-            FilledButton.icon(
-              key: const Key('place-review'),
-              onPressed: onReview,
-              icon: const Icon(Icons.rate_review),
-              label: const Text('Avaliar'),
-            ),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (reviewAgainLabel != null)
+                _ReviewAgainLater(label: reviewAgainLabel!)
+              else
+                FilledButton.icon(
+                  key: const Key('place-review'),
+                  onPressed: onReview,
+                  icon: const Icon(Icons.rate_review),
+                  label: const Text('Avaliar'),
+                ),
+              visitAction,
+            ],
+          ),
         ],
       ),
     );
@@ -353,6 +425,44 @@ class _ReviewAgainLater extends StatelessWidget {
           child: Text(
             label,
             style: theme.textTheme.bodyMedium?.copyWith(color: color),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Voltei aqui" (F15). Com visita há menos de 12 h, o botão fica
+/// desabilitado e a explicação aparece logo abaixo.
+class _VisitAction extends StatelessWidget {
+  const _VisitAction({required this.onVisit, this.blockedLabel});
+
+  final VoidCallback onVisit;
+
+  /// "Você registrou uma visita às 13h. De novo a partir das 01h."
+  final String? blockedLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final button = OutlinedButton.icon(
+      key: const Key('place-visit'),
+      onPressed: blockedLabel == null ? onVisit : null,
+      icon: const Icon(Icons.replay),
+      label: const Text(visitActionLabel),
+    );
+    if (blockedLabel == null) return button;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        button,
+        const SizedBox(height: 4),
+        Text(
+          blockedLabel!,
+          key: const Key('place-visit-locked'),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
       ],

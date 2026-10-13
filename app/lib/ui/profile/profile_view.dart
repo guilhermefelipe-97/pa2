@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../domain/models/review.dart';
+import '../../domain/models/place_activity.dart';
 import '../../domain/relative_time.dart';
 import '../../routing/routes.dart';
 import '../feed/widgets/author_avatar.dart';
 import '../feed/widgets/axis_scores.dart';
+import '../feed/widgets/visit_tile.dart' show visitMeta, visitTileLabel;
 import 'profile_view_model.dart';
 
-/// Perfil simples (`/pessoa/:uid`): nome, Seguir/Seguindo e as avaliações
-/// da pessoa, mais recentes primeiro.
+/// Perfil simples (`/pessoa/:uid`): nome, Seguir/Seguindo e as avaliações e
+/// visitas ("Voltei aqui", F15) da pessoa, mais recentes primeiro.
 class ProfileView extends StatefulWidget {
   const ProfileView({super.key, required this.viewModel});
 
@@ -68,7 +69,7 @@ class _ProfileViewState extends State<ProfileView> {
 
   // O local pode levar a outro perfil, onde seguir/deixar de seguir muda
   // este: recarrega ao voltar, se mudou.
-  Future<void> _openPlace(Review r) async {
+  Future<void> _openPlace(PlaceActivity r) async {
     await context.push(Routes.placeDetail(r.placeId));
     if (!mounted) return;
     widget.viewModel.reloadIfStale();
@@ -119,8 +120,8 @@ class _ProfileViewState extends State<ProfileView> {
 
   Widget _ready(BuildContext context, ProfileViewModel vm) {
     final now = vm.now();
-    final reviews = vm.reviews;
-    // Item 0: cabeçalho; depois as avaliações (ou o texto de vazio).
+    final reviews = vm.activities;
+    // Item 0: cabeçalho; depois avaliações e visitas (ou o texto de vazio).
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       itemCount: 1 + (reviews.isEmpty ? 1 : reviews.length),
@@ -140,13 +141,20 @@ class _ProfileViewState extends State<ProfileView> {
             ),
           );
         }
-        final r = reviews[i - 1];
-        return _ProfileReviewTile(
-          key: ValueKey('profile-review-${r.id}'),
-          review: r,
-          now: now,
-          onTap: () => _openPlace(r),
-        );
+        return switch (reviews[i - 1]) {
+          final Review r => _ProfileReviewTile(
+            key: ValueKey('profile-review-${r.id}'),
+            review: r,
+            now: now,
+            onTap: () => _openPlace(r),
+          ),
+          final Visit v => _ProfileVisitTile(
+            key: ValueKey('profile-visit-${v.id}'),
+            visit: v,
+            now: now,
+            onTap: () => _openPlace(v),
+          ),
+        };
       },
     );
   }
@@ -196,7 +204,12 @@ class _Header extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 24),
-        Text('Avaliações', style: theme.textTheme.titleMedium),
+        Text(
+          vm.activities.any((a) => a is Visit)
+              ? 'Avaliações e visitas'
+              : 'Avaliações',
+          style: theme.textTheme.titleMedium,
+        ),
         const Divider(height: 20),
       ],
     );
@@ -255,6 +268,55 @@ class _ProfileReviewTile extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(review.comment!, style: theme.textTheme.bodyMedium),
                 ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Uma visita no perfil (F15): local e contexto, sem notas.
+class _ProfileVisitTile extends StatelessWidget {
+  const _ProfileVisitTile({
+    super.key,
+    required this.visit,
+    required this.now,
+    required this.onTap,
+  });
+
+  final Visit visit;
+  final DateTime now;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        label: 'Abrir ${visit.placeName}',
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(visit.placeName, style: theme.textTheme.titleMedium),
+                Text(
+                  '$visitTileLabel · ${visitMeta(visit, now)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
               ],
             ),
           ),

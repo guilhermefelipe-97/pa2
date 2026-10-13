@@ -19,9 +19,6 @@ class FirestorePlaceRepository implements PlaceRepository {
   /// para não esvaziar a página depois do filtro.
   static const _multiTermFetch = 60;
 
-  /// Limite do `whereIn`.
-  static const _whereInLimit = 30;
-
   /// O cliente nunca edita `places` (só cria, G2): o que já foi lido
   /// (inclusive "não existe" → null) vale para a sessão inteira, até
   /// [markPersisted]/[ensurePersisted]. Guardar o Future
@@ -131,7 +128,7 @@ class FirestorePlaceRepository implements PlaceRepository {
     }
     final missing = wanted.where((id) => !_byId.containsKey(id)).toList()
       ..sort();
-    for (final batch in chunked(missing, _whereInLimit)) {
+    for (final batch in chunked(missing, whereInLimit)) {
       final fetch = _fetchBatch(batch);
       for (final id in batch) {
         _byId[id] = fetch.then((found) => found[id]);

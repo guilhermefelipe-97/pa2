@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../data/repositories/auth_repository.dart';
+import '../data/repositories/visit_repository.dart';
 import '../data/services/location_service.dart';
 import '../domain/models/place.dart';
 import '../ui/auth/auth_view.dart';
@@ -96,6 +97,7 @@ GoRouter buildRouter(AuthRepository auth) {
                     reviewRepository: context.read(),
                     placeRepository: context.read(),
                     followEvents: context.read<FollowEvents>(),
+                    visitRepository: context.read<VisitRepository>(),
                   ),
                   builder: (context, vm) => FeedView(viewModel: vm),
                 ),
@@ -117,6 +119,7 @@ GoRouter buildRouter(AuthRepository auth) {
                     reviewRepository: context.read(),
                     followEvents: context.read<FollowEvents>(),
                     savedStore: context.read<SavedPlacesStore?>(),
+                    visitRepository: context.read<VisitRepository>(),
                   ),
                   builder: (context, vm) => NearbyView(viewModel: vm),
                 ),
@@ -172,6 +175,7 @@ GoRouter buildRouter(AuthRepository auth) {
               placeRepository: context.read(),
               reviewRepository: context.read(),
               followEvents: context.read<FollowEvents>(),
+              visitRepository: context.read<VisitRepository>(),
               clock: context.read<AppClock?>()?.now,
             ),
             builder: (context, vm) => PlaceDetailView(viewModel: vm),
@@ -191,6 +195,7 @@ GoRouter buildRouter(AuthRepository auth) {
               userRepository: context.read(),
               reviewRepository: context.read(),
               followEvents: context.read<FollowEvents>(),
+              visitRepository: context.read<VisitRepository>(),
             ),
             builder: (context, vm) => ProfileView(viewModel: vm),
           );

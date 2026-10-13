@@ -9,6 +9,7 @@ import '../core/app_shell.dart';
 import '../core/osm_credit.dart';
 import '../core/save_button.dart';
 import '../feed/widgets/place_photo.dart';
+import '../feed/widgets/trust_sources.dart' show RecurrenceLine;
 import 'nearby_view_model.dart';
 
 /// Categoria e bairro do local (o que houver).
@@ -31,6 +32,7 @@ String nearbySemanticsLabel(NearbyItem item, {required bool saved}) => [
   ..._placeDetails(item.place),
   if (saved) 'está no Quero ir',
   ?item.friendsLabel,
+  ?item.recurrence,
 ].join(', ');
 
 /// Linha que explica a sugestão.
@@ -439,6 +441,7 @@ class NearbyTile extends StatelessWidget {
     final scheme = theme.colorScheme;
     final place = item.place;
     final friends = item.friendsLabel;
+    final recurrence = item.recurrence;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -507,6 +510,13 @@ class NearbyTile extends StatelessWidget {
                                     ),
                                   ],
                                 ),
+                              ),
+                            // F15: recorrência de um amigo ali.
+                            if (recurrence != null)
+                              Padding(
+                                key: const Key('nearby-recurrence'),
+                                padding: const EdgeInsets.only(top: 2),
+                                child: RecurrenceLine(label: recurrence),
                               ),
                           ],
                         ),

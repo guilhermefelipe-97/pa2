@@ -20,23 +20,10 @@ DateTime reviewAllowedAt(DateTime lastAt) => lastAt.add(reviewCooldown);
 bool isReviewBlocked(DateTime? lastAt, DateTime now) =>
     lastAt != null && now.isBefore(reviewAllowedAt(lastAt));
 
-/// Arredonda para o minuto seguinte quando há segundos: a hora exibida nunca
-/// é anterior à liberação real.
-DateTime _ceilToMinute(DateTime t) {
-  final floor = DateTime.fromMicrosecondsSinceEpoch(
-    t.microsecondsSinceEpoch -
-        t.microsecondsSinceEpoch % Duration.microsecondsPerMinute,
-    isUtc: true,
-  );
-  return floor.isBefore(t.toUtc())
-      ? floor.add(const Duration(minutes: 1))
-      : floor;
-}
-
 /// "Pode avaliar de novo a partir de 11/11 às 20h" (UTC-3).
 String reviewAgainFromLabel(DateTime lastAt) =>
     'Pode avaliar de novo a partir de '
-    '${formatDayMonthHour(_ceilToMinute(reviewAllowedAt(lastAt)))}';
+    '${formatDayMonthHour(ceilToMinute(reviewAllowedAt(lastAt)))}';
 
 /// "Você avaliou este lugar em 12/10. Pode avaliar de novo a partir de
 /// 11/11 às 20h." (UTC-3).

@@ -179,7 +179,7 @@ void main() {
   });
 
   group('FeedCard: foto do amigo', () {
-    FeedItem anaComFotoBetoSem() => groupReviewsIntoFeed(
+    FeedItem anaComFotoBetoSem() => groupActivitiesIntoFeed(
       [
         review(
           id: 'ra',
@@ -248,7 +248,7 @@ void main() {
 
     testWidgets('ninguém com foto: não consulta fotos', (tester) async {
       final photos = FakeReviewPhotoRepository();
-      final item = groupReviewsIntoFeed(
+      final item = groupActivitiesIntoFeed(
         [review(placeId: 'mangai')],
         places: {'mangai': _mangai},
       ).single;
@@ -427,7 +427,7 @@ void main() {
     (tester) async {
       final handle = tester.ensureSemantics();
       final photos = FakeReviewPhotoRepository({'ra': _png});
-      final item = groupReviewsIntoFeed(
+      final item = groupActivitiesIntoFeed(
         [
           review(
             id: 'ra',

@@ -8,6 +8,7 @@ import 'package:naarea/data/repositories/review_photo_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
 import 'package:naarea/data/repositories/saved_repository.dart';
 import 'package:naarea/data/repositories/user_repository.dart';
+import 'package:naarea/data/repositories/visit_repository.dart';
 import 'package:naarea/data/services/location_service.dart';
 import 'package:naarea/data/services/photo_picker.dart';
 import 'package:naarea/domain/feed.dart';
@@ -35,6 +36,7 @@ class TestApp {
     required this.photos,
     required this.picker,
     required this.location,
+    required this.visits,
   });
 
   final FakeAuthRepository auth;
@@ -47,6 +49,7 @@ class TestApp {
   final FakeReviewPhotoRepository photos;
   final FakePhotoPicker picker;
   final FakeLocationService location;
+  final FakeVisitRepository visits;
 
   SavedPlacesStore store(WidgetTester tester) => Provider.of<SavedPlacesStore>(
     tester.element(find.byType(Navigator).first),
@@ -71,6 +74,7 @@ Future<TestApp> pumpApp(
   FakeReviewPhotoRepository? photos,
   FakePhotoPicker? picker,
   FakeLocationService? location,
+  FakeVisitRepository? visits,
   DateTime Function()? clock,
 }) async {
   final loc = location ?? FakeLocationService();
@@ -82,6 +86,7 @@ Future<TestApp> pumpApp(
   final l = lists ?? FakeListsRepository(saved: s);
   final ph = photos ?? FakeReviewPhotoRepository(r.photos);
   final pk = picker ?? FakePhotoPicker();
+  final v = visits ?? FakeVisitRepository();
   final router = buildRouter(auth);
   await tester.pumpWidget(
     MultiProvider(
@@ -91,6 +96,7 @@ Future<TestApp> pumpApp(
         Provider<UserRepository>.value(value: u),
         Provider<PlaceRepository>.value(value: p),
         Provider<ReviewRepository>.value(value: r),
+        Provider<VisitRepository>.value(value: v),
         Provider<ReviewPhotoRepository>.value(value: ph),
         Provider<PhotoPicker>.value(value: pk),
         Provider<LocationService>.value(value: loc),
@@ -133,6 +139,7 @@ Future<TestApp> pumpApp(
     photos: ph,
     picker: pk,
     location: loc,
+    visits: v,
   );
 }
 
@@ -140,8 +147,9 @@ Future<TestApp> pumpApp(
 /// (a recarga confirma o que veio do feed).
 PlaceDetailViewModel detailVmFor(FeedItem item, {DateTime? now}) {
   final users = FakeUserRepository()
-    ..followingByUser['me'] = {for (final r in item.reviews) r.authorId};
+    ..followingByUser['me'] = {for (final a in item.activities) a.authorId};
   final reviews = FakeReviewRepository()..stored.addAll(item.reviews);
+  final visits = FakeVisitRepository()..stored.addAll(item.visits);
   return PlaceDetailViewModel(
     placeId: item.placeId,
     initial: item,
@@ -150,6 +158,7 @@ PlaceDetailViewModel detailVmFor(FeedItem item, {DateTime? now}) {
     placeRepository: FakePlaceRepository([item.place]),
     reviewRepository: reviews,
     followEvents: FollowEvents(),
+    visitRepository: visits,
     clock: now == null ? null : () => now,
   );
 }

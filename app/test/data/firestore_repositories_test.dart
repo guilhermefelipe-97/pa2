@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mock_exceptions/mock_exceptions.dart';
+import 'package:naarea/data/activity_batch.dart';
 import 'package:naarea/data/firebase/firestore_place_repository.dart';
 import 'package:naarea/data/firebase/firestore_review_repository.dart';
 import 'package:naarea/data/firebase/firestore_user_repository.dart';
@@ -301,9 +302,9 @@ void main() {
           );
         }
       }
-      final result = await FirestoreReviewRepository(
+      final result = (await FirestoreReviewRepository(
         db,
-      ).fetchReviewsByAuthors(authors, limit: 5);
+      ).fetchReviewsByAuthors(authors, limit: 5)).items;
       expect(result, hasLength(5));
       expect(result.map((r) => r.createdAt.toUtc()), [
         for (var h = 79; h > 74; h--)
@@ -330,9 +331,9 @@ void main() {
         );
 
         // ids repetidos na entrada não podem duplicar resultados
-        final result = await FirestoreReviewRepository(
+        final result = (await FirestoreReviewRepository(
           db,
-        ).fetchReviewsByAuthors([...authors, 'u0', 'u64']);
+        ).fetchReviewsByAuthors([...authors, 'u0', 'u64'])).items;
 
         expect(result, hasLength(65));
         expect(result.map((r) => r.id).toSet(), hasLength(65));
@@ -344,9 +345,9 @@ void main() {
 
     test('lista vazia não consulta nada', () async {
       expect(
-        await FirestoreReviewRepository(
+        (await FirestoreReviewRepository(
           FakeFirebaseFirestore(),
-        ).fetchReviewsByAuthors([]),
+        ).fetchReviewsByAuthors([])).items,
         isEmpty,
       );
     });
@@ -370,10 +371,10 @@ void main() {
         createdAt: DateTime.utc(2026, 9, 13),
       );
 
-      final result = await FirestoreReviewRepository(
+      final result = (await FirestoreReviewRepository(
         db,
         perBatchLimit: 3,
-      ).fetchReviewsByAuthors([...batch1, 'v0']);
+      ).fetchReviewsByAuthors([...batch1, 'v0'])).items;
 
       // Lote 1 trouxe dias 14, 13, 12 (cheio; mais antigo = 12). Corte = dia 12.
       // v0 do dia 1 é descartado: o lote 1 pode ter avaliações daquela época
@@ -415,9 +416,9 @@ void main() {
           createdAt: DateTime.utc(2026, 8, 30),
           comment: '  Bom  ',
         );
-        final result = await FirestoreReviewRepository(
+        final result = (await FirestoreReviewRepository(
           db,
-        ).fetchReviewsByAuthors(['a']);
+        ).fetchReviewsByAuthors(['a'])).items;
         expect(
           result.map((r) => r.comment),
           ['Top!', null, null, null, 'Bom'],
@@ -456,9 +457,9 @@ void main() {
           omitHasPhoto: false,
           hasPhoto: 'true',
         );
-        final result = await FirestoreReviewRepository(
+        final result = (await FirestoreReviewRepository(
           db,
-        ).fetchReviewsByAuthors(['a']);
+        ).fetchReviewsByAuthors(['a'])).items;
         expect(result.map((r) => r.hasPhoto), [true, false, false, false]);
       },
     );
@@ -485,9 +486,9 @@ void main() {
         };
         await db.collection('reviews').add(doc(null, 5, null));
         await db.collection('reviews').add(doc(null, null, null));
-        final result = await FirestoreReviewRepository(
+        final result = (await FirestoreReviewRepository(
           db,
-        ).fetchReviewsByAuthors(['a']);
+        ).fetchReviewsByAuthors(['a'])).items;
         expect(result.single.scores, Scores(ambience: 5));
       },
     );
@@ -522,9 +523,9 @@ void main() {
           ...base(),
           'service': '3',
         });
-        final result = await FirestoreReviewRepository(
+        final result = (await FirestoreReviewRepository(
           db,
-        ).fetchReviewsByAuthors(['a']);
+        ).fetchReviewsByAuthors(['a'])).items;
         expect(result.map((r) => r.id), ['ok']);
         expect(result.single.scores, Scores(food: 4, service: 3));
       },
@@ -538,32 +539,63 @@ void main() {
         'food': 'x',
         'createdAt': Timestamp.now(),
       });
-      final result = await FirestoreReviewRepository(
+      final result = (await FirestoreReviewRepository(
         db,
-      ).fetchReviewsByAuthors(['a']);
+      ).fetchReviewsByAuthors(['a'])).items;
       expect(result, hasLength(1));
     });
   });
 
-  group('FirestoreReviewRepository.applyBatchCutoff', () {
-    test('sem corte só ordena; com corte mantém >= corte', () {
+  group('activity_batch: corte entre lotes', () {
+    test('keepFrom: sem corte só ordena; com corte mantém >= corte', () {
       final a = review(createdAt: DateTime.utc(2026, 9, 1));
       final b = review(createdAt: DateTime.utc(2026, 9, 5));
       final c = review(createdAt: DateTime.utc(2026, 9, 3));
-      expect(FirestoreReviewRepository.applyBatchCutoff([a, b, c], null), [
-        b,
-        c,
-        a,
-      ]);
+      expect(keepFrom([a, b, c], null), [b, c, a]);
+      expect(keepFrom([a, b, c], DateTime.utc(2026, 9, 3)), [b, c]);
+    });
+
+    test('commonCutoff: o mais recente dos cortes; nenhum = null', () {
+      expect(commonCutoff([null, null]), isNull);
       expect(
-        FirestoreReviewRepository.applyBatchCutoff([
-          a,
-          b,
-          c,
-        ], DateTime.utc(2026, 9, 3)),
-        [b, c],
+        commonCutoff([
+          DateTime.utc(2026, 9, 1),
+          null,
+          DateTime.utc(2026, 9, 4),
+        ]),
+        DateTime.utc(2026, 9, 4),
       );
     });
+
+    test(
+      'doc fora do schema conta para o corte do lote (createdAt bruto)',
+      () async {
+        final db = FakeFirebaseFirestore();
+        // Lote cheio (limite 2): o mais antigo é um doc inválido do dia 5.
+        await _addReview(
+          db,
+          authorId: 'a',
+          createdAt: DateTime.utc(2026, 9, 9),
+        );
+        await db.collection('reviews').doc('ruim').set({
+          'authorId': 'a',
+          'createdAt': Timestamp.fromDate(DateTime.utc(2026, 9, 5)),
+        });
+        await _addReview(
+          db,
+          authorId: 'a',
+          createdAt: DateTime.utc(2026, 9, 1),
+        );
+        final result = await FirestoreReviewRepository(
+          db,
+          perBatchLimit: 2,
+        ).fetchReviewsByAuthors(['a']);
+        expect(result.items, hasLength(1));
+        // Sem o doc inválido, o corte seria o dia 9 e esconderia o buraco
+        // entre 9 e 5; com ele, o corte é o dia 5.
+        expect(result.cutoff!.toUtc(), DateTime.utc(2026, 9, 5));
+      },
+    );
   });
 
   group('FirestoreUserRepository', () {

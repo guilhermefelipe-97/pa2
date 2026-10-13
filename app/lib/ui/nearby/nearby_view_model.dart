@@ -5,10 +5,13 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
+import '../../data/repositories/visit_repository.dart';
 import '../../data/services/location_service.dart';
+import '../../domain/feed.dart';
 import '../../domain/geo.dart';
 import '../../domain/models/place.dart';
 import '../core/follow_events.dart';
+import '../core/load_visits.dart';
 import '../core/safe_change_notifier.dart';
 import '../feed/widgets/trust_sources.dart' show displayAuthorName;
 import '../saved/saved_places_store.dart';
@@ -59,20 +62,28 @@ enum NearbyPhase {
   loadError,
 }
 
+/// Sinal de amigos de um local no "Perto": quem foi e a recorrência.
+typedef FriendSignal = ({List<String> names, String? recurrence});
+
 /// Item da lista: local, distância e quem o usuário segue que foi lá.
 class NearbyItem {
   const NearbyItem({
     required this.place,
     required this.distanceMeters,
     this.friends = const [],
+    this.recurrence,
   });
 
   final Place place;
   final double distanceMeters;
 
-  /// Nomes de quem o usuário segue que avaliou o local (mais recente
-  /// primeiro, sem repetição).
+  /// Nomes de quem o usuário segue que foi ao local — avaliou ou registrou
+  /// visita (F15) —, mais recente primeiro, sem repetição.
   final List<String> friends;
+
+  /// "Ana voltou 3 vezes" quando um amigo foi 2 vezes ou mais (F15; a
+  /// tela acrescenta o ícone 🔁).
+  final String? recurrence;
 
   /// "Ana foi aqui", "Ana e Bia foram aqui", "Ana e mais 2 foram aqui".
   String? get friendsLabel => friendsWentLabel(friends);
@@ -132,11 +143,13 @@ class NearbyViewModel extends SafeChangeNotifier {
     required ReviewRepository reviewRepository,
     FollowEvents? followEvents,
     SavedPlacesStore? savedStore,
+    required VisitRepository visitRepository,
   }) : _location = locationService,
        _places = placeRepository,
        _auth = authRepository,
        _users = userRepository,
        _reviews = reviewRepository,
+       _visits = visitRepository,
        _follow = followEvents == null ? null : FollowStaleness(followEvents),
        _saved = savedStore {
     _saved?.addListener(notifyListeners);
@@ -147,6 +160,7 @@ class NearbyViewModel extends SafeChangeNotifier {
   final AuthRepository _auth;
   final UserRepository _users;
   final ReviewRepository _reviews;
+  final VisitRepository _visits;
   final FollowStaleness? _follow;
   final SavedPlacesStore? _saved;
 
@@ -200,9 +214,9 @@ class NearbyViewModel extends SafeChangeNotifier {
   /// A falha foi o Photon pedindo para esperar (HTTP 429).
   bool get rateLimited => _rateLimited;
 
-  /// placeId → nomes de quem o usuário segue que foi lá. `null`: ainda não
-  /// carregado (ou falhou: tenta de novo na próxima carga).
-  Map<String, List<String>>? _friends;
+  /// placeId → quem o usuário segue que foi lá (e a recorrência). `null`:
+  /// ainda não carregado (ou falhou: tenta de novo na próxima carga).
+  Map<String, FriendSignal>? _friends;
   String? _friendsUid;
 
   /// Muda a cada carga: respostas antigas são descartadas.
@@ -324,7 +338,7 @@ class NearbyViewModel extends SafeChangeNotifier {
       ]);
       if (gen != _generation) return;
       final result = results[0] as NearbyResult;
-      final friends = results[1] as Map<String, List<String>>;
+      final friends = results[1] as Map<String, FriendSignal>;
       _partial = result.partial;
       _capped = result.capped;
       _items = [
@@ -332,7 +346,8 @@ class NearbyViewModel extends SafeChangeNotifier {
           NearbyItem(
             place: n.place,
             distanceMeters: n.distanceMeters,
-            friends: friends[n.place.id] ?? const [],
+            friends: friends[n.place.id]?.names ?? const [],
+            recurrence: friends[n.place.id]?.recurrence,
           ),
       ];
       _phase = NearbyPhase.ready;
@@ -383,31 +398,50 @@ class NearbyViewModel extends SafeChangeNotifier {
     );
   }
 
-  /// Sinal "foi aqui": avaliações de quem o usuário segue (mesma fonte do
-  /// feed). Falha não derruba a lista: fica sem o sinal e tenta de novo na
-  /// próxima carga.
-  Future<Map<String, List<String>>> _loadFriends() async {
+  /// Sinal "foi aqui": avaliações e visitas (F15) de quem o usuário segue
+  /// (mesma fonte e mesmo corte comum do feed). Falha não derruba a lista:
+  /// fica sem o sinal e tenta de novo na próxima carga; falha só das visitas
+  /// mostra o sinal só com as avaliações, sem guardá-lo (a próxima carga
+  /// tenta as visitas de novo).
+  Future<Map<String, FriendSignal>> _loadFriends() async {
     final uid = _auth.currentUserId;
     if (uid == null) return const {};
     final cached = _friends;
     if (cached != null && _friendsUid == uid) return cached;
     try {
       final following = {...await _users.getFollowing(uid)}..remove(uid);
-      final byPlace = <String, List<String>>{};
+      final byPlace = <String, FriendSignal>{};
+      var visitsOk = true;
       if (following.isNotEmpty) {
-        final reviews = await _reviews.fetchReviewsByAuthors(
-          following.toList(),
+        final read = await loadFriendActivities(
+          reviews: _reviews,
+          visits: _visits,
+          authors: following.toList(),
+          where: 'Perto',
         );
-        final seen = <String, Set<String>>{};
-        // Mais recentes primeiro (contrato do repositório).
-        for (final r in reviews) {
-          if (!following.contains(r.authorId)) continue;
-          if (!(seen[r.placeId] ??= {}).add(r.authorId)) continue;
-          (byPlace[r.placeId] ??= []).add(displayAuthorName(r.authorName));
+        visitsOk = read.visitsOk;
+        final items = groupActivitiesIntoFeed(
+          read.activities.where((a) => following.contains(a.authorId)),
+        );
+        for (final item in items) {
+          final recurrent = item.recurrent;
+          byPlace[item.placeId] = (
+            names: [
+              for (final s in item.sources) displayAuthorName(s.authorName),
+            ],
+            recurrence: recurrent == null
+                ? null
+                : recurrenceLabel(
+                    displayAuthorName(recurrent.authorName),
+                    recurrent.trips,
+                  ),
+          );
         }
       }
-      _friends = byPlace;
-      _friendsUid = uid;
+      if (visitsOk) {
+        _friends = byPlace;
+        _friendsUid = uid;
+      }
       return byPlace;
     } on Object {
       return const {};

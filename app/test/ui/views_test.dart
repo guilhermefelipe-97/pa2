@@ -38,6 +38,7 @@ FeedViewModel _feedVm({
   placeRepository: FakePlaceRepository(places),
   clock: () => _now,
   followEvents: FollowEvents(),
+  visitRepository: FakeVisitRepository(),
 );
 
 /// Tela de celular alta (412x2000 dp) para as listas preguiçosas construírem
@@ -511,7 +512,7 @@ void main() {
     'PlaceDetailView: foto grande e todas as avaliações dos amigos no local',
     (tester) async {
       _tallPhone(tester);
-      final item = groupReviewsIntoFeed(
+      final item = groupActivitiesIntoFeed(
         [
           review(
             authorId: 'a',
@@ -564,7 +565,7 @@ void main() {
       'avaliações por eixo (F14)', (tester) async {
     _tallPhone(tester);
     final handle = tester.ensureSemantics();
-    final item = groupReviewsIntoFeed(
+    final item = groupActivitiesIntoFeed(
       [
         review(authorId: 'a', placeId: 'x', scores: Scores(food: 4)),
         review(authorId: 'b', placeId: 'x', scores: Scores(food: 5)),
@@ -597,7 +598,7 @@ void main() {
       '(F14)', (tester) async {
     _tallPhone(tester);
     final handle = tester.ensureSemantics();
-    final item = groupReviewsIntoFeed(
+    final item = groupActivitiesIntoFeed(
       [
         review(
           authorId: 'a',
@@ -642,7 +643,7 @@ void main() {
 
   testWidgets('PlaceDetailView: singular com 1 avaliação', (tester) async {
     _tallPhone(tester);
-    final item = groupReviewsIntoFeed([
+    final item = groupActivitiesIntoFeed([
       review(authorId: 'a', placeId: 'x'),
     ]).single;
     await tester.pumpWidget(
@@ -658,8 +659,10 @@ void main() {
     tester,
   ) async {
     _tallPhone(tester);
-    FeedItem itemFor(Place p) =>
-        groupReviewsIntoFeed([review(placeId: p.id)], places: {p.id: p}).single;
+    FeedItem itemFor(Place p) => groupActivitiesIntoFeed(
+      [review(placeId: p.id)],
+      places: {p.id: p},
+    ).single;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -748,7 +751,7 @@ void main() {
   testWidgets(
     'FeedCard: sem bairro nem categoria, a linha de local não aparece',
     (tester) async {
-      final item = groupReviewsIntoFeed([
+      final item = groupActivitiesIntoFeed([
         review(placeId: 'x', placeName: 'Sumiu'),
       ]).single;
       await tester.pumpWidget(
@@ -767,7 +770,7 @@ void main() {
 
   testWidgets('FeedCard: rótulo "Abrir <local>" como botão', (tester) async {
     final handle = tester.ensureSemantics();
-    final item = groupReviewsIntoFeed(
+    final item = groupActivitiesIntoFeed(
       [review(placeId: 'x')],
       places: {'x': place(id: 'x', name: 'Mangai')},
     ).single;

@@ -1130,3 +1130,270 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
     await assertSucceeds(reviewWithPhotoBatch(alice()));
   });
 });
+
+// ---------- F15: "Voltei aqui" (visitas) ----------
+
+const visitLockPath = (uid, placeId) => 'users/' + uid + '/visitLocks/' + placeId;
+
+/// Visita como o app grava: sem notas, companhia opcional, createdAt do
+/// servidor.
+function validVisit(overrides = {}) {
+  return {
+    authorId: 'alice',
+    authorName: 'Alice',
+    placeId: 'camaroes',
+    placeName: 'Camarões Potiguar',
+    companion: 'amigos',
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+function validVisitLock(visitId, overrides = {}) {
+  return {
+    lastAt: serverTimestamp(),
+    visitId,
+    placeId: 'camaroes',
+    ...overrides,
+  };
+}
+
+let visitSeq = 0;
+
+/// Visita + trava num único batch. `lock: false` omite a trava; `lock: {...}`
+/// sobrescreve campos; `lockAt` troca o caminho da trava.
+function addVisit(db, data, { id, lock = {}, lockAt } = {}) {
+  const visitId = id || 'v' + (++visitSeq);
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'visits/' + visitId), data);
+  if (lock !== false) {
+    const placeId = typeof data.placeId === 'string' ? data.placeId : 'camaroes';
+    batch.set(
+      doc(db, lockAt || visitLockPath(data.authorId, placeId)),
+      validVisitLock(visitId, { placeId, ...lock }),
+    );
+  }
+  return batch.commit();
+}
+
+/// Trava de visita semeada sem Rules, com a última visita há [hoursAgo] horas.
+async function seedVisitLock(uid, placeId, hoursAgo, visitId = 'antiga') {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), visitLockPath(uid, placeId)), {
+      lastAt: Timestamp.fromMillis(Date.now() - hoursAgo * 60 * 60 * 1000),
+      visitId,
+      placeId,
+    });
+  });
+}
+
+async function seedVisit(id, overrides = {}) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'visits/' + id), {
+      ...validVisit(overrides),
+      createdAt: Timestamp.now(),
+    });
+  });
+}
+
+describe('visits + users/{uid}/visitLocks (F15: "Voltei aqui", 12 h)', () => {
+  const lockRef = (db, uid = 'alice', placeId = 'camaroes') => doc(db, visitLockPath(uid, placeId));
+
+  it('registra visita: visita + trava no mesmo batch', async () => {
+    await assertSucceeds(addVisit(alice(), validVisit(), { id: 'primeira' }));
+    const snap = await assertSucceeds(getDoc(lockRef(alice())));
+    const d = snap.data();
+    if (d.visitId !== 'primeira' || d.placeId !== 'camaroes' || !(d.lastAt instanceof Timestamp)) {
+      throw new Error('trava inesperada: ' + JSON.stringify(d));
+    }
+  });
+
+  it('companhia é opcional (null), mas a chave é obrigatória e do vocabulário', async () => {
+    await assertSucceeds(addVisit(alice(), validVisit({ companion: null })));
+    await seedVisitLock('alice', 'camaroes', 13);
+    await assertFails(addVisit(alice(), validVisit({ companion: 'pet' })));
+    const semChave = validVisit();
+    delete semChave.companion;
+    await assertFails(addVisit(alice(), semChave));
+  });
+
+  it('visita e avaliação têm travas separadas (bloqueio do F03 não impede visitar)', async () => {
+    await seedLock('alice', 'camaroes', 1);
+    await assertSucceeds(addVisit(alice(), validVisit()));
+    await unlockAll();
+    await assertSucceeds(addReview(alice(), validReview()));
+  });
+
+  it('há 3 h e há 11,9 h: negada', async () => {
+    await seedVisitLock('alice', 'camaroes', 3);
+    await assertFails(addVisit(alice(), validVisit()));
+    await seedVisitLock('alice', 'camaroes', 11.9);
+    await assertFails(addVisit(alice(), validVisit()));
+  });
+
+  it('mesma hora: 2ª visita negada', async () => {
+    await assertSucceeds(addVisit(alice(), validVisit(), { id: 'agora1' }));
+    await assertFails(addVisit(alice(), validVisit(), { id: 'agora2' }));
+  });
+
+  it('após 12 h: visita aceita e trava renovada', async () => {
+    await seedVisitLock('alice', 'camaroes', 12.1);
+    await assertSucceeds(addVisit(alice(), validVisit(), { id: 'depois' }));
+    const snap = await getDoc(lockRef(alice()));
+    if (snap.data().visitId !== 'depois') throw new Error('trava não renovada');
+    if (Date.now() - snap.data().lastAt.toMillis() > 60 * 1000) {
+      throw new Error('lastAt não é a hora do servidor');
+    }
+  });
+
+  it('a trava é por local e por usuário', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'places/mangai'), { name: 'Mangai', category: 'Restaurante' });
+    });
+    await seedVisitLock('alice', 'camaroes', 1);
+    await assertSucceeds(addVisit(alice(), validVisit({ placeId: 'mangai', placeName: 'Mangai' })));
+    await assertSucceeds(addVisit(bob(), validVisit({ authorId: 'bob', authorName: 'Bob' })));
+  });
+
+  it('local descoberto (Photon) é criado no batch da visita', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace());
+    batch.set(doc(db, 'visits/nova'), validVisit({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    batch.set(doc(db, visitLockPath('alice', 'osm-n123')), validVisitLock('nova', { placeId: 'osm-n123' }));
+    await assertSucceeds(batch.commit());
+  });
+
+  it('local inexistente, forjado ou placeName divergente: negado', async () => {
+    await assertFails(addVisit(alice(), validVisit({ placeId: 'osm-n999', placeName: 'Bar do Zé' })));
+    await assertFails(addVisit(alice(), validVisit({ placeName: 'Outro nome' })));
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace({ lat: 38.7, lng: -9.1 }));
+    batch.set(doc(db, 'visits/nova'), validVisit({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    batch.set(doc(db, visitLockPath('alice', 'osm-n123')), validVisitLock('nova', { placeId: 'osm-n123' }));
+    await assertFails(batch.commit());
+  });
+
+  it('forja: anônimo, authorId de outro ou sem perfil', async () => {
+    await assertFails(addVisit(anon(), validVisit()));
+    await assertFails(addVisit(bob(), validVisit()));
+    const ghost = env.authenticatedContext('ghost').firestore();
+    await assertFails(addVisit(ghost, validVisit({ authorId: 'ghost', authorName: 'Ghost' })));
+  });
+
+  it('forja: authorName diferente do perfil (nunca anônima)', async () => {
+    await assertFails(addVisit(alice(), validVisit({ authorName: 'Outra Pessoa' })));
+    await assertFails(addVisit(alice(), validVisit({ authorName: '' })));
+    await assertFails(addVisit(alice(), validVisit({ authorName: null })));
+  });
+
+  it('forja: chave extra (notas, comentário) ou faltando', async () => {
+    await assertFails(addVisit(alice(), validVisit({ food: 5 })));
+    await assertFails(addVisit(alice(), validVisit({ comment: 'top' })));
+    await assertFails(addVisit(alice(), validVisit({ dayPeriod: 'noite' })));
+    const semNome = validVisit();
+    delete semNome.placeName;
+    await assertFails(addVisit(alice(), semNome));
+  });
+
+  it('forja: createdAt do cliente', async () => {
+    await assertFails(addVisit(alice(), validVisit({ createdAt: Timestamp.now() })));
+    await assertFails(addVisit(alice(), validVisit({ createdAt: Timestamp.fromMillis(0) })));
+  });
+
+  it('forja: visita sem trava no batch', async () => {
+    await assertFails(addVisit(alice(), validVisit(), { lock: false }));
+    await assertFails(addDoc(collection(alice(), 'visits'), validVisit()));
+  });
+
+  it('forja: trava de outro uid', async () => {
+    await assertFails(addVisit(alice(), validVisit(), { lockAt: visitLockPath('bob', 'camaroes') }));
+    await assertFails(addVisit(bob(), validVisit({ authorId: 'bob', authorName: 'Bob' }), { lockAt: visitLockPath('alice', 'camaroes') }));
+  });
+
+  it('forja: trava sem visita, para visita existente ou para outra visita', async () => {
+    await assertFails(setDoc(lockRef(alice()), validVisitLock('fantasma')));
+    await seedVisit('existente');
+    await assertFails(setDoc(lockRef(alice()), validVisitLock('existente')));
+    await assertFails(addVisit(alice(), validVisit(), { id: 'v-a', lock: { visitId: 'outra' } }));
+  });
+
+  it('forja: trava de avaliação não serve para a visita (nem o contrário)', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'visits/x'), validVisit());
+    batch.set(doc(db, lockPath('alice', 'camaroes')), validLock('x'));
+    await assertFails(batch.commit());
+    const batch2 = writeBatch(db);
+    batch2.set(doc(db, 'reviews/y'), validReview());
+    batch2.set(lockRef(db), validVisitLock('y'));
+    await assertFails(batch2.commit());
+  });
+
+  it('forja: lastAt do cliente, placeId divergente ou chave extra na trava', async () => {
+    await assertFails(addVisit(alice(), validVisit(), { lock: { lastAt: Timestamp.now() } }));
+    await seedVisitLock('alice', 'camaroes', 20);
+    await assertFails(addVisit(alice(), validVisit(), { lock: { lastAt: Timestamp.fromMillis(0) } }));
+    await assertFails(addVisit(alice(), validVisit(), { lock: { placeId: 'mangai' } }));
+    await assertFails(addVisit(alice(), validVisit(), { lock: { count: 1 } }));
+  });
+
+  it('forja: renovar a trava sem esperar 12 h, nem via update parcial', async () => {
+    await seedVisitLock('alice', 'camaroes', 3);
+    await assertFails(updateDoc(lockRef(alice()), { lastAt: Timestamp.fromMillis(0) }));
+    await assertFails(updateDoc(lockRef(alice()), { lastAt: serverTimestamp() }));
+  });
+
+  it('forja: update/delete da visita (nem o autor) e da trava', async () => {
+    await seedVisit('existente');
+    await assertFails(updateDoc(doc(alice(), 'visits/existente'), { companion: 'casal' }));
+    await assertFails(setDoc(doc(alice(), 'visits/existente'), validVisit()));
+    await assertFails(deleteDoc(doc(alice(), 'visits/existente')));
+    await assertFails(deleteDoc(doc(bob(), 'visits/existente')));
+    await seedVisitLock('alice', 'camaroes', 3);
+    await assertFails(deleteDoc(lockRef(alice())));
+    await seedVisitLock('alice', 'camaroes', 20);
+    await assertFails(deleteDoc(lockRef(alice())));
+  });
+
+  it('logado lê visitas (consultas do feed e do detalhe); anônimo não', async () => {
+    await seedVisit('existente');
+    await assertSucceeds(getDoc(doc(bob(), 'visits/existente')));
+    await assertFails(getDoc(doc(anon(), 'visits/existente')));
+    const feed = await assertSucceeds(getDocs(query(
+      collection(bob(), 'visits'),
+      where('authorId', 'in', ['alice']),
+      orderBy('createdAt', 'desc'),
+      limit(100),
+    )));
+    if (feed.size !== 1) throw new Error('esperava 1 visita, veio ' + feed.size);
+    const detail = await assertSucceeds(getDocs(query(
+      collection(bob(), 'visits'),
+      where('placeId', '==', 'camaroes'),
+      where('authorId', 'in', ['alice', 'bob']),
+      orderBy('createdAt', 'desc'),
+    )));
+    if (detail.size !== 1) throw new Error('esperava 1 visita, veio ' + detail.size);
+  });
+
+  it('só o dono lê a trava de visita', async () => {
+    await assertSucceeds(getDoc(lockRef(alice())));
+    await seedVisitLock('alice', 'camaroes', 3);
+    await assertSucceeds(getDoc(lockRef(alice())));
+    await assertFails(getDoc(lockRef(bob())));
+    await assertFails(getDoc(lockRef(anon())));
+    await assertFails(getDocs(collection(bob(), 'users/alice/visitLocks')));
+  });
+
+  it('corrida: dois aparelhos ao mesmo tempo, só um passa', async () => {
+    const phone = env.authenticatedContext('alice').firestore();
+    const tablet = env.authenticatedContext('alice').firestore();
+    const results = await Promise.allSettled([
+      addVisit(phone, validVisit(), { id: 'cel' }),
+      addVisit(tablet, validVisit(), { id: 'tab' }),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    if (ok !== 1) throw new Error('esperava 1 sucesso, vieram ' + ok);
+  });
+});

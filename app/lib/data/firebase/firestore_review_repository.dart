@@ -7,8 +7,9 @@ import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart';
 import '../../domain/photo_compression.dart';
-import '../chunk.dart';
+import '../activity_batch.dart';
 import '../repositories/review_repository.dart';
+import 'activity_queries.dart' as queries;
 import 'place_doc.dart';
 
 class FirestoreReviewRepository implements ReviewRepository {
@@ -198,90 +199,22 @@ class FirestoreReviewRepository implements ReviewRepository {
   }
 
   @override
-  Future<List<Review>> fetchReviewsByAuthors(
+  Future<ActivityBatch<Review>> fetchReviewsByAuthors(
     List<String> authorIds, {
     int? limit,
-  }) async {
-    assert(limit == null || limit > 0);
-    final ids = authorIds.toSet().toList();
-    if (ids.isEmpty) return [];
-    // Cada lote traz as suas `batchLimit` mais recentes: as `limit` mais
-    // recentes do total estão sempre na união.
-    final batchLimit = limit == null || limit > perBatchLimit
-        ? perBatchLimit
-        : limit;
-    final batches = chunked(ids, ReviewRepository.whereInLimit);
-    final snaps = await Future.wait(
-      batches.map(
-        (batch) => _reviews
-            .where('authorId', whereIn: batch)
-            .orderBy('createdAt', descending: true)
-            .limit(batchLimit)
-            .get(),
-      ),
-    );
-    final byId = <String, Review>{};
-    // Um lote que bateu o limite pode ter avaliações mais antigas que não
-    // vieram. Para os lotes ficarem consistentes entre si, corta o resultado
-    // no mais recente dos "createdAt mais antigos" entre os lotes cheios.
-    DateTime? cutoff;
-    for (final snap in snaps) {
-      DateTime? oldestInBatch;
-      for (final doc in snap.docs) {
-        final r = _fromDoc(doc);
-        if (r == null) continue;
-        byId[r.id] = r;
-        if (oldestInBatch == null || r.createdAt.isBefore(oldestInBatch)) {
-          oldestInBatch = r.createdAt;
-        }
-      }
-      if (snap.docs.length >= batchLimit && oldestInBatch != null) {
-        if (cutoff == null || oldestInBatch.isAfter(cutoff)) {
-          cutoff = oldestInBatch;
-        }
-      }
-    }
-    final result = applyBatchCutoff(byId.values, cutoff);
-    return limit == null || result.length <= limit
-        ? result
-        : result.sublist(0, limit);
-  }
+  }) => queries.fetchLatestByAuthors(
+    _reviews,
+    authorIds,
+    perBatchLimit: perBatchLimit,
+    fromDoc: _fromDoc,
+    limit: limit,
+  );
 
   @override
   Future<List<Review>> fetchReviewsForPlace(
     String placeId,
     List<String> authorIds,
-  ) async {
-    final ids = authorIds.toSet().toList();
-    if (ids.isEmpty) return [];
-    final snaps = await Future.wait(
-      chunked(ids, ReviewRepository.whereInLimit).map(
-        (batch) => _reviews
-            .where('placeId', isEqualTo: placeId)
-            .where('authorId', whereIn: batch)
-            .orderBy('createdAt', descending: true)
-            .get(),
-      ),
-    );
-    final byId = {
-      for (final snap in snaps)
-        for (final r in snap.docs.map(_fromDoc).whereType<Review>()) r.id: r,
-    };
-    return applyBatchCutoff(byId.values, null);
-  }
-
-  /// Remove avaliações anteriores a [cutoff] (quando houver) e ordena da mais
-  /// recente para a mais antiga.
-  static List<Review> applyBatchCutoff(
-    Iterable<Review> reviews,
-    DateTime? cutoff,
-  ) {
-    final kept = cutoff == null
-        ? reviews.toList()
-        : reviews.where((r) => !r.createdAt.isBefore(cutoff)).toList();
-    kept.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return kept;
-  }
+  ) => queries.fetchForPlace(_reviews, placeId, authorIds, fromDoc: _fromDoc);
 
   /// Leitura estrita de um eixo (F14), espelhando as Rules: a chave precisa
   /// existir e valer `null` (não avaliado) ou um `int` de 1 a 5. Chave
