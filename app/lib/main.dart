@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'data/catalog/catalog_place_repository.dart';
 import 'data/firebase/firebase_auth_repository.dart';
 import 'data/firebase/firestore_lists_repository.dart';
+import 'data/firebase/firestore_open_report_repository.dart';
 import 'data/firebase/firestore_place_repository.dart';
 import 'data/firebase/firestore_review_photo_repository.dart';
 import 'data/firebase/firestore_review_repository.dart';
@@ -18,6 +19,7 @@ import 'data/firebase/firestore_visit_repository.dart';
 import 'data/photon/photon_client.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/lists_repository.dart';
+import 'data/repositories/open_report_repository.dart';
 import 'data/repositories/place_repository.dart';
 import 'data/repositories/review_photo_repository.dart';
 import 'data/repositories/review_repository.dart';
@@ -109,6 +111,10 @@ Future<void> main() async {
         ),
         // "Voltei aqui" (F15): visitas sem nota, contam como recorrência.
         Provider<VisitRepository>(create: (_) => FirestoreVisitRepository(db)),
+        // "Está aberto agora?" (F20): relatos de quem está no local.
+        Provider<OpenReportRepository>(
+          create: (_) => FirestoreOpenReportRepository(db),
+        ),
         // Fotos de quem avaliou (G1): cache em memória, limpo na troca de usuário.
         Provider<ReviewPhotoRepository>(
           create: (_) => FirestoreReviewPhotoRepository(

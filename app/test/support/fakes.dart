@@ -6,6 +6,7 @@ import 'package:naarea/data/activity_batch.dart';
 import 'package:naarea/data/chunk.dart';
 import 'package:naarea/data/repositories/auth_repository.dart';
 import 'package:naarea/data/repositories/lists_repository.dart';
+import 'package:naarea/data/repositories/open_report_repository.dart';
 import 'package:naarea/data/repositories/place_repository.dart';
 import 'package:naarea/data/repositories/review_photo_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
@@ -16,6 +17,7 @@ import 'package:naarea/data/services/location_service.dart';
 import 'package:naarea/data/services/photo_picker.dart';
 import 'package:naarea/domain/geo.dart';
 import 'package:naarea/domain/models/place.dart';
+import 'package:naarea/domain/open_status.dart';
 import 'package:naarea/domain/models/place_activity.dart';
 import 'package:naarea/domain/models/place_list.dart';
 import 'package:naarea/domain/models/user_profile.dart';
@@ -888,4 +890,104 @@ ActivityBatch<T> fakeAuthorBatches<T extends PlaceActivity>(
     batchLimit: batchLimit,
     limit: limit,
   );
+}
+
+/// Relatos "Está aberto agora?" (F20) em memória, com a trava de 30 min
+/// aplicada como as Rules.
+class FakeOpenReportRepository implements OpenReportRepository {
+  final List<OpenReport> stored = [];
+  final List<NewOpenReport> created = [];
+  final List<Place?> createdNewPlaces = [];
+  Object? createError;
+  Object? fetchError;
+  Object? lockError;
+
+  /// Se definido, [createReport] espera por ele antes de responder.
+  Completer<void>? createGate;
+
+  DateTime Function() clock = () => DateTime.utc(2026, 9, 10, 23);
+
+  /// `lastAt` por `'{uid}/{placeId}'`.
+  final Map<String, DateTime> locks = {};
+  final List<String> placeFetchCalls = [];
+  final List<List<String>> placesFetchCalls = [];
+
+  void lock(String uid, String placeId, DateTime lastAt) =>
+      locks['$uid/$placeId'] = lastAt;
+
+  /// Relato já gravado (de qualquer pessoa).
+  void add(
+    String placeId, {
+    required bool open,
+    required DateTime at,
+    String authorId = 'ana',
+    String authorName = 'Ana',
+  }) => stored.add(
+    OpenReport(
+      id: 'o${stored.length + 1}',
+      authorId: authorId,
+      authorName: authorName,
+      placeId: placeId,
+      open: open,
+      createdAt: at,
+    ),
+  );
+
+  @override
+  Future<DateTime?> openReportLockOf(String uid, String placeId) async {
+    if (lockError != null) throw lockError!;
+    return locks['$uid/$placeId'];
+  }
+
+  @override
+  Future<CreateOpenReportResult> createReport(
+    NewOpenReport report, {
+    Place? newPlace,
+  }) async {
+    if (createGate != null) await createGate!.future;
+    if (createError != null) throw createError!;
+    final lockId = '${report.authorId}/${report.placeId}';
+    final now = clock();
+    if (isOpenReportBlocked(locks[lockId], now)) {
+      throw StateError('permission-denied: trava do F20');
+    }
+    locks[lockId] = now;
+    created.add(report);
+    createdNewPlaces.add(newPlace);
+    add(
+      report.placeId,
+      open: report.open,
+      at: now,
+      authorId: report.authorId,
+      authorName: report.authorName,
+    );
+    return (placeCreated: newPlace != null);
+  }
+
+  @override
+  Future<List<OpenReport>> fetchForPlace(
+    String placeId, {
+    required DateTime since,
+  }) async {
+    placeFetchCalls.add(placeId);
+    if (fetchError != null) throw fetchError!;
+    return stored
+        .where((r) => r.placeId == placeId && !r.createdAt.isBefore(since))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  @override
+  Future<List<OpenReport>> fetchForPlaces(
+    List<String> placeIds, {
+    required DateTime since,
+  }) async {
+    placesFetchCalls.add(placeIds);
+    if (fetchError != null) throw fetchError!;
+    final ids = placeIds.toSet();
+    return stored
+        .where((r) => ids.contains(r.placeId) && !r.createdAt.isBefore(since))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
 }

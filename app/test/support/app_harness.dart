@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:naarea/data/repositories/auth_repository.dart';
 import 'package:naarea/data/repositories/lists_repository.dart';
+import 'package:naarea/data/repositories/open_report_repository.dart';
 import 'package:naarea/data/repositories/place_repository.dart';
 import 'package:naarea/data/repositories/review_photo_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
@@ -37,6 +38,7 @@ class TestApp {
     required this.picker,
     required this.location,
     required this.visits,
+    this.openReports,
   });
 
   final FakeAuthRepository auth;
@@ -50,6 +52,9 @@ class TestApp {
   final FakePhotoPicker picker;
   final FakeLocationService location;
   final FakeVisitRepository visits;
+
+  /// "Está aberto agora?" (F20): só existe quando o teste o fornece.
+  final FakeOpenReportRepository? openReports;
 
   SavedPlacesStore store(WidgetTester tester) => Provider.of<SavedPlacesStore>(
     tester.element(find.byType(Navigator).first),
@@ -75,6 +80,7 @@ Future<TestApp> pumpApp(
   FakePhotoPicker? picker,
   FakeLocationService? location,
   FakeVisitRepository? visits,
+  FakeOpenReportRepository? openReports,
   DateTime Function()? clock,
 }) async {
   final loc = location ?? FakeLocationService();
@@ -97,6 +103,8 @@ Future<TestApp> pumpApp(
         Provider<PlaceRepository>.value(value: p),
         Provider<ReviewRepository>.value(value: r),
         Provider<VisitRepository>.value(value: v),
+        if (openReports != null)
+          Provider<OpenReportRepository>.value(value: openReports),
         Provider<ReviewPhotoRepository>.value(value: ph),
         Provider<PhotoPicker>.value(value: pk),
         Provider<LocationService>.value(value: loc),
@@ -140,6 +148,7 @@ Future<TestApp> pumpApp(
     picker: pk,
     location: loc,
     visits: v,
+    openReports: openReports,
   );
 }
 

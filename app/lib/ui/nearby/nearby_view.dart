@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/photon/photon_client.dart';
 import '../../domain/geo.dart';
 import '../../domain/models/place.dart';
+import '../../domain/open_status.dart';
 import '../../domain/price_summary.dart';
 import '../../routing/routes.dart';
 import '../core/app_shell.dart';
@@ -12,6 +13,7 @@ import '../core/save_button.dart';
 import '../feed/widgets/place_photo.dart';
 import '../feed/widgets/price_chip.dart';
 import '../feed/widgets/trust_sources.dart' show RecurrenceLine;
+import '../open/open_status_line.dart';
 import 'nearby_view_model.dart';
 
 /// Categoria e bairro do local (o que houver).
@@ -28,10 +30,15 @@ String nearbySubtitle(NearbyItem item) => [
 
 /// O que o leitor de tela diz de um item: "Mangai, a 120 metros,
 /// Restaurante, Ponta Negra, está no Quero ir, Ana foi aqui".
-String nearbySemanticsLabel(NearbyItem item, {required bool saved}) => [
+String nearbySemanticsLabel(
+  NearbyItem item, {
+  required bool saved,
+  String? openStatus,
+}) => [
   item.place.name,
   spokenDistance(item.distanceMeters),
   ..._placeDetails(item.place),
+  ?openStatus,
   if (saved) 'está no Quero ir',
   ?item.friendsLabel,
   ?item.recurrence,
@@ -74,6 +81,12 @@ class NearbyView extends StatefulWidget {
   static const cappedMessage = 'Mostrando os 50 mais próximos';
 
   static String emptyMessage(NearbyRadius r) => 'Nada a ${r.label}';
+  static const openFilterLabel = 'Aberto agora (confirmado)';
+  static const openUnavailableMessage =
+      'Não foi possível ver quem confirmou que está aberto';
+  static String openEmptyMessage(NearbyRadius r) =>
+      'Nenhum lugar confirmado aberto a ${r.label}';
+  static const showAllLabel = 'Mostrar todos';
   static String widenLabel(NearbyRadius r) => 'Ampliar para ${r.label}';
 
   @override
@@ -184,6 +197,27 @@ class _NearbyViewState extends State<NearbyView> {
         return Column(
           children: [
             RadiusChips(viewModel: vm),
+            if (vm.hasOpenFilter && vm.openReadFailed)
+              Padding(
+                key: const Key('nearby-open-unavailable'),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        NearbyView.openUnavailableMessage,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: vm.refresh,
@@ -218,7 +252,16 @@ class _NearbyViewState extends State<NearbyView> {
         onAction: vm.retry,
       );
     }
-    final items = vm.items;
+    final items = vm.visibleItems;
+    if (items.isEmpty && vm.openOnly && vm.items.isNotEmpty) {
+      return _Message(
+        key: const Key('nearby-open-empty'),
+        icon: Icons.storefront,
+        title: NearbyView.openEmptyMessage(vm.radius),
+        actionLabel: NearbyView.showAllLabel,
+        onAction: () => vm.setOpenOnly(false),
+      );
+    }
     if (items.isEmpty && vm.partial) {
       // Sem a descoberta ao vivo e sem nada conhecido por perto: não dá para
       // dizer "nada a 300 m".
@@ -284,6 +327,9 @@ class _NearbyViewState extends State<NearbyView> {
           key: ValueKey('nearby-${item.place.id}'),
           item: item,
           saved: vm.isSaved(item.place.id),
+          openStatus: vm.openStatusOf(item.place.id),
+          now: vm.now(),
+          currentUserId: vm.currentUserId,
           onTap: () => _open(item.place),
         );
       },
@@ -320,6 +366,19 @@ class RadiusChips extends StatelessWidget {
                   selected: viewModel.radius == r,
                   onSelected: (_) => viewModel.selectRadius(r),
                 ),
+              ),
+            ],
+            // F20: só os confirmados abertos nas últimas 3 h.
+            if (viewModel.hasOpenFilter) ...[
+              const SizedBox(width: 8),
+              FilterChip(
+                key: const Key('nearby-open-filter'),
+                avatar: const Icon(Icons.storefront, size: 18),
+                label: const Text(NearbyView.openFilterLabel),
+                selected: viewModel.openOnly,
+                onSelected: viewModel.openReadFailed
+                    ? null
+                    : viewModel.setOpenOnly,
               ),
             ],
           ],
@@ -431,11 +490,22 @@ class NearbyTile extends StatelessWidget {
     super.key,
     required this.item,
     required this.saved,
+    this.openStatus,
+    this.now,
+    this.currentUserId,
     this.onTap,
   });
 
   final NearbyItem item;
   final bool saved;
+
+  /// "Aberto · confirmado por Ana há 20 min" (F20); `null` sem relato
+  /// recente.
+  final OpenStatus? openStatus;
+
+  /// Hora de referência do [openStatus] (padrão: agora).
+  final DateTime? now;
+  final String? currentUserId;
   final VoidCallback? onTap;
 
   @override
@@ -445,6 +515,8 @@ class NearbyTile extends StatelessWidget {
     final place = item.place;
     final friends = item.friendsLabel;
     final recurrence = item.recurrence;
+    final open = openStatus;
+    final at = now ?? DateTime.now();
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -452,7 +524,17 @@ class NearbyTile extends StatelessWidget {
           Expanded(
             child: Semantics(
               button: true,
-              label: nearbySemanticsLabel(item, saved: saved),
+              label: nearbySemanticsLabel(
+                item,
+                saved: saved,
+                openStatus: open == null
+                    ? null
+                    : openStatusSemantics(
+                        open,
+                        at,
+                        currentUserId: currentUserId,
+                      ),
+              ),
               hint: 'Abre o lugar',
               excludeSemantics: true,
               child: InkWell(
@@ -488,6 +570,18 @@ class NearbyTile extends StatelessWidget {
                                 color: scheme.tertiary,
                               ),
                             ),
+                            // F20: aberto agora, com quem confirmou.
+                            if (open != null)
+                              Padding(
+                                key: const Key('nearby-open-status'),
+                                padding: const EdgeInsets.only(top: 2),
+                                child: OpenStatusLine(
+                                  status: open,
+                                  now: at,
+                                  currentUserId: currentUserId,
+                                  dense: true,
+                                ),
+                              ),
                             if (friends != null)
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),

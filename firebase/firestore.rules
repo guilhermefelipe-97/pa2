@@ -80,6 +80,21 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Trava do F20 ("Está aberto agora?"): no máximo 1 relato a cada 30 min
+      // por usuário e local. Mesmo padrão do F03/F15: `lastAt` do servidor,
+      // só nasce/renova no mesmo batch que cria o relato novo `reportId` do
+      // mesmo autor e local; nunca apagável.
+      // MESMO período de `openReportCooldown` em app/lib/domain/open_status.dart
+      // (teste de paridade lê este arquivo).
+      match /openReportLocks/{placeId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && validOpenReportLock(placeId, request.resource.data);
+        allow update: if isOwner(uid)
+          && validOpenReportLock(placeId, request.resource.data)
+          && request.time >= resource.data.lastAt + duration.value(30, 'm');
+        allow delete: if false;
+      }
+
       match /saved/{placeId} {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid)
@@ -143,6 +158,25 @@ service cloud.firestore {
         && visit != null
         && visit.data.authorId == request.auth.uid
         && visit.data.placeId == placeId;
+    }
+
+    function openReportLockKeys() {
+      return ['lastAt', 'reportId', 'placeId'];
+    }
+
+    // O relato `reportId` é novo, nasce neste batch, do mesmo autor e local.
+    function validOpenReportLock(placeId, data) {
+      let reportPath = /databases/$(database)/documents/openReports/$(data.reportId);
+      let report = getAfter(reportPath);
+      return data.keys().hasOnly(openReportLockKeys())
+        && data.keys().hasAll(openReportLockKeys())
+        && data.placeId == placeId
+        && data.reportId is string
+        && data.lastAt == request.time
+        && !exists(reportPath)
+        && report != null
+        && report.data.authorId == request.auth.uid
+        && report.data.placeId == placeId;
     }
 
     function listKeys() {
@@ -388,6 +422,44 @@ service cloud.firestore {
     match /visits/{visitId} {
       allow read: if signedIn();
       allow create: if signedIn() && validVisit(request.resource.data, visitId);
+      allow update, delete: if false;
+    }
+
+    // ---------- openReports (F20: "Está aberto agora?") ----------
+    // Fato relatado por quem está no local: `open` (Sim/Não). Nunca anônimo
+    // (autor e nome do perfil validados como na visita), imutável,
+    // `createdAt` do servidor, local existente (pode nascer no mesmo batch,
+    // G2) e limitado a 1 a cada 30 min por usuário e local pela trava
+    // `users/{uid}/openReportLocks/{placeId}` do mesmo batch. A proximidade
+    // (até 150 m) é checada no app: a localização nunca é enviada.
+    function openReportKeys() {
+      return ['authorId', 'authorName', 'placeId', 'open', 'createdAt'];
+    }
+
+    function openReportLockPath(uid, placeId) {
+      return /databases/$(database)/documents/users/$(uid)/openReportLocks/$(placeId);
+    }
+
+    function validOpenReport(data, reportId) {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let lock = getAfter(openReportLockPath(request.auth.uid, data.placeId));
+      return data.keys().hasOnly(openReportKeys())
+        && data.keys().hasAll(openReportKeys())
+        && data.authorId == request.auth.uid
+        && data.authorName == profile.data.displayName
+        && data.placeId is string
+        // `After`: o local pode nascer no mesmo batch do relato (G2).
+        && existsAfter(/databases/$(database)/documents/places/$(data.placeId))
+        && data.open is bool
+        && lock != null
+        && lock.data.lastAt == request.time
+        && lock.data.reportId == reportId
+        && data.createdAt == request.time;
+    }
+
+    match /openReports/{reportId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validOpenReport(request.resource.data, reportId);
       allow update, delete: if false;
     }
 

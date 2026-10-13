@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../../data/photon/photon_client.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/open_report_repository.dart';
 import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
@@ -10,6 +13,7 @@ import '../../data/services/location_service.dart';
 import '../../domain/feed.dart';
 import '../../domain/geo.dart';
 import '../../domain/models/place.dart';
+import '../../domain/open_status.dart';
 import '../../domain/price_summary.dart';
 import '../core/follow_events.dart';
 import '../core/load_visits.dart';
@@ -154,8 +158,10 @@ class NearbyViewModel extends SafeChangeNotifier {
     FollowEvents? followEvents,
     SavedPlacesStore? savedStore,
     required VisitRepository visitRepository,
+    OpenReportRepository? openReportRepository,
     DateTime Function()? clock,
   }) : _location = locationService,
+       _openReports = openReportRepository,
        _clock = clock ?? DateTime.now,
        _places = placeRepository,
        _auth = authRepository,
@@ -173,6 +179,7 @@ class NearbyViewModel extends SafeChangeNotifier {
   final UserRepository _users;
   final ReviewRepository _reviews;
   final VisitRepository _visits;
+  final OpenReportRepository? _openReports;
   final FollowStaleness? _follow;
   final SavedPlacesStore? _saved;
 
@@ -197,7 +204,51 @@ class NearbyViewModel extends SafeChangeNotifier {
   LatLng? get position => _position;
 
   List<NearbyItem> _items = const [];
+
+  /// Todos os locais no raio, por distância (sem o filtro "Aberto agora").
   List<NearbyItem> get items => _items;
+
+  /// O que a lista mostra: [items], ou só os confirmados abertos com o
+  /// filtro "Aberto agora (confirmado)" ligado.
+  List<NearbyItem> get visibleItems => _openOnly
+      ? [
+          for (final i in _items)
+            if (_openStatuses[i.place.id]?.isOpen ?? false) i,
+        ]
+      : _items;
+
+  /// Hora atual (rótulos "há 20 min" do status de aberto).
+  DateTime now() => _clock();
+
+  /// Usuário logado (o próprio relato aparece como "você").
+  String? get currentUserId => _auth.currentUserId;
+
+  /// Status "Está aberto agora?" (F20) por local da lista.
+  Map<String, OpenStatus> _openStatuses = const {};
+
+  OpenStatus? openStatusOf(String placeId) => _openStatuses[placeId];
+
+  /// O filtro "Aberto agora (confirmado)" existe (há repositório de
+  /// relatos).
+  bool get hasOpenFilter => _openReports != null;
+
+  bool _openOnly = false;
+
+  /// Filtro "Aberto agora (confirmado)": só status Aberto (não divergente).
+  bool get openOnly => _openOnly;
+
+  bool _openReadFailed = false;
+
+  /// A leitura dos relatos falhou: sem status nos itens e o chip
+  /// desabilitado com aviso.
+  bool get openReadFailed => _openReadFailed;
+
+  void setOpenOnly(bool value) {
+    if (value && _openReadFailed) return;
+    if (value == _openOnly) return;
+    _openOnly = value;
+    notifyListeners();
+  }
 
   /// A posição está fora da área que o catálogo cobre.
   bool get outOfArea {
@@ -206,7 +257,7 @@ class NearbyViewModel extends SafeChangeNotifier {
   }
 
   NearbySuggestion? get suggestion =>
-      pickSuggestion(_items, _saved?.isSaved ?? (_) => false);
+      pickSuggestion(visibleItems, _saved?.isSaved ?? (_) => false);
 
   bool isSaved(String placeId) => _saved?.isSaved(placeId) ?? false;
 
@@ -367,6 +418,10 @@ class NearbyViewModel extends SafeChangeNotifier {
           ),
       ];
       _phase = NearbyPhase.ready;
+      // A lista aparece já; o status de aberto chega depois.
+      notifyListeners();
+      await _loadOpenStatuses(gen);
+      return;
     } on Object catch (e) {
       if (gen != _generation) return;
       _items = const [];
@@ -374,6 +429,38 @@ class NearbyViewModel extends SafeChangeNotifier {
       _capped = false;
       _rateLimited = e is PhotonRateLimitedException;
       _phase = NearbyPhase.loadError;
+    }
+    notifyListeners();
+  }
+
+  /// Status "Está aberto agora?" (F20) só dos itens da lista: `placeId in`
+  /// em lotes de 30, relatos das últimas 3 h. Falha não derruba a lista:
+  /// sem status, filtro desligado e chip desabilitado com aviso.
+  Future<void> _loadOpenStatuses(int gen) async {
+    final repo = _openReports;
+    if (repo == null) return;
+    final ids = [for (final i in _items) i.place.id];
+    if (ids.isEmpty || _auth.currentUserId == null) {
+      _openStatuses = const {};
+      _openReadFailed = false;
+      notifyListeners();
+      return;
+    }
+    try {
+      final now = _clock();
+      final reports = await repo.fetchForPlaces(
+        ids,
+        since: openReportsSince(now),
+      );
+      if (gen != _generation) return;
+      _openStatuses = openStatusesByPlace(reports, now);
+      _openReadFailed = false;
+    } on Object catch (e) {
+      if (gen != _generation) return;
+      debugPrint('Relatos de aberto indisponíveis (Perto): $e');
+      _openStatuses = const {};
+      _openReadFailed = true;
+      _openOnly = false;
     }
     notifyListeners();
   }

@@ -18,6 +18,7 @@ import '../../domain/visit_lock.dart';
 import '../core/follow_events.dart';
 import '../core/load_visits.dart';
 import '../core/safe_change_notifier.dart';
+import '../open/open_now_view_model.dart';
 
 /// Detalhe do local, autônomo por `placeId` (F11): carrega o local e as
 /// avaliações e visitas ("Voltei aqui", F15) de quem o usuário segue ali (e
@@ -33,6 +34,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     required ReviewRepository reviewRepository,
     required FollowEvents followEvents,
     required VisitRepository visitRepository,
+    this.openNow,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _users = userRepository,
@@ -58,6 +60,11 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   static const youLabel = 'Você';
 
   final String placeId;
+
+  /// "Está aberto agora?" (F20); `null` sem o repositório de relatos.
+  /// Descartado junto com o detalhe.
+  final OpenNowViewModel? openNow;
+
   final AuthRepository _auth;
   final UserRepository _users;
   final PlaceRepository _places;
@@ -423,6 +430,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
 
   @override
   void dispose() {
+    openNow?.dispose();
     _visitUnlockTimer?.cancel();
     _visitLockSeq++;
     _unlockTimer?.cancel();

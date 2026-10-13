@@ -14,6 +14,7 @@ import '../feed/widgets/price_chip.dart';
 import '../feed/widgets/review_tile.dart';
 import '../feed/widgets/trust_sources.dart' show RecurrenceBadge;
 import '../feed/widgets/visit_tile.dart';
+import '../open/open_now_section.dart';
 import '../visit/visit_sheet.dart';
 import '../visit/visit_view_model.dart';
 import 'place_detail_view_model.dart';
@@ -225,6 +226,9 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                       ],
                     ),
                   PlaceFacts(place: place),
+                  // F20: "Está aberto agora?" confirmado por quem está lá.
+                  if (vm.openNow != null)
+                    OpenNowSection(viewModel: vm.openNow!, place: place),
                   const SizedBox(height: 12),
                   if (item != null) ...[
                     Row(

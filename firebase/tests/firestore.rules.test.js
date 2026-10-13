@@ -1462,3 +1462,276 @@ describe('visits + users/{uid}/visitLocks (F15: "Voltei aqui", 12 h)', () => {
     if (ok !== 1) throw new Error('esperava 1 sucesso, vieram ' + ok);
   });
 });
+
+// ---------- F20: "Está aberto agora?" (openReports) ----------
+
+const openLockPath = (uid, placeId) => 'users/' + uid + '/openReportLocks/' + placeId;
+
+/// Relato como o app grava: autor do perfil, `open` bool, createdAt do
+/// servidor.
+function validOpenReport(overrides = {}) {
+  return {
+    authorId: 'alice',
+    authorName: 'Alice',
+    placeId: 'camaroes',
+    open: true,
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+function validOpenLock(reportId, overrides = {}) {
+  return {
+    lastAt: serverTimestamp(),
+    reportId,
+    placeId: 'camaroes',
+    ...overrides,
+  };
+}
+
+let openSeq = 0;
+
+/// Relato + trava num único batch. `lock: false` omite a trava; `lock: {...}`
+/// sobrescreve campos; `lockAt` troca o caminho da trava.
+function addOpenReport(db, data, { id, lock = {}, lockAt } = {}) {
+  const reportId = id || 'o' + (++openSeq);
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'openReports/' + reportId), data);
+  if (lock !== false) {
+    const placeId = typeof data.placeId === 'string' ? data.placeId : 'camaroes';
+    batch.set(
+      doc(db, lockAt || openLockPath(data.authorId, placeId)),
+      validOpenLock(reportId, { placeId, ...lock }),
+    );
+  }
+  return batch.commit();
+}
+
+/// Trava de relato semeada sem Rules, com o último relato há [minutesAgo].
+async function seedOpenLock(uid, placeId, minutesAgo, reportId = 'antigo') {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), openLockPath(uid, placeId)), {
+      lastAt: Timestamp.fromMillis(Date.now() - minutesAgo * 60 * 1000),
+      reportId,
+      placeId,
+    });
+  });
+}
+
+async function seedOpenReport(id, minutesAgo = 0, overrides = {}) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'openReports/' + id), {
+      ...validOpenReport(overrides),
+      createdAt: Timestamp.fromMillis(Date.now() - minutesAgo * 60 * 1000),
+    });
+  });
+}
+
+describe('openReports + users/{uid}/openReportLocks (F20: "Está aberto agora?", 30 min)', () => {
+  const lockRef = (db, uid = 'alice', placeId = 'camaroes') => doc(db, openLockPath(uid, placeId));
+
+  it('relata "Sim" e "Não": relato + trava no mesmo batch', async () => {
+    await assertSucceeds(addOpenReport(alice(), validOpenReport(), { id: 'primeiro' }));
+    const snap = await assertSucceeds(getDoc(lockRef(alice())));
+    const d = snap.data();
+    if (d.reportId !== 'primeiro' || d.placeId !== 'camaroes' || !(d.lastAt instanceof Timestamp)) {
+      throw new Error('trava inesperada: ' + JSON.stringify(d));
+    }
+    await assertSucceeds(addOpenReport(bob(), validOpenReport({ authorId: 'bob', authorName: 'Bob', open: false })));
+  });
+
+  it('há 10 min e há 29,9 min: negado', async () => {
+    await seedOpenLock('alice', 'camaroes', 10);
+    await assertFails(addOpenReport(alice(), validOpenReport()));
+    await seedOpenLock('alice', 'camaroes', 29.9);
+    await assertFails(addOpenReport(alice(), validOpenReport({ open: false })));
+  });
+
+  it('mesma hora: 2º relato negado', async () => {
+    await assertSucceeds(addOpenReport(alice(), validOpenReport(), { id: 'a1' }));
+    await assertFails(addOpenReport(alice(), validOpenReport({ open: false }), { id: 'a2' }));
+  });
+
+  it('após 30 min: relato aceito e trava renovada', async () => {
+    await seedOpenLock('alice', 'camaroes', 30.5);
+    await assertSucceeds(addOpenReport(alice(), validOpenReport(), { id: 'depois' }));
+    const snap = await getDoc(lockRef(alice()));
+    if (snap.data().reportId !== 'depois') throw new Error('trava não renovada');
+    if (Date.now() - snap.data().lastAt.toMillis() > 60 * 1000) {
+      throw new Error('lastAt não é a hora do servidor');
+    }
+  });
+
+  it('a trava é por local e por usuário, e separada da visita (F15)', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'places/mangai'), { name: 'Mangai', category: 'Restaurante' });
+    });
+    await seedOpenLock('alice', 'camaroes', 1);
+    await assertSucceeds(addOpenReport(alice(), validOpenReport({ placeId: 'mangai' })));
+    await assertSucceeds(addOpenReport(bob(), validOpenReport({ authorId: 'bob', authorName: 'Bob' })));
+    await seedVisitLock('alice', 'mangai', 1);
+    await seedOpenLock('alice', 'mangai', 31);
+    await assertSucceeds(addOpenReport(alice(), validOpenReport({ placeId: 'mangai' })));
+  });
+
+  it('local descoberto (Photon) é criado no batch do relato', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace());
+    batch.set(doc(db, 'openReports/novo'), validOpenReport({ placeId: 'osm-n123' }));
+    batch.set(doc(db, openLockPath('alice', 'osm-n123')), validOpenLock('novo', { placeId: 'osm-n123' }));
+    await assertSucceeds(batch.commit());
+  });
+
+  it('local inexistente ou forjado: negado', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport({ placeId: 'osm-n999' })));
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace({ lat: 38.7, lng: -9.1 }));
+    batch.set(doc(db, 'openReports/novo'), validOpenReport({ placeId: 'osm-n123' }));
+    batch.set(doc(db, openLockPath('alice', 'osm-n123')), validOpenLock('novo', { placeId: 'osm-n123' }));
+    await assertFails(batch.commit());
+  });
+
+  it('forja: anônimo, outro autor ou sem perfil', async () => {
+    await assertFails(addOpenReport(anon(), validOpenReport()));
+    await assertFails(addOpenReport(bob(), validOpenReport()));
+    await assertFails(addOpenReport(bob(), validOpenReport(), { lockAt: openLockPath('bob', 'camaroes') }));
+    const ghost = env.authenticatedContext('ghost').firestore();
+    await assertFails(addOpenReport(ghost, validOpenReport({ authorId: 'ghost', authorName: 'Ghost' })));
+  });
+
+  it('forja: authorName diferente do perfil (nunca anônimo)', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport({ authorName: 'Outra Pessoa' })));
+    await assertFails(addOpenReport(alice(), validOpenReport({ authorName: '' })));
+    await assertFails(addOpenReport(alice(), validOpenReport({ authorName: null })));
+  });
+
+  it('forja: open não-bool', async () => {
+    for (const open of ['true', 1, 0, null, 'sim', [true], { v: true }]) {
+      await assertFails(addOpenReport(alice(), validOpenReport({ open })));
+    }
+  });
+
+  it('forja: chave extra ou faltando', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport({ queue: 3 })));
+    await assertFails(addOpenReport(alice(), validOpenReport({ placeName: 'Camarões Potiguar' })));
+    await assertFails(addOpenReport(alice(), validOpenReport({ lat: -5.8 })));
+    for (const key of ['authorId', 'authorName', 'placeId', 'open', 'createdAt']) {
+      const data = validOpenReport();
+      delete data[key];
+      await assertFails(addOpenReport(alice(), data));
+    }
+  });
+
+  it('forja: createdAt do cliente', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport({ createdAt: Timestamp.now() })));
+    await assertFails(addOpenReport(alice(), validOpenReport({ createdAt: Timestamp.fromMillis(0) })));
+  });
+
+  it('forja: relato sem trava no batch', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lock: false }));
+    await assertFails(addDoc(collection(alice(), 'openReports'), validOpenReport()));
+  });
+
+  it('forja: trava de outro uid', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lockAt: openLockPath('bob', 'camaroes') }));
+    await assertFails(addOpenReport(bob(), validOpenReport({ authorId: 'bob', authorName: 'Bob' }), { lockAt: openLockPath('alice', 'camaroes') }));
+  });
+
+  it('forja: trava sem relato, para relato existente ou para outro relato', async () => {
+    await assertFails(setDoc(lockRef(alice()), validOpenLock('fantasma')));
+    await seedOpenReport('existente', 40);
+    await assertFails(setDoc(lockRef(alice()), validOpenLock('existente')));
+    await assertFails(addOpenReport(alice(), validOpenReport(), { id: 'o-a', lock: { reportId: 'outro' } }));
+  });
+
+  it('forja: trava de visita não serve para o relato (nem o contrário)', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'openReports/x'), validOpenReport());
+    batch.set(doc(db, visitLockPath('alice', 'camaroes')), validVisitLock('x'));
+    await assertFails(batch.commit());
+    const batch2 = writeBatch(db);
+    batch2.set(doc(db, 'visits/y'), validVisit());
+    batch2.set(lockRef(db), validOpenLock('y'));
+    await assertFails(batch2.commit());
+  });
+
+  it('forja: lastAt do cliente, placeId divergente ou chave extra na trava', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lock: { lastAt: Timestamp.now() } }));
+    await seedOpenLock('alice', 'camaroes', 40);
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lock: { lastAt: Timestamp.fromMillis(0) } }));
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lock: { placeId: 'mangai' } }));
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lock: { count: 1 } }));
+  });
+
+  it('forja: renovar a trava sem esperar 30 min, nem via update parcial', async () => {
+    await seedOpenLock('alice', 'camaroes', 10);
+    await assertFails(updateDoc(lockRef(alice()), { lastAt: Timestamp.fromMillis(0) }));
+    await assertFails(updateDoc(lockRef(alice()), { lastAt: serverTimestamp() }));
+  });
+
+  it('forja: update/delete do relato (nem o autor) e da trava', async () => {
+    await seedOpenReport('existente', 5);
+    await assertFails(updateDoc(doc(alice(), 'openReports/existente'), { open: false }));
+    await assertFails(setDoc(doc(alice(), 'openReports/existente'), validOpenReport({ open: false })));
+    await assertFails(deleteDoc(doc(alice(), 'openReports/existente')));
+    await assertFails(deleteDoc(doc(bob(), 'openReports/existente')));
+    await seedOpenLock('alice', 'camaroes', 10);
+    await assertFails(deleteDoc(lockRef(alice())));
+    await seedOpenLock('alice', 'camaroes', 40);
+    await assertFails(deleteDoc(lockRef(alice())));
+  });
+
+  it('logado lê relatos (consultas do detalhe e do Perto); anônimo não', async () => {
+    await seedOpenReport('recente', 20);
+    await seedOpenReport('velho', 200, { authorId: 'bob', authorName: 'Bob', open: false });
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'places/mangai'), { name: 'Mangai', category: 'Restaurante' });
+    });
+    await seedOpenReport('mangai', 5, { placeId: 'mangai', open: false });
+    await assertSucceeds(getDoc(doc(bob(), 'openReports/recente')));
+    await assertFails(getDoc(doc(anon(), 'openReports/recente')));
+    const since = Timestamp.fromMillis(Date.now() - 3 * 60 * 60 * 1000);
+    const detail = await assertSucceeds(getDocs(query(
+      collection(bob(), 'openReports'),
+      where('placeId', '==', 'camaroes'),
+      where('createdAt', '>=', since),
+      orderBy('createdAt', 'desc'),
+      limit(50),
+    )));
+    if (detail.size !== 1 || detail.docs[0].id !== 'recente') {
+      throw new Error('detalhe: esperava só o relato recente, veio ' + detail.size);
+    }
+    const nearby = await assertSucceeds(getDocs(query(
+      collection(bob(), 'openReports'),
+      where('placeId', 'in', ['camaroes', 'mangai']),
+      where('createdAt', '>=', since),
+      orderBy('createdAt', 'desc'),
+      limit(300),
+    )));
+    const ids = nearby.docs.map((d) => d.id).join(',');
+    if (ids !== 'mangai,recente') throw new Error('Perto: veio ' + ids);
+  });
+
+  it('só o dono lê a trava de relato', async () => {
+    await assertSucceeds(getDoc(lockRef(alice())));
+    await seedOpenLock('alice', 'camaroes', 10);
+    await assertSucceeds(getDoc(lockRef(alice())));
+    await assertFails(getDoc(lockRef(bob())));
+    await assertFails(getDoc(lockRef(anon())));
+    await assertFails(getDocs(collection(bob(), 'users/alice/openReportLocks')));
+  });
+
+  it('corrida: dois aparelhos ao mesmo tempo, só um passa', async () => {
+    const phone = env.authenticatedContext('alice').firestore();
+    const tablet = env.authenticatedContext('alice').firestore();
+    const results = await Promise.allSettled([
+      addOpenReport(phone, validOpenReport(), { id: 'cel' }),
+      addOpenReport(tablet, validOpenReport({ open: false }), { id: 'tab' }),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    if (ok !== 1) throw new Error('esperava 1 sucesso, vieram ' + ok);
+  });
+});
