@@ -9,6 +9,7 @@ import '../../data/repositories/visit_repository.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/models/place.dart';
 import '../../domain/models/visit.dart';
+import '../../domain/price_band.dart';
 import '../../domain/visit_lock.dart';
 import '../core/safe_change_notifier.dart';
 
@@ -42,6 +43,11 @@ class VisitViewModel extends SafeChangeNotifier {
 
   Companion? _companion;
   Companion? get companion => _companion;
+
+  PriceBand? _priceBand;
+
+  /// Gasto por pessoa (F27); opcional, nunca bloqueia o envio.
+  PriceBand? get priceBand => _priceBand;
 
   bool _isCheckingLock = false;
 
@@ -97,6 +103,14 @@ class VisitViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
+  /// Faixa escolhida (F27); `null` limpa. Ignorada durante o envio e com
+  /// a visita bloqueada (12 h). Não mexe na mensagem de erro.
+  void setPriceBand(PriceBand? value) {
+    if (_isSubmitting || isBlocked || value == _priceBand) return;
+    _priceBand = value;
+    notifyListeners();
+  }
+
   /// Consulta a trava antes de liberar o Confirmar. Erro ou mais de
   /// [visitLockTimeout]: segue sem trava e as Rules decidem no envio.
   Future<void> checkLock() async {
@@ -141,6 +155,7 @@ class VisitViewModel extends SafeChangeNotifier {
           placeId: place.id,
           placeName: place.name,
           companion: _companion,
+          priceBand: _priceBand,
         ),
         newPlace: newPlace,
       );

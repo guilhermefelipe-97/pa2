@@ -277,10 +277,21 @@ service cloud.firestore {
               'food', 'ambience', 'service', 'companion', 'comment', 'createdAt'];
     }
 
-    // Permitidas: as 10 + `hasPhoto` (G1). Janela de transição: clientes
-    // antigos ainda gravam sem `hasPhoto`, tratado como false.
+    // Permitidas: as 10 + `hasPhoto` (G1) + `priceBand` (F27). Janela de
+    // transição: clientes antigos ainda gravam sem `hasPhoto` (= false) e
+    // sem `priceBand` (= não informado).
     function reviewKeys() {
-      return reviewRequiredKeys().concat(['hasPhoto']);
+      return reviewRequiredKeys().concat(['hasPhoto', 'priceBand']);
+    }
+
+    // Faixa de preço por pessoa (F27), opcional em avaliações e visitas:
+    // ausente (build antigo), null (não informada) ou int de 1 a 5.
+    // MESMOS limites de `PriceBand` em app/lib/domain/price_band.dart (teste
+    // de paridade lê este arquivo).
+    function validPriceBand(data) {
+      return !('priceBand' in data)
+        || data.priceBand == null
+        || (data.priceBand is int && data.priceBand >= 1 && data.priceBand <= 5);
     }
 
     function photoPath(reviewId) {
@@ -318,6 +329,7 @@ service cloud.firestore {
         && validCompanion(data.companion)
         && validComment(data.comment)
         && validHasPhoto(data, reviewId)
+        && validPriceBand(data)
         // F03: a trava `users/{uid}/reviewLocks/{placeId}` é criada ou
         // renovada no MESMO batch, apontando para esta avaliação (as Rules da
         // trava exigem o intervalo de 30 dias desde a anterior).
@@ -343,6 +355,12 @@ service cloud.firestore {
       return ['authorId', 'authorName', 'placeId', 'placeName', 'companion', 'createdAt'];
     }
 
+    // Permitidas: as 6 obrigatórias + `priceBand` opcional (F27; builds
+    // antigos gravam sem a chave).
+    function visitAllowedKeys() {
+      return visitKeys().concat(['priceBand']);
+    }
+
     function visitLockPath(uid, placeId) {
       return /databases/$(database)/documents/users/$(uid)/visitLocks/$(placeId);
     }
@@ -351,7 +369,7 @@ service cloud.firestore {
       let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
       let placePath = /databases/$(database)/documents/places/$(data.placeId);
       let lock = getAfter(visitLockPath(request.auth.uid, data.placeId));
-      return data.keys().hasOnly(visitKeys())
+      return data.keys().hasOnly(visitAllowedKeys())
         && data.keys().hasAll(visitKeys())
         && data.authorId == request.auth.uid
         && data.authorName == profile.data.displayName
@@ -360,6 +378,7 @@ service cloud.firestore {
         && existsAfter(placePath)
         && data.placeName == getAfter(placePath).data.name
         && validCompanion(data.companion)
+        && validPriceBand(data)
         && lock != null
         && lock.data.lastAt == request.time
         && lock.data.visitId == visitId

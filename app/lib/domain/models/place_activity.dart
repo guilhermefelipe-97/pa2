@@ -1,3 +1,4 @@
+import '../price_band.dart';
 import 'companion.dart';
 import 'day_period.dart';
 import 'scores.dart';
@@ -17,6 +18,10 @@ sealed class PlaceActivity {
   String get placeId;
   String get placeName;
   Companion? get companion;
+
+  /// Quanto a pessoa gastou por pessoa nesta ida (F27); `null` = não
+  /// informou (ou build antigo, sem a chave).
+  PriceBand? get priceBand;
 
   /// Timestamp do servidor.
   DateTime get createdAt;

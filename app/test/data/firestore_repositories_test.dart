@@ -12,20 +12,26 @@ import 'package:naarea/domain/models/companion.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/domain/models/review.dart';
 import 'package:naarea/domain/models/scores.dart';
+import 'package:naarea/domain/price_band.dart';
 import 'package:naarea/domain/search_tokens.dart';
 
 import '../support/builders.dart';
 
-NewReview _newReview({Companion? companion, String? comment, Scores? scores}) =>
-    NewReview(
-      authorId: 'alice',
-      authorName: 'Alice',
-      placeId: 'mangai',
-      placeName: 'Mangai',
-      scores: scores ?? Scores(food: 5, ambience: 4, service: 3),
-      companion: companion,
-      comment: comment,
-    );
+NewReview _newReview({
+  Companion? companion,
+  String? comment,
+  Scores? scores,
+  PriceBand? priceBand,
+}) => NewReview(
+  authorId: 'alice',
+  authorName: 'Alice',
+  placeId: 'mangai',
+  placeName: 'Mangai',
+  scores: scores ?? Scores(food: 5, ambience: 4, service: 3),
+  companion: companion,
+  comment: comment,
+  priceBand: priceBand,
+);
 
 Future<void> _addReview(
   FakeFirebaseFirestore db, {
@@ -36,6 +42,8 @@ Future<void> _addReview(
   bool omitComment = false,
   Object? hasPhoto,
   bool omitHasPhoto = true,
+  Object? priceBand,
+  bool omitPriceBand = true,
 }) {
   return db.collection('reviews').add({
     'authorId': authorId,
@@ -48,6 +56,7 @@ Future<void> _addReview(
     'companion': null,
     if (!omitComment) 'comment': comment,
     if (!omitHasPhoto) 'hasPhoto': hasPhoto,
+    if (!omitPriceBand) 'priceBand': priceBand,
     'createdAt': Timestamp.fromDate(createdAt),
   });
 }
@@ -82,7 +91,7 @@ Future<void> _seedPlace(
 
 void main() {
   group('FirestoreReviewRepository.createReview', () {
-    test('grava exatamente as 11 chaves que as Rules exigem', () async {
+    test('grava exatamente as 12 chaves que as Rules aceitam', () async {
       final db = FakeFirebaseFirestore();
       await FirestoreReviewRepository(
         db,
@@ -102,9 +111,12 @@ void main() {
         'companion',
         'comment',
         'hasPhoto',
+        'priceBand',
         'createdAt',
       });
       expect(data['hasPhoto'], isFalse);
+      // F27: sem faixa escolhida, a chave vai com null.
+      expect(data['priceBand'], isNull);
       expect(data['authorId'], 'alice');
       expect(data['authorName'], 'Alice');
       expect(data['food'], 5);
@@ -113,6 +125,15 @@ void main() {
       expect(data['companion'], 'amigos');
       // FieldValue.serverTimestamp() é resolvido pelo fake como Timestamp.
       expect(data['createdAt'], isA<Timestamp>());
+    });
+
+    test('F27: faixa de preço gravada como int 1–5', () async {
+      final db = FakeFirebaseFirestore();
+      await FirestoreReviewRepository(
+        db,
+      ).createReview(_newReview(priceBand: PriceBand.from30To60));
+      final data = (await db.collection('reviews').get()).docs.single.data();
+      expect(data['priceBand'], 2);
     });
 
     test('companion ausente é gravado como null (chave presente)', () async {
@@ -463,6 +484,37 @@ void main() {
         expect(result.map((r) => r.hasPhoto), [true, false, false, false]);
       },
     );
+
+    test('F27: lê priceBand; ausente (build antigo) ou null = não informado; '
+        'inválido ignora o doc', () async {
+      final db = FakeFirebaseFirestore();
+      final cases = <(Object?, bool)>[
+        (3, false),
+        (null, false),
+        (null, true),
+        (0, false),
+        (6, false),
+        ('2', false),
+        (2.5, false),
+      ];
+      for (var i = 0; i < cases.length; i++) {
+        await _addReview(
+          db,
+          authorId: 'a',
+          createdAt: DateTime.utc(2026, 9, 10 - i),
+          priceBand: cases[i].$1,
+          omitPriceBand: cases[i].$2,
+        );
+      }
+      final result = (await FirestoreReviewRepository(
+        db,
+      ).fetchReviewsByAuthors(['a'])).items;
+      expect(result.map((r) => r.priceBand), [
+        PriceBand.from60To100,
+        null,
+        null,
+      ]);
+    });
 
     test(
       'F14: lê eixos null como não avaliados; os 3 null é ignorado',

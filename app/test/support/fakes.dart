@@ -398,12 +398,16 @@ class FakeReviewRepository implements ReviewRepository {
     return locks['$uid/$placeId'];
   }
 
+  /// Se definido, [createReview] espera por ele antes de responder.
+  Completer<void>? createGate;
+
   @override
   Future<CreateReviewResult> createReview(
     NewReview review, {
     Uint8List? photo,
     Place? newPlace,
   }) async {
+    if (createGate != null) await createGate!.future;
     if (createError != null) throw createError!;
     final lockId = '${review.authorId}/${review.placeId}';
     final now = clock();
@@ -429,6 +433,7 @@ class FakeReviewRepository implements ReviewRepository {
         comment: review.comment,
         createdAt: clock(),
         hasPhoto: photo != null,
+        priceBand: review.priceBand,
       ),
     );
     return (placeCreated: placeCreated ?? newPlace != null);
@@ -817,6 +822,7 @@ class FakeVisitRepository implements VisitRepository {
         placeName: visit.placeName,
         companion: visit.companion,
         createdAt: now,
+        priceBand: visit.priceBand,
       ),
     );
     return (placeCreated: placeCreated ?? newPlace != null);

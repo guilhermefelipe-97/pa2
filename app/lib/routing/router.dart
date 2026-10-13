@@ -120,6 +120,7 @@ GoRouter buildRouter(AuthRepository auth) {
                     followEvents: context.read<FollowEvents>(),
                     savedStore: context.read<SavedPlacesStore?>(),
                     visitRepository: context.read<VisitRepository>(),
+                    clock: context.read<AppClock?>()?.now,
                   ),
                   builder: (context, vm) => NearbyView(viewModel: vm),
                 ),

@@ -11,6 +11,7 @@ class Visit extends PlaceActivity {
     required this.placeName,
     required this.createdAt,
     this.companion,
+    this.priceBand,
   });
 
   @override
@@ -27,6 +28,8 @@ class Visit extends PlaceActivity {
   final Companion? companion;
   @override
   final DateTime createdAt;
+  @override
+  final PriceBand? priceBand;
 }
 
 /// Dados que o cliente envia para registrar uma visita. Sem `createdAt` (é
@@ -38,6 +41,7 @@ class NewVisit {
     required this.placeId,
     required this.placeName,
     this.companion,
+    this.priceBand,
   });
 
   final String authorId;
@@ -45,4 +49,7 @@ class NewVisit {
   final String placeId;
   final String placeName;
   final Companion? companion;
+
+  /// Gasto por pessoa (F27); opcional.
+  final PriceBand? priceBand;
 }

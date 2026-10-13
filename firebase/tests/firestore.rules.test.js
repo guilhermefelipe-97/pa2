@@ -786,6 +786,39 @@ describe('reviews', () => {
     await assertFails(reviewWithPhotoBatch(alice(), { withPhoto: false }));
   });
 
+  // ---------- F27: faixa de preço por pessoa (opcional) ----------
+  it('priceBand: 1 a 5 e null são aceitos (F27)', async () => {
+    for (const band of [1, 2, 3, 4, 5, null]) {
+      await assertSucceeds(freshReview(alice(), validReview({ priceBand: band })));
+    }
+  });
+
+  it('priceBand: build antigo sem a chave continua aceito (F27)', async () => {
+    const data = validReview();
+    delete data.priceBand;
+    if ('priceBand' in data) throw new Error('a chave deveria estar ausente');
+    await assertSucceeds(freshReview(alice(), data));
+    let snap;
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      snap = await getDocs(query(collection(ctx.firestore(), 'reviews'), where('authorId', '==', 'alice')));
+    });
+    const gravadas = snap.docs.filter((d) => d.id !== 'existing');
+    if (gravadas.length !== 1 || 'priceBand' in gravadas[0].data()) {
+      throw new Error('esperava 1 review gravada sem priceBand');
+    }
+  });
+
+  it('priceBand com foto: review + foto + faixa no mesmo batch (F27)', async () => {
+    await assertSucceeds(reviewWithPhotoBatch(alice(), { review: { priceBand: 3 } }));
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'outra', review: { priceBand: 6 } }));
+  });
+
+  it('priceBand: forja 0, 6, "2", 2.5, true, -1 é negada (F27)', async () => {
+    for (const band of [0, 6, '2', 2.5, true, -1, [2]]) {
+      await assertFails(freshReview(alice(), validReview({ priceBand: band })));
+    }
+  });
+
   it('comentário é imutável como a avaliação (nem o autor edita)', async () => {
     await assertFails(updateDoc(doc(alice(), 'reviews/existing'), { comment: 'editado' }));
   });
@@ -1384,6 +1417,38 @@ describe('visits + users/{uid}/visitLocks (F15: "Voltei aqui", 12 h)', () => {
     await assertFails(getDoc(lockRef(bob())));
     await assertFails(getDoc(lockRef(anon())));
     await assertFails(getDocs(collection(bob(), 'users/alice/visitLocks')));
+  });
+
+  it('priceBand: 1 a 5 e null são aceitos (F27)', async () => {
+    for (const band of [1, 2, 3, 4, 5, null]) {
+      // Trava vencida (há 13 h): cada asserção vale sozinha.
+      await seedVisitLock('alice', 'camaroes', 13);
+      await assertSucceeds(addVisit(alice(), validVisit({ priceBand: band })));
+    }
+  });
+
+  it('priceBand: build antigo sem a chave continua aceito (F27)', async () => {
+    const data = validVisit();
+    delete data.priceBand;
+    if ('priceBand' in data) throw new Error('a chave deveria estar ausente');
+    await assertSucceeds(addVisit(alice(), data, { id: 'antigo' }));
+    let snap;
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      snap = await getDoc(doc(ctx.firestore(), 'visits/antigo'));
+    });
+    if ('priceBand' in snap.data()) throw new Error('visita gravada com priceBand');
+  });
+
+  it('priceBand válido não abre espaço para chave extra (F27)', async () => {
+    await assertFails(addVisit(alice(), validVisit({ priceBand: 2, food: 5 })));
+    await assertFails(addVisit(alice(), validVisit({ priceBand: 2, price: 45 })));
+    await assertSucceeds(addVisit(alice(), validVisit({ priceBand: 2 })));
+  });
+
+  it('priceBand: forja 0, 6, "2", 2.5, true, -1 é negada (F27)', async () => {
+    for (const band of [0, 6, '2', 2.5, true, -1, [2]]) {
+      await assertFails(addVisit(alice(), validVisit({ priceBand: band })));
+    }
   });
 
   it('corrida: dois aparelhos ao mesmo tempo, só um passa', async () => {

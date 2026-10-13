@@ -95,3 +95,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-f15-recorrencia.md`
   summary: Prova de presença na visita (checar proximidade no cliente) e limite global de visitas por dia; desfazer visita acidental e exclusão por LGPD.
   evidence: Hoje dá para registrar "Voltei aqui" de casa a cada 12 h por local; visita e trava são imutáveis.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-f27-faixa-de-preco.md`
+  summary: Permitir informar/corrigir o preço depois (ex.: "informar preço" na próxima ida) já que avaliações e visitas são imutáveis.
+  evidence: Quem esquece ou erra a faixa não tem como corrigir; o relato só é substituído por uma ida futura.

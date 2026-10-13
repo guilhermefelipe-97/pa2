@@ -10,6 +10,7 @@ import '../../data/services/location_service.dart';
 import '../../domain/feed.dart';
 import '../../domain/geo.dart';
 import '../../domain/models/place.dart';
+import '../../domain/price_summary.dart';
 import '../core/follow_events.dart';
 import '../core/load_visits.dart';
 import '../core/safe_change_notifier.dart';
@@ -62,8 +63,13 @@ enum NearbyPhase {
   loadError,
 }
 
-/// Sinal de amigos de um local no "Perto": quem foi e a recorrência.
-typedef FriendSignal = ({List<String> names, String? recurrence});
+/// Sinal de amigos de um local no "Perto": quem foi, a recorrência e o
+/// preço relatado (F27).
+typedef FriendSignal = ({
+  List<String> names,
+  String? recurrence,
+  PriceSummary? price,
+});
 
 /// Item da lista: local, distância e quem o usuário segue que foi lá.
 class NearbyItem {
@@ -72,6 +78,7 @@ class NearbyItem {
     required this.distanceMeters,
     this.friends = const [],
     this.recurrence,
+    this.price,
   });
 
   final Place place;
@@ -84,6 +91,9 @@ class NearbyItem {
   /// "Ana voltou 3 vezes" quando um amigo foi 2 vezes ou mais (F15; a
   /// tela acrescenta o ícone 🔁).
   final String? recurrence;
+
+  /// Preço relatado pelos amigos (F27); `null` = ninguém informou.
+  final PriceSummary? price;
 
   /// "Ana foi aqui", "Ana e Bia foram aqui", "Ana e mais 2 foram aqui".
   String? get friendsLabel => friendsWentLabel(friends);
@@ -144,7 +154,9 @@ class NearbyViewModel extends SafeChangeNotifier {
     FollowEvents? followEvents,
     SavedPlacesStore? savedStore,
     required VisitRepository visitRepository,
+    DateTime Function()? clock,
   }) : _location = locationService,
+       _clock = clock ?? DateTime.now,
        _places = placeRepository,
        _auth = authRepository,
        _users = userRepository,
@@ -163,6 +175,9 @@ class NearbyViewModel extends SafeChangeNotifier {
   final VisitRepository _visits;
   final FollowStaleness? _follow;
   final SavedPlacesStore? _saved;
+
+  /// Hora atual (janela de 12 meses do preço, F27).
+  final DateTime Function() _clock;
 
   /// Lado da célula de geohash de precisão 7 é ~153 m: a consulta em cache
   /// parte do centro da célula com esta folga (meia diagonal, arredondada
@@ -348,6 +363,7 @@ class NearbyViewModel extends SafeChangeNotifier {
             distanceMeters: n.distanceMeters,
             friends: friends[n.place.id]?.names ?? const [],
             recurrence: friends[n.place.id]?.recurrence,
+            price: friends[n.place.id]?.price,
           ),
       ];
       _phase = NearbyPhase.ready;
@@ -435,6 +451,7 @@ class NearbyViewModel extends SafeChangeNotifier {
                     displayAuthorName(recurrent.authorName),
                     recurrent.trips,
                   ),
+            price: item.priceAt(_clock()),
           );
         }
       }

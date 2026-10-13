@@ -8,6 +8,7 @@ import 'package:naarea/data/firebase/firestore_visit_repository.dart';
 import 'package:naarea/domain/models/companion.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/domain/models/visit.dart';
+import 'package:naarea/domain/price_band.dart';
 
 FirebaseException _denied() =>
     FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied');
@@ -15,14 +16,18 @@ FirebaseException _denied() =>
 FirebaseException _unavailable() =>
     FirebaseException(plugin: 'cloud_firestore', code: 'unavailable');
 
-NewVisit _newVisit({String placeId = 'mangai', Companion? companion}) =>
-    NewVisit(
-      authorId: 'alice',
-      authorName: 'Alice',
-      placeId: placeId,
-      placeName: placeId == 'mangai' ? 'Mangai' : 'Bar do Zé',
-      companion: companion,
-    );
+NewVisit _newVisit({
+  String placeId = 'mangai',
+  Companion? companion,
+  PriceBand? priceBand,
+}) => NewVisit(
+  authorId: 'alice',
+  authorName: 'Alice',
+  placeId: placeId,
+  placeName: placeId == 'mangai' ? 'Mangai' : 'Bar do Zé',
+  companion: companion,
+  priceBand: priceBand,
+);
 
 /// Local só descoberto pelo Photon (G2).
 const _discovered = Place(
@@ -45,12 +50,15 @@ Future<void> _addVisit(
   required String authorId,
   String placeId = 'mangai',
   required DateTime createdAt,
+  Object? priceBand,
+  bool omitPriceBand = true,
 }) => db.collection('visits').doc(id).set({
   'authorId': authorId,
   'authorName': authorId.toUpperCase(),
   'placeId': placeId,
   'placeName': 'Local $placeId',
   'companion': null,
+  if (!omitPriceBand) 'priceBand': priceBand,
   'createdAt': Timestamp.fromDate(createdAt),
 });
 
@@ -59,7 +67,7 @@ DateTime _t(int minutes) =>
 
 void main() {
   group('FirestoreVisitRepository.createVisit (F15)', () {
-    test('grava as 6 chaves das Rules e a trava no mesmo batch', () async {
+    test('grava as 7 chaves das Rules e a trava no mesmo batch', () async {
       final db = FakeFirebaseFirestore();
       final result = await FirestoreVisitRepository(
         db,
@@ -72,15 +80,27 @@ void main() {
         'placeId',
         'placeName',
         'companion',
+        'priceBand',
         'createdAt',
       });
       expect(visit.data()['companion'], 'amigos');
+      // F27: sem faixa escolhida, a chave vai com null.
+      expect(visit.data()['priceBand'], isNull);
       expect(visit.data()['createdAt'], isA<Timestamp>());
       final lock = await db.doc('users/alice/visitLocks/mangai').get();
       expect(lock.data()!.keys.toSet(), {'lastAt', 'visitId', 'placeId'});
       expect(lock.data()!['visitId'], visit.id);
       expect(lock.data()!['placeId'], 'mangai');
       expect(lock.data()!['lastAt'], isA<Timestamp>());
+    });
+
+    test('F27: faixa de preço gravada como int 1–5', () async {
+      final db = FakeFirebaseFirestore();
+      await FirestoreVisitRepository(
+        db,
+      ).createVisit(_newVisit(priceBand: PriceBand.upTo30));
+      final data = (await db.collection('visits').get()).docs.single.data();
+      expect(data['priceBand'], 1);
     });
 
     test('companhia ausente: chave presente com null; sem notas', () async {
@@ -342,6 +362,35 @@ void main() {
       expect(found.map((v) => v.id), ['x1']);
       expect(found.single, isA<Visit>());
       expect(found.single.companion, isNull);
+    });
+
+    test('F27: lê priceBand; ausente (build antigo) ou null = não '
+        'informado; inválido ignora o doc', () async {
+      final db = FakeFirebaseFirestore();
+      final cases = <(Object?, bool)>[
+        (5, false),
+        (null, false),
+        (null, true),
+        (0, false),
+        (6, false),
+        ('2', false),
+        (2.5, false),
+      ];
+      for (var i = 0; i < cases.length; i++) {
+        await _addVisit(
+          db,
+          id: 'p$i',
+          authorId: 'ana',
+          createdAt: _t(100 - i),
+          priceBand: cases[i].$1,
+          omitPriceBand: cases[i].$2,
+        );
+      }
+      final found = (await FirestoreVisitRepository(
+        db,
+      ).fetchVisitsByAuthors(['ana'])).items;
+      expect(found.map((v) => v.id), ['p0', 'p1', 'p2']);
+      expect(found.map((v) => v.priceBand), [PriceBand.from150, null, null]);
     });
   });
 }

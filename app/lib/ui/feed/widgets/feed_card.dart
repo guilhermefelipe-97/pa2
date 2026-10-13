@@ -4,6 +4,7 @@ import '../../../domain/feed.dart';
 import '../../../domain/relative_time.dart';
 import '../../core/save_button.dart';
 import 'place_photo.dart';
+import 'price_chip.dart';
 import 'trust_sources.dart';
 
 /// "Bairro · Categoria", pulando partes vazias.
@@ -47,6 +48,7 @@ class FeedCard extends StatelessWidget {
     final place = item.place;
     final commented = item.latestComment;
     final subtitle = placeSubtitle(place.neighborhood, place.category);
+    final price = item.priceAt(now);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -98,6 +100,14 @@ class FeedCard extends StatelessWidget {
                                 ),
                               ),
                             ],
+                          ),
+                        ],
+                        // F27: quanto os amigos gastaram por pessoa.
+                        if (price != null) ...[
+                          const SizedBox(height: 8),
+                          PriceChip(
+                            key: const Key('feed-price'),
+                            summary: price,
                           ),
                         ],
                         const SizedBox(height: 10),

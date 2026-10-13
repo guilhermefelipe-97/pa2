@@ -8,6 +8,7 @@ import '../../data/repositories/visit_repository.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/models/place.dart';
 import '../core/app_clock.dart';
+import '../core/price_band_picker.dart';
 import 'visit_view_model.dart';
 
 /// Rótulo do botão que abre o fluxo (detalhe).
@@ -133,9 +134,16 @@ class _VisitSheetState extends State<VisitSheet> {
         canPop: _vm.canClose,
         child: child!,
       ),
+      // Área segura (barra do sistema) e teclado/insets: o Confirmar nunca
+      // fica escondido; o conteúdo rola em telas baixas (ex.: 320×568).
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            0,
+            20,
+            20 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
           child: ListenableBuilder(
             listenable: _vm,
             builder: (context, _) {
@@ -143,98 +151,108 @@ class _VisitSheetState extends State<VisitSheet> {
               final muted = theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               );
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Alça só visual (o arrastar é o do sheet, desligado durante
-                  // o envio).
-                  Center(
-                    child: Container(
-                      key: const Key('visit-handle'),
-                      margin: const EdgeInsets.symmetric(vertical: 16),
-                      width: 32,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurfaceVariant.withValues(
-                          alpha: vm.canClose ? 0.4 : 0.12,
+              // Rolável: com o preço (F27) o conteúdo pode passar da
+              // altura de telas pequenas.
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Alça só visual (o arrastar é o do sheet, desligado durante
+                    // o envio).
+                    Center(
+                      child: Container(
+                        key: const Key('visit-handle'),
+                        margin: const EdgeInsets.symmetric(vertical: 16),
+                        width: 32,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurfaceVariant.withValues(
+                            alpha: vm.canClose ? 0.4 : 0.12,
+                          ),
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                  ),
-                  Text(visitActionLabel, style: theme.textTheme.titleLarge),
-                  Text(vm.place.name, style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Sem notas: só conta que você voltou. O período do dia é '
-                    'registrado pelo horário do envio.',
-                    style: muted,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Com quem você foi? (opcional)',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final c in Companion.values)
-                        ChoiceChip(
-                          key: ValueKey('visit-companion-${c.value}'),
-                          label: Text(c.label),
-                          selected: vm.companion == c,
-                          onSelected: vm.isSubmitting || vm.isBlocked
-                              ? null
-                              : (_) => vm.toggleCompanion(c),
+                    Text(visitActionLabel, style: theme.textTheme.titleLarge),
+                    Text(vm.place.name, style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Sem notas: só conta que você voltou. O período do dia é '
+                      'registrado pelo horário do envio.',
+                      style: muted,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Com quem você foi? (opcional)',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final c in Companion.values)
+                          ChoiceChip(
+                            key: ValueKey('visit-companion-${c.value}'),
+                            label: Text(c.label),
+                            selected: vm.companion == c,
+                            onSelected: vm.isSubmitting || vm.isBlocked
+                                ? null
+                                : (_) => vm.toggleCompanion(c),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    PriceBandPicker(
+                      value: vm.priceBand,
+                      onChanged: vm.setPriceBand,
+                      enabled: !vm.isSubmitting && !vm.isBlocked,
+                    ),
+                    if (vm.blockedMessage != null) ...[
+                      const SizedBox(height: 16),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          vm.blockedMessage!,
+                          key: const Key('visit-blocked'),
+                          style: muted,
                         ),
+                      ),
                     ],
-                  ),
-                  if (vm.blockedMessage != null) ...[
-                    const SizedBox(height: 16),
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        vm.blockedMessage!,
-                        key: const Key('visit-blocked'),
-                        style: muted,
+                    if (vm.errorMessage != null) ...[
+                      const SizedBox(height: 16),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          vm.errorMessage!,
+                          key: const Key('visit-error'),
+                          style: TextStyle(color: theme.colorScheme.error),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        key: const Key('visit-confirm'),
+                        onPressed: vm.canSubmit ? _confirm : null,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: vm.isSubmitting || vm.isCheckingLock
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Confirmar'),
+                        ),
                       ),
                     ),
                   ],
-                  if (vm.errorMessage != null) ...[
-                    const SizedBox(height: 16),
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        vm.errorMessage!,
-                        key: const Key('visit-error'),
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      key: const Key('visit-confirm'),
-                      onPressed: vm.canSubmit ? _confirm : null,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: vm.isSubmitting || vm.isCheckingLock
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Confirmar'),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               );
             },
           ),

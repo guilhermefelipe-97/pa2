@@ -4,11 +4,13 @@ import 'package:go_router/go_router.dart';
 import '../../data/photon/photon_client.dart';
 import '../../domain/geo.dart';
 import '../../domain/models/place.dart';
+import '../../domain/price_summary.dart';
 import '../../routing/routes.dart';
 import '../core/app_shell.dart';
 import '../core/osm_credit.dart';
 import '../core/save_button.dart';
 import '../feed/widgets/place_photo.dart';
+import '../feed/widgets/price_chip.dart';
 import '../feed/widgets/trust_sources.dart' show RecurrenceLine;
 import 'nearby_view_model.dart';
 
@@ -33,6 +35,7 @@ String nearbySemanticsLabel(NearbyItem item, {required bool saved}) => [
   if (saved) 'está no Quero ir',
   ?item.friendsLabel,
   ?item.recurrence,
+  if (item.price != null) priceChipSemantics(item.price!),
 ].join(', ');
 
 /// Linha que explica a sugestão.
@@ -517,6 +520,16 @@ class NearbyTile extends StatelessWidget {
                                 key: const Key('nearby-recurrence'),
                                 padding: const EdgeInsets.only(top: 2),
                                 child: RecurrenceLine(label: recurrence),
+                              ),
+                            // F27: preço relatado pelos amigos.
+                            if (item.price != null)
+                              Padding(
+                                key: const Key('nearby-price'),
+                                padding: const EdgeInsets.only(top: 2),
+                                child: PriceChip(
+                                  summary: item.price!,
+                                  dense: true,
+                                ),
                               ),
                           ],
                         ),

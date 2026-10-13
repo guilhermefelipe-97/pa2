@@ -343,7 +343,8 @@ void main() {
     await tester.pump(); // trava do F03 (checkLock)
 
     final field = find.byKey(const Key('review-comment'));
-    await tester.ensureVisible(field);
+    // O seletor de preço (F27) empurra o campo para fora da área montada.
+    await tester.scrollUntilVisible(field, 200);
     expect(tester.widget<TextField>(field).maxLength, 280);
 
     await tester.enterText(field, 'x' * 300);

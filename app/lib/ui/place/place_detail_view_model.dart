@@ -12,6 +12,7 @@ import '../../domain/feed.dart';
 import '../../domain/models/place.dart';
 import '../../domain/models/place_activity.dart';
 import '../../domain/models/scores.dart' as scores;
+import '../../domain/price_summary.dart';
 import '../../domain/review_lock.dart';
 import '../../domain/visit_lock.dart';
 import '../core/follow_events.dart';
@@ -190,13 +191,59 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     return n == 0 ? visitPart : '$reviewPart · $visitPart';
   }
 
+  Place? _itemPlace;
+  List<Review>? _itemReviews;
+  List<Visit>? _itemVisits;
+  FeedItem? _item;
+
   /// Card com as avaliações e visitas (cabeçalho, médias, autores, lista).
+  /// O mesmo objeto enquanto o local e as idas não mudam (snapshot).
   FeedItem? get item {
     final p = _place;
     final r = _visibleReviews;
-    if (p == null || r == null) return null;
-    if (r.isEmpty && _visibleVisits.isEmpty) return null;
-    return FeedItem(place: p, activities: [...r, ..._visibleVisits]);
+    final v = _visibleVisits;
+    if (identical(p, _itemPlace) &&
+        identical(r, _itemReviews) &&
+        identical(v, _itemVisits)) {
+      return _item;
+    }
+    _itemPlace = p;
+    _itemReviews = r;
+    _itemVisits = v;
+    _item = (p == null || r == null || (r.isEmpty && v.isEmpty))
+        ? null
+        : FeedItem(place: p, activities: [...r, ...v]);
+    return _item;
+  }
+
+  FeedItem? _priceItem;
+  PriceSummary? _price;
+
+  /// Preço relatado (F27) pelos amigos e pelo próprio usuário (inclusive
+  /// quando só há a ida dele): o relato mais recente de cada um, nos
+  /// últimos 12 meses. `null` = ninguém informou. Calculado uma vez por
+  /// snapshot ([item]): o chip do topo e a seção usam o mesmo resumo.
+  PriceSummary? get price {
+    final i = item;
+    if (!identical(i, _priceItem)) {
+      _priceItem = i;
+      _price = i?.priceAt(now());
+    }
+    return _price;
+  }
+
+  /// "3 relatos de amigos"; com o do próprio usuário, "3 relatos (seu e de
+  /// amigos)" ou "1 relato seu". `null` sem relatos.
+  String? get priceCountLabel {
+    final p = price;
+    if (p == null) return null;
+    final own = p.reports.any(isOwn);
+    final n = p.count;
+    if (!own) {
+      return scores.countLabel(n, 'relato de amigo', 'relatos de amigos');
+    }
+    if (n == 1) return '1 relato seu';
+    return '$n relatos (seu e de amigos)';
   }
 
   DateTime? _visitLockLastAt;
@@ -360,6 +407,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     comment: r.comment,
     createdAt: r.createdAt,
     hasPhoto: r.hasPhoto,
+    priceBand: r.priceBand,
   );
 
   static Visit _visitAsYou(Visit v) => Visit(
@@ -370,6 +418,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     placeName: v.placeName,
     companion: v.companion,
     createdAt: v.createdAt,
+    priceBand: v.priceBand,
   );
 
   @override

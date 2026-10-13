@@ -10,12 +10,14 @@ import '../feed/widgets/author_avatar.dart';
 import '../feed/widgets/axis_scores.dart';
 import '../feed/widgets/feed_card.dart';
 import '../feed/widgets/place_photo.dart';
+import '../feed/widgets/price_chip.dart';
 import '../feed/widgets/review_tile.dart';
 import '../feed/widgets/trust_sources.dart' show RecurrenceBadge;
 import '../feed/widgets/visit_tile.dart';
 import '../visit/visit_sheet.dart';
 import '../visit/visit_view_model.dart';
 import 'place_detail_view_model.dart';
+import 'price_section.dart';
 import 'review_photo_strip.dart';
 
 /// Detalhe do local: foto grande, marcador "Quero ir" e as avaliações dos
@@ -127,6 +129,13 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
     final scheme = theme.colorScheme;
     final at = vm.now();
     final item = vm.item;
+    // F27: uma seção de preço só — no fim da lista quando há idas (inclusive
+    // só a do próprio usuário), ou junto do convite quando não há nenhuma.
+    final priceSection = PriceSection(
+      key: const Key('place-price-section'),
+      summary: vm.price,
+      countLabel: vm.priceCountLabel,
+    );
     final subtitle = [
       placeSubtitle(place.neighborhood, place.category),
       if (place.city.trim().isNotEmpty) place.city,
@@ -253,6 +262,16 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                       const SizedBox(height: 6),
                       AxisScores.averages(item.averages!),
                     ],
+                    // F27: cabe no orçamento? A faixa típica aqui; a
+                    // distribuição e o rachar no fim da lista.
+                    if (vm.price != null) ...[
+                      const SizedBox(height: 12),
+                      PriceChip(
+                        key: const Key('place-price-chip'),
+                        summary: vm.price!,
+                        countLabel: vm.priceCountLabel,
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     Wrap(
                       spacing: 12,
@@ -291,7 +310,7 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                       style: theme.textTheme.titleMedium,
                     ),
                     const Divider(height: 20),
-                  ] else if (vm.reviewsKnown)
+                  ] else if (vm.reviewsKnown) ...[
                     _NoFriendReviews(
                       onReview: () => _review(place),
                       reviewAgainLabel: vm.reviewAgainLabel,
@@ -299,8 +318,9 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                         blockedLabel: vm.visitBlockedLabel,
                         onVisit: () => _visit(place),
                       ),
-                    )
-                  else if (vm.errorMessage != null)
+                    ),
+                    priceSection,
+                  ] else if (vm.errorMessage != null)
                     _CenteredMessage(
                       icon: Icons.wifi_off,
                       text: vm.errorMessage!,
@@ -336,6 +356,15 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                   ),
                 },
                 separatorBuilder: (context, i) => const Divider(height: 1),
+              ),
+            ),
+          // F27: preço relatado (faixa típica, distribuição, quem relatou
+          // e quanto dá para rachar).
+          if (item != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                child: priceSection,
               ),
             ),
           if (place.hasOsmData)

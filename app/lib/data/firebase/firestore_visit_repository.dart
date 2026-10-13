@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/models/place.dart';
 import '../../domain/models/visit.dart';
+import '../../domain/price_band.dart';
 import '../activity_batch.dart';
 import '../repositories/visit_repository.dart';
 import 'activity_queries.dart' as queries;
@@ -169,14 +170,16 @@ class FirestoreVisitRepository implements VisitRepository {
         newPlaceData(createPlace, uid: visit.authorId),
       );
     }
-    // Schema exato (6 chaves) validado pelas Rules. Sem notas; o período do
-    // dia é derivado do createdAt, sempre do servidor.
+    // Schema exato (7 chaves) validado pelas Rules. Sem notas; o período do
+    // dia é derivado do createdAt, sempre do servidor. `priceBand` (F27):
+    // 1–5 ou null quando não informado.
     batch.set(ref, {
       'authorId': visit.authorId,
       'authorName': visit.authorName,
       'placeId': visit.placeId,
       'placeName': placeName,
       'companion': visit.companion?.value,
+      'priceBand': visit.priceBand?.value,
       'createdAt': FieldValue.serverTimestamp(),
     });
     // Trava criada/renovada no mesmo batch, apontando para esta visita.
@@ -224,6 +227,12 @@ class FirestoreVisitRepository implements VisitRepository {
         (companion != null && companion is! String)) {
       return null;
     }
+    final PriceBand? priceBand;
+    try {
+      priceBand = readPriceBand(d);
+    } on FormatException {
+      return null;
+    }
     return Visit(
       id: doc.id,
       authorId: authorId,
@@ -232,6 +241,7 @@ class FirestoreVisitRepository implements VisitRepository {
       placeName: placeName,
       companion: Companion.fromValue(companion as String?),
       createdAt: ts.toDate(),
+      priceBand: priceBand,
     );
   }
 }

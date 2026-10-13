@@ -13,6 +13,7 @@ class Review extends PlaceActivity {
     required this.createdAt,
     this.comment,
     this.hasPhoto = false,
+    this.priceBand,
   });
 
   @override
@@ -41,6 +42,9 @@ class Review extends PlaceActivity {
   /// sem a chave, são tratadas como sem foto.
   final bool hasPhoto;
 
+  @override
+  final PriceBand? priceBand;
+
   /// Mesmo limite das Security Rules (`comment.size() <= 280`).
   static const int maxCommentLength = 280;
 
@@ -67,6 +71,7 @@ class NewReview {
     required this.scores,
     this.companion,
     String? comment,
+    this.priceBand,
   }) : comment = Review.normalizeComment(comment);
 
   final String authorId;
@@ -78,4 +83,7 @@ class NewReview {
 
   /// Normalizado na criação (trim; vazio → `null`).
   final String? comment;
+
+  /// Gasto por pessoa (F27); opcional.
+  final PriceBand? priceBand;
 }

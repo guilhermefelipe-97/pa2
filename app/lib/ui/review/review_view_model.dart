@@ -6,6 +6,7 @@ import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/services/photo_picker.dart';
 import '../../domain/models/companion.dart';
+import '../../domain/price_band.dart';
 import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart';
@@ -134,6 +135,11 @@ class ReviewViewModel extends SafeChangeNotifier {
   int? get service => _service;
   Companion? get companion => _companion;
 
+  PriceBand? _priceBand;
+
+  /// Gasto por pessoa (F27); opcional, nunca bloqueia o envio.
+  PriceBand? get priceBand => _priceBand;
+
   /// Texto como digitado (é aparado só no envio).
   String get comment => _comment;
 
@@ -195,6 +201,14 @@ class ReviewViewModel extends SafeChangeNotifier {
       _set(() => _companion = _companion == value ? null : value);
 
   void setComment(String value) => _set(() => _comment = value);
+
+  /// Faixa escolhida (F27); `null` limpa. Ignorada durante o envio. Não
+  /// mexe na mensagem de erro (o preço não resolve erro nenhum).
+  void setPriceBand(PriceBand? value) {
+    if (_isSubmitting || value == _priceBand) return;
+    _priceBand = value;
+    notifyListeners();
+  }
 
   /// Abre a câmera ou a galeria. Cancelar não muda nada (nem a foto atual).
   /// A foto escolhida é sempre recodificada; se não der, avisa e segue com a
@@ -316,6 +330,7 @@ class ReviewViewModel extends SafeChangeNotifier {
           scores: Scores(food: _food, ambience: _ambience, service: _service),
           companion: _companion,
           comment: _comment, // NewReview normaliza: trim, vazio → null
+          priceBand: _priceBand,
         ),
         photo: _photo,
         newPlace: newPlace,

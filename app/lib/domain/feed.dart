@@ -1,6 +1,7 @@
 import 'models/place.dart';
 import 'models/place_activity.dart';
 import 'models/scores.dart';
+import 'price_summary.dart';
 
 /// Um card do feed "Amigos foram aqui": um local e as idas de quem o
 /// usuário segue — avaliações e visitas sem nota ("Voltei aqui", F15) —, da
@@ -77,6 +78,21 @@ class FeedItem {
   late final AxisAverages? averages = reviews.isEmpty
       ? null
       : AxisAverages.of(reviews.map((r) => r.scores));
+
+  DateTime? _priceAt;
+  PriceSummary? _price;
+
+  /// Preço relatado (F27): faixa típica e distribuição a partir do relato
+  /// mais recente de cada pessoa do card nos 12 meses antes de [now];
+  /// `null` quando ninguém informou. Guardado para o mesmo [now] (o card e
+  /// o detalhe pedem várias vezes por quadro).
+  PriceSummary? priceAt(DateTime now) {
+    if (_priceAt != now) {
+      _price = PriceSummary.of(activities, now: now);
+      _priceAt = now;
+    }
+    return _price;
+  }
 
   /// Quem foi (F06/F15): uma fonte por autor distinto, com a ida mais
   /// recente dele aqui (avaliação ou visita), a avaliação mais recente (dona

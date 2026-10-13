@@ -7,6 +7,7 @@ import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart';
 import '../../domain/photo_compression.dart';
+import '../../domain/price_band.dart';
 import '../activity_batch.dart';
 import '../repositories/review_repository.dart';
 import 'activity_queries.dart' as queries;
@@ -157,10 +158,11 @@ class FirestoreReviewRepository implements ReviewRepository {
         newPlaceData(createPlace, uid: review.authorId),
       );
     }
-    // Schema exato (11 chaves) validado pelas Rules (hasOnly/hasAll). O período
+    // Schema exato (12 chaves) validado pelas Rules (hasOnly/hasAll). O período
     // do dia NÃO é gravado; createdAt é sempre o timestamp do servidor.
     // Eixo não avaliado vai como null (F14): a chave está sempre presente.
     // `comment` já vem normalizado (aparado; null quando não há).
+    // `priceBand` (F27): 1–5 ou null quando não informado.
     batch.set(ref, {
       'authorId': review.authorId,
       'authorName': review.authorName,
@@ -172,6 +174,7 @@ class FirestoreReviewRepository implements ReviewRepository {
       'companion': review.companion?.value,
       'comment': review.comment,
       'hasPhoto': photo != null,
+      'priceBand': review.priceBand?.value,
       'createdAt': FieldValue.serverTimestamp(),
     });
     if (photo != null) {
@@ -253,6 +256,7 @@ class FirestoreReviewRepository implements ReviewRepository {
         createdAt: ts.toDate(),
         // Reviews anteriores ao G1 não têm a chave: sem foto.
         hasPhoto: d['hasPhoto'] == true,
+        priceBand: readPriceBand(d),
       );
     } on Object {
       // Documento fora do schema: ignora em vez de derrubar o feed.

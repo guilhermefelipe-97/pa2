@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/services/photo_picker.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/models/review.dart';
+import '../core/price_band_picker.dart';
 import '../feed/widgets/axis_scores.dart' show noScoresLabel;
 import '../visit/visit_sheet.dart';
 import '../visit/visit_view_model.dart';
@@ -145,6 +146,12 @@ class _ReviewViewState extends State<ReviewView> {
                           : (_) => vm.toggleCompanion(c),
                     ),
                 ],
+              ),
+              const SizedBox(height: 16),
+              PriceBandPicker(
+                value: vm.priceBand,
+                onChanged: vm.setPriceBand,
+                enabled: !vm.isSubmitting,
               ),
               const SizedBox(height: 24),
               TextField(
