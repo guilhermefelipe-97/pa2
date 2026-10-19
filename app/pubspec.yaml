@@ -44,6 +44,8 @@ dependencies:
   image: ^4.10.1
   geolocator: ^14.1.1
   http: ^1.6.0
+  # Corte de nome por grafema (emoji com ZWJ ou tom de pele inteiros, F13).
+  characters: ^1.4.0
 
 dev_dependencies:
   flutter_test:

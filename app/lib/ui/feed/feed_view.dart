@@ -72,6 +72,12 @@ class _FeedViewState extends State<FeedView> {
     context.push(Routes.person(source.authorId));
   }
 
+  void _openMe() {
+    final uid = widget.viewModel.currentUserId;
+    if (uid == null) return;
+    context.push(Routes.person(uid));
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = widget.viewModel;
@@ -92,6 +98,13 @@ class _FeedViewState extends State<FeedView> {
           ],
         ),
         actions: [
+          // "Minhas avaliações": o próprio perfil, com título "Você".
+          IconButton(
+            key: const Key('feed-me'),
+            tooltip: 'Você',
+            icon: const Icon(Icons.account_circle_outlined),
+            onPressed: _openMe,
+          ),
           PopupMenuButton<void>(
             key: const Key('feed-menu'),
             tooltip: 'Mais opções',

@@ -105,20 +105,46 @@ service cloud.firestore {
         allow update: if false;
       }
 
-      // Listas nomeadas (F12): privadas, subconjunto do "Quero ir" (o app
-      // mantém a coerência; remover do Quero ir tira das listas num batch).
-      // Nome único sem caixa/acento e o máximo de 30 listas são do app.
+      // Listas nomeadas (F12): subconjunto do "Quero ir" (o app mantém a
+      // coerência; remover do Quero ir tira das listas num batch). Nome
+      // único sem caixa/acento e o máximo de 30 listas são do app.
+      // F13: privadas por padrão; com `visible == true`, quem segue a dona
+      // (`users/{leitor}/following/{dona}`) lê a lista para copiá-la. A
+      // consulta do seguidor precisa filtrar `visible == true`.
       match /lists/{listId} {
-        allow read: if isOwner(uid);
+        allow read: if isOwner(uid)
+          || (signedIn()
+              && resource.data.visible == true
+              && exists(/databases/$(database)/documents/users/$(request.auth.uid)/following/$(uid)));
         allow create: if isOwner(uid)
           && validList(request.resource.data)
+          && validCopiedFrom(uid, request.resource.data)
           && request.resource.data.createdAt == request.time
           && request.resource.data.updatedAt == request.time;
+        // O crédito da cópia (F13) só nasce no create e nunca muda.
         allow update: if isOwner(uid)
           && validList(request.resource.data)
           && request.resource.data.createdAt == resource.data.createdAt
-          && request.resource.data.updatedAt == request.time;
+          && request.resource.data.updatedAt == request.time
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(copiedFromKeys());
         allow delete: if isOwner(uid);
+
+        // Contador de cópias (F13, N32): um doc por pessoa que copiou, id =
+        // uid dela. Só cria quem segue a dona e com a lista visível; uma por
+        // pessoa (o 2º create vira update, negado) e imutável. A dona lê
+        // todos (contagem via count()); quem copiou lê só o próprio. Só a
+        // dona apaga (junto com a lista, no mesmo batch).
+        match /copies/{copierUid} {
+          allow read: if isOwner(uid) || isOwner(copierUid);
+          allow create: if isOwner(copierUid)
+            && exists(/databases/$(database)/documents/users/$(copierUid)/following/$(uid))
+            && get(/databases/$(database)/documents/users/$(uid)/lists/$(listId)).data.visible == true
+            && request.resource.data.keys().hasOnly(['createdAt'])
+            && request.resource.data.keys().hasAll(['createdAt'])
+            && request.resource.data.createdAt == request.time;
+          allow delete: if isOwner(uid);
+          allow update: if false;
+        }
       }
     }
 
@@ -179,8 +205,35 @@ service cloud.firestore {
         && report.data.placeId == placeId;
     }
 
+    // Obrigatórias (F12). As opcionais do F13 ficam fora do hasAll: listas
+    // antigas, sem elas, continuam válidas.
     function listKeys() {
       return ['name', 'emoji', 'placeIds', 'createdAt', 'updatedAt'];
+    }
+
+    // Crédito de lista copiada (F13): o trio vem junto ou não vem.
+    function copiedFromKeys() {
+      return ['copiedFromUid', 'copiedFromName', 'copiedFromListId'];
+    }
+
+    function listAllowedKeys() {
+      return listKeys().concat(['visible']).concat(copiedFromKeys());
+    }
+
+    // Sem crédito, ou o trio completo apontando para uma lista que quem
+    // copia pode ler: de outra pessoa, que ele segue, existente e visível.
+    // O nome é igual ao `displayName` da autora (imutável, então o crédito
+    // nunca fica desatualizado).
+    function validCopiedFrom(uid, data) {
+      return !data.keys().hasAny(copiedFromKeys())
+        || (data.keys().hasAll(copiedFromKeys())
+            && data.copiedFromUid is string
+            && data.copiedFromListId is string
+            && data.copiedFromName is string
+            && data.copiedFromUid != uid
+            && exists(/databases/$(database)/documents/users/$(uid)/following/$(data.copiedFromUid))
+            && get(/databases/$(database)/documents/users/$(data.copiedFromUid)/lists/$(data.copiedFromListId)).data.visible == true
+            && data.copiedFromName == get(/databases/$(database)/documents/users/$(data.copiedFromUid)).data.displayName);
     }
 
     // MESMA lista de `listEmojis` em app/lib/domain/models/place_list.dart.
@@ -189,8 +242,9 @@ service cloud.firestore {
     }
 
     function validList(data) {
-      return data.keys().hasOnly(listKeys())
+      return data.keys().hasOnly(listAllowedKeys())
         && data.keys().hasAll(listKeys())
+        && (!('visible' in data) || data.visible is bool)
         && data.name is string
         && data.name.size() >= 1
         && data.name.size() <= 40
@@ -370,13 +424,15 @@ service cloud.firestore {
         && lock != null
         && lock.data.lastAt == request.time
         && lock.data.reviewId == reviewId
+        // F04: a entrada de auditoria nasce no mesmo batch.
+        && existsAfter(auditPath('reviews', reviewId))
         && data.createdAt == request.time;
     }
 
     match /reviews/{reviewId} {
       allow read: if signedIn();
       allow create: if signedIn() && validReview(request.resource.data, reviewId);
-      // Editar/excluir fica para F03/F04.
+      // Imutável: nem o autor edita ou exclui.
       allow update, delete: if false;
     }
 
@@ -416,6 +472,8 @@ service cloud.firestore {
         && lock != null
         && lock.data.lastAt == request.time
         && lock.data.visitId == visitId
+        // F04: a entrada de auditoria nasce no mesmo batch.
+        && existsAfter(auditPath('visits', visitId))
         && data.createdAt == request.time;
     }
 
@@ -454,6 +512,8 @@ service cloud.firestore {
         && lock != null
         && lock.data.lastAt == request.time
         && lock.data.reportId == reportId
+        // F04: a entrada de auditoria nasce no mesmo batch.
+        && existsAfter(auditPath('openReports', reportId))
         && data.createdAt == request.time;
     }
 
@@ -461,6 +521,45 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && validOpenReport(request.resource.data, reportId);
       allow update, delete: if false;
+    }
+
+    // ---------- auditLog (F04) ----------
+    // Quem criou cada avaliação, visita e relato. Uma entrada por doc, id
+    // determinístico `{coleção}-{docId}` (o retry de um batch que não foi
+    // gravado reusa o mesmo id). Só nasce no MESMO batch que cria o doc
+    // auditado (novo, do mesmo autor e local), e o create desses docs exige
+    // a entrada. Ninguém lê nem altera pelo app. Docs anteriores ao F04
+    // ficam sem entrada (sem backfill).
+    function auditKeys() {
+      return ['actorUid', 'action', 'collection', 'docId', 'placeId', 'at'];
+    }
+
+    function auditPath(collectionName, docId) {
+      return /databases/$(database)/documents/auditLog/$(collectionName + '-' + docId);
+    }
+
+    function validAudit(auditId, data) {
+      let targetPath = /databases/$(database)/documents/$(data.collection)/$(data.docId);
+      let target = getAfter(targetPath);
+      return data.keys().hasOnly(auditKeys())
+        && data.keys().hasAll(auditKeys())
+        && data.collection in ['reviews', 'visits', 'openReports']
+        && data.docId is string
+        && auditId == data.collection + '-' + data.docId
+        && data.action == 'create'
+        && data.actorUid == request.auth.uid
+        && data.placeId is string
+        && data.at == request.time
+        // O alvo é novo: nasce neste batch, do mesmo autor e local.
+        && !exists(targetPath)
+        && target != null
+        && target.data.authorId == request.auth.uid
+        && target.data.placeId == data.placeId;
+    }
+
+    match /auditLog/{auditId} {
+      allow create: if signedIn() && validAudit(auditId, request.resource.data);
+      allow read, update, delete: if false;
     }
 
     // ---------- reviewPhotos (G1) ----------

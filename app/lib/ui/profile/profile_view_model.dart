@@ -1,9 +1,13 @@
+import 'package:flutter/foundation.dart';
+
 import '../../data/activity_batch.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/lists_repository.dart';
 import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/visit_repository.dart';
 import '../../domain/models/place_activity.dart';
+import '../../domain/models/place_list.dart';
 import '../../domain/models/user_profile.dart';
 import '../core/follow_events.dart';
 import '../core/load_visits.dart';
@@ -22,7 +26,8 @@ enum ProfileNotice {
 
 /// Perfil simples de uma pessoa (F06): nome, Seguir/Deixar de seguir e as
 /// avaliações e visitas ("Voltei aqui", F15) dela, mais recentes primeiro.
-/// Sem foto, sem contagem de seguidores, sem edição.
+/// Sem foto, sem contagem de seguidores, sem edição. Para quem segue a
+/// pessoa, as listas que ela deixou visíveis (F13).
 class ProfileViewModel extends SafeChangeNotifier {
   ProfileViewModel({
     required this.uid,
@@ -31,11 +36,13 @@ class ProfileViewModel extends SafeChangeNotifier {
     required ReviewRepository reviewRepository,
     required FollowEvents followEvents,
     required VisitRepository visitRepository,
+    ListsRepository? listsRepository,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _users = userRepository,
        _reviews = reviewRepository,
        _visits = visitRepository,
+       _lists = listsRepository,
        _follow = FollowStaleness(followEvents),
        _clock = clock ?? DateTime.now;
 
@@ -57,6 +64,7 @@ class ProfileViewModel extends SafeChangeNotifier {
   final UserRepository _users;
   final ReviewRepository _reviews;
   final VisitRepository _visits;
+  final ListsRepository? _lists;
   final FollowStaleness _follow;
   final DateTime Function() _clock;
 
@@ -96,6 +104,34 @@ class ProfileViewModel extends SafeChangeNotifier {
 
   bool _following = false;
   bool get isFollowing => _following;
+
+  List<PlaceList> _visibleLists = const [];
+
+  /// Listas visíveis da pessoa (F13): só para quem a segue; vazio (seção
+  /// oculta) sem seguir, no próprio perfil ou se a leitura falhou.
+  List<PlaceList> get lists => _visibleLists;
+
+  int _listsSeq = 0;
+
+  /// Lê as listas visíveis (sem bloquear o perfil). Falha = seção oculta.
+  Future<void> _loadLists() async {
+    final seq = ++_listsSeq;
+    final repo = _lists;
+    if (repo == null || isSelf || !_following) {
+      _visibleLists = const [];
+      return;
+    }
+    try {
+      final found = await repo.listVisibleLists(uid);
+      if (seq != _listsSeq || isDisposed) return;
+      _visibleLists = found;
+    } on Object catch (e) {
+      if (seq != _listsSeq || isDisposed) return;
+      debugPrint('Listas indisponíveis (perfil): $e');
+      _visibleLists = const [];
+    }
+    notifyListeners();
+  }
 
   bool _busy = false;
   bool get isBusy => _busy;
@@ -159,6 +195,8 @@ class ProfileViewModel extends SafeChangeNotifier {
           _following = (results[3]! as Set<String>).contains(uid);
         }
         _state = ProfileState.ready;
+        // As listas chegam depois, sem atrasar o perfil.
+        _loadLists();
       }
     } on Object {
       if (seq != _seq) return;
@@ -186,6 +224,8 @@ class ProfileViewModel extends SafeChangeNotifier {
       }
       _follow.announce();
       if (wasFollowing) _notice = ProfileNotice.unfollowed;
+      // Passou a seguir: as listas visíveis aparecem; deixou: somem.
+      _loadLists();
     } on Object {
       _following = wasFollowing;
       _notice = ProfileNotice.followFailed;

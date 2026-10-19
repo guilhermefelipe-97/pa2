@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../data/repositories/auth_repository.dart';
+import '../data/repositories/lists_repository.dart';
 import '../data/repositories/open_report_repository.dart';
 import '../data/repositories/place_repository.dart';
 import '../data/repositories/visit_repository.dart';
@@ -17,6 +18,8 @@ import '../ui/core/view_model_host.dart';
 import '../ui/feed/feed_view.dart';
 import '../ui/feed/feed_view_model.dart';
 import '../ui/lists/lists_store.dart';
+import '../ui/lists/person_list_view.dart';
+import '../ui/lists/person_list_view_model.dart';
 import '../ui/nearby/nearby_view.dart';
 import '../ui/nearby/nearby_view_model.dart';
 import '../ui/open/open_now_view_model.dart';
@@ -156,6 +159,7 @@ GoRouter buildRouter(AuthRepository auth) {
                     store: context.read(),
                     placeRepository: context.read(),
                     lists: context.read<ListsStore?>(),
+                    clock: context.read<AppClock?>()?.now,
                   ),
                   builder: (context, vm) => SavedView(viewModel: vm),
                 ),
@@ -204,6 +208,30 @@ GoRouter buildRouter(AuthRepository auth) {
           );
         },
       ),
+      // Lista visível de uma pessoa (F13), com "Copiar lista". Rota de topo
+      // própria: o go_router casa o caminho inteiro, então ela e o perfil
+      // (/pessoa/:uid) não se confundem, em qualquer ordem.
+      GoRoute(
+        path: Routes.personListPattern,
+        builder: (context, state) {
+          final uid = state.pathParameters['uid']!;
+          final listId = state.pathParameters['listId']!;
+          return ViewModelHost<PersonListViewModel>(
+            key: ValueKey('person-list-$uid-$listId'),
+            create: (context) => PersonListViewModel(
+              ownerUid: uid,
+              listId: listId,
+              initial: state.extra,
+              authRepository: context.read(),
+              userRepository: context.read(),
+              listsRepository: context.read(),
+              placeRepository: context.read(),
+              listsStore: context.read<ListsStore?>(),
+            ),
+            builder: (context, vm) => PersonListView(viewModel: vm),
+          );
+        },
+      ),
       // Perfil simples de uma pessoa (F06), fora do shell como o detalhe.
       GoRoute(
         path: Routes.personPattern,
@@ -218,6 +246,7 @@ GoRouter buildRouter(AuthRepository auth) {
               reviewRepository: context.read(),
               followEvents: context.read<FollowEvents>(),
               visitRepository: context.read<VisitRepository>(),
+              listsRepository: context.read<ListsRepository?>(),
             ),
             builder: (context, vm) => ProfileView(viewModel: vm),
           );

@@ -11,10 +11,17 @@ abstract final class Routes {
   static const placeDetailPattern = '/local/:placeId';
   static const personPattern = '/pessoa/:uid';
 
+  /// Lista visível de uma pessoa (F13), com "Copiar lista".
+  static const personListPattern = '/pessoa/:uid/lista/:listId';
+
   static String reviewFor(String placeId) => '/avaliar/$placeId';
 
   static String placeDetail(String placeId) =>
       '/local/${Uri.encodeComponent(placeId)}';
 
   static String person(String uid) => '/pessoa/${Uri.encodeComponent(uid)}';
+
+  static String personList(String uid, String listId) =>
+      '/pessoa/${Uri.encodeComponent(uid)}/lista/'
+      '${Uri.encodeComponent(listId)}';
 }

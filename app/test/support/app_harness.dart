@@ -89,7 +89,10 @@ Future<TestApp> pumpApp(
   final r = reviews ?? FakeReviewRepository();
   final p = placeRepository ?? FakePlaceRepository(places);
   final s = saved ?? FakeSavedRepository();
-  final l = lists ?? FakeListsRepository(saved: s);
+  // As Rules das listas (F13) olham quem lê e quem segue quem.
+  final l = (lists ?? FakeListsRepository(saved: s))
+    ..users ??= u
+    ..auth ??= auth;
   final ph = photos ?? FakeReviewPhotoRepository(r.photos);
   final pk = picker ?? FakePhotoPicker();
   final v = visits ?? FakeVisitRepository();

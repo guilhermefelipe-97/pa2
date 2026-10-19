@@ -11,6 +11,7 @@ import '../../domain/price_band.dart';
 import '../activity_batch.dart';
 import '../repositories/review_repository.dart';
 import 'activity_queries.dart' as queries;
+import 'audit_log.dart';
 import 'place_doc.dart';
 
 class FirestoreReviewRepository implements ReviewRepository {
@@ -26,6 +27,8 @@ class FirestoreReviewRepository implements ReviewRepository {
   /// Limite por lote na consulta do feed.
   final int perBatchLimit;
 
+  static const String reviewsCollection = 'reviews';
+
   /// Coleção das fotos (bytes no Firestore; id = id da avaliação).
   static const String reviewPhotosCollection = 'reviewPhotos';
 
@@ -33,7 +36,7 @@ class FirestoreReviewRepository implements ReviewRepository {
   static const String reviewLocksCollection = 'reviewLocks';
 
   CollectionReference<Map<String, dynamic>> get _reviews =>
-      _db.collection('reviews');
+      _db.collection(reviewsCollection);
 
   DocumentReference<Map<String, dynamic>> _lockRef(
     String uid,
@@ -177,6 +180,15 @@ class FirestoreReviewRepository implements ReviewRepository {
       'priceBand': review.priceBand?.value,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    // F04: entrada de auditoria no mesmo batch (as Rules exigem o par).
+    addAuditEntry(
+      batch,
+      _db,
+      collection: reviewsCollection,
+      docId: ref.id,
+      actorUid: review.authorId,
+      placeId: review.placeId,
+    );
     if (photo != null) {
       // As Rules só aceitam a foto no mesmo batch da review nova do mesmo id.
       batch.set(_db.collection(reviewPhotosCollection).doc(ref.id), {

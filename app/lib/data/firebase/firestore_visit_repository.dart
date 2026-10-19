@@ -10,6 +10,7 @@ import '../../domain/price_band.dart';
 import '../activity_batch.dart';
 import '../repositories/visit_repository.dart';
 import 'activity_queries.dart' as queries;
+import 'audit_log.dart';
 import 'place_doc.dart';
 
 class FirestoreVisitRepository implements VisitRepository {
@@ -182,6 +183,15 @@ class FirestoreVisitRepository implements VisitRepository {
       'priceBand': visit.priceBand?.value,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    // F04: entrada de auditoria no mesmo batch (as Rules exigem o par).
+    addAuditEntry(
+      batch,
+      _db,
+      collection: visitsCollection,
+      docId: ref.id,
+      actorUid: visit.authorId,
+      placeId: visit.placeId,
+    );
     // Trava criada/renovada no mesmo batch, apontando para esta visita.
     // Dentro de 12 h as Rules negam a trava e a visita juntas.
     batch.set(_lockRef(visit.authorId, visit.placeId), {
