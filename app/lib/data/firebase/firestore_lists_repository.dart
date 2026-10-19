@@ -34,11 +34,40 @@ class FirestoreListsRepository implements ListsRepository {
     return out;
   }
 
+  @override
+  Future<List<PlaceList>> listVisibleLists(String ownerUid) async {
+    // O filtro é obrigatório: as Rules só liberam a consulta do seguidor
+    // que prova `visible == true`.
+    final QuerySnapshot<Map<String, dynamic>> snap;
+    try {
+      snap = await _lists(ownerUid).where('visible', isEqualTo: true).get();
+    } on FirebaseException catch (e, stack) {
+      // Quem não segue a dona (ou deixou de seguir): negado pelas Rules.
+      if (e.code == 'permission-denied') {
+        Error.throwWithStackTrace(const ListAccessDeniedException(), stack);
+      }
+      rethrow;
+    }
+    final now = _clock();
+    final out = [
+      for (final d in snap.docs)
+        if (_parse(d.id, d.data(), now) case final PlaceList l) l,
+    ];
+    out.sort((a, b) {
+      final byDate = a.createdAt.compareTo(b.createdAt);
+      return byDate != 0 ? byDate : a.id.compareTo(b.id);
+    });
+    return out;
+  }
+
   static PlaceList? _parse(String id, Map<String, dynamic> data, DateTime now) {
     final name = data['name'];
     if (name is! String) return null;
     final emoji = data['emoji'];
     final ids = data['placeIds'];
+    final fromUid = data['copiedFromUid'];
+    final fromName = data['copiedFromName'];
+    final fromList = data['copiedFromListId'];
     return PlaceList(
       id: id,
       name: name,
@@ -53,6 +82,11 @@ class FirestoreListsRepository implements ListsRepository {
         final Timestamp ts => ts.toDate(),
         _ => now,
       },
+      // Listas anteriores ao F13 não têm a chave: privadas.
+      visible: data['visible'] == true,
+      copiedFrom: fromUid is String && fromName is String && fromList is String
+          ? ListCredit(uid: fromUid, name: fromName, listId: fromList)
+          : null,
     );
   }
 
@@ -63,15 +97,67 @@ class FirestoreListsRepository implements ListsRepository {
     required String name,
     required String? emoji,
     required List<String> placeIds,
+    ListCredit? copiedFrom,
   }) {
-    // Schema exato validado pelas Rules.
+    // Schema exato validado pelas Rules (o trio do crédito vem junto ou não
+    // vem; `visible` ausente = privada).
     return _lists(uid).doc(listId).set({
       'name': name,
       'emoji': emoji,
       'placeIds': placeIds,
+      if (copiedFrom != null) ...{
+        'copiedFromUid': copiedFrom.uid,
+        'copiedFromName': copiedFrom.name,
+        'copiedFromListId': copiedFrom.listId,
+      },
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  @override
+  Future<void> setVisible({
+    required String uid,
+    required String listId,
+    required bool visible,
+  }) {
+    return _lists(uid).doc(listId).update({
+      'visible': visible,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  CollectionReference<Map<String, dynamic>> _copies(
+    String ownerUid,
+    String listId,
+  ) => _lists(ownerUid).doc(listId).collection('copies');
+
+  @override
+  Future<int> copyCount({
+    required String ownerUid,
+    required String listId,
+  }) async {
+    final snap = await _copies(ownerUid, listId).count().get();
+    return snap.count ?? 0;
+  }
+
+  @override
+  Future<void> recordCopy({
+    required String ownerUid,
+    required String listId,
+    required String copierUid,
+  }) async {
+    // Direto, sem ler antes: offline a escrita entra na fila do SDK e
+    // sincroniza depois. Já registrada (2ª cópia), o set vira update e as
+    // Rules negam: é o "uma por pessoa", não um erro.
+    try {
+      await _copies(
+        ownerUid,
+        listId,
+      ).doc(copierUid).set({'createdAt': FieldValue.serverTimestamp()});
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') rethrow;
+    }
   }
 
   @override
@@ -88,9 +174,29 @@ class FirestoreListsRepository implements ListsRepository {
     });
   }
 
+  /// Máximo de escritas num batch do Firestore.
+  static const int maxBatchWrites = 500;
+
   @override
-  Future<void> deleteList({required String uid, required String listId}) {
-    return _lists(uid).doc(listId).delete();
+  Future<void> deleteList({required String uid, required String listId}) async {
+    // O contador de cópias (F13) sai junto: no mesmo batch da lista. Com
+    // mais de 499 cópias, as excedentes saem antes, em batches próprios.
+    final copies = (await _copies(uid, listId).get()).docs;
+    final last = maxBatchWrites - 1;
+    final early = copies.length > last ? copies.length - last : 0;
+    for (var i = 0; i < early; i += maxBatchWrites) {
+      final batch = _db.batch();
+      for (final d in copies.sublist(i, (i + maxBatchWrites).clamp(0, early))) {
+        batch.delete(d.reference);
+      }
+      await batch.commit();
+    }
+    final batch = _db.batch();
+    for (final d in copies.sublist(early)) {
+      batch.delete(d.reference);
+    }
+    batch.delete(_lists(uid).doc(listId));
+    await batch.commit();
   }
 
   @override

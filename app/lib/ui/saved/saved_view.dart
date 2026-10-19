@@ -7,6 +7,7 @@ import '../../domain/relative_time.dart';
 import '../../routing/routes.dart';
 import '../core/messages.dart';
 import '../core/save_button.dart';
+import '../decision/decision_sheet.dart';
 import '../feed/widgets/feed_card.dart' show placeSubtitle;
 import '../feed/widgets/place_photo.dart';
 import '../lists/add_to_list_sheet.dart';
@@ -28,6 +29,11 @@ class SavedView extends StatelessWidget {
 
   final SavedViewModel viewModel;
 
+  static const privateCaption = 'Só você vê esta lista';
+
+  /// Lista ativa com "Visível para quem me segue" (F13).
+  static const visibleCaption = 'Quem te segue vê esta lista';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -43,9 +49,38 @@ class SavedView extends StatelessWidget {
                 color: theme.colorScheme.primary,
               ),
             ),
-            Text('Só você vê esta lista', style: theme.textTheme.bodySmall),
+            ListenableBuilder(
+              listenable: viewModel,
+              builder: (context, _) => Text(
+                viewModel.isSelectedListVisible
+                    ? SavedView.visibleCaption
+                    : SavedView.privateCaption,
+                key: const Key('saved-caption'),
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
           ],
         ),
+        actions: [
+          ListenableBuilder(
+            listenable: viewModel,
+            builder: (context, _) {
+              final items = viewModel.items;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: TextButton.icon(
+                  key: const Key('saved-decide'),
+                  // Sem salvos no chip ativo: nada a decidir.
+                  onPressed: items.isEmpty
+                      ? null
+                      : () => showDecisionSheet(context, candidates: items),
+                  icon: const Icon(Icons.casino_outlined),
+                  label: const Text(decideLabel),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: ListenableBuilder(
         listenable: viewModel,
@@ -319,11 +354,35 @@ class ListChips extends StatelessWidget {
   }
 }
 
-class _ActiveListChip extends StatelessWidget {
+class _ActiveListChip extends StatefulWidget {
   const _ActiveListChip({required this.viewModel, required this.list});
 
   final SavedViewModel viewModel;
   final PlaceList list;
+
+  @override
+  State<_ActiveListChip> createState() => _ActiveListChipState();
+}
+
+class _ActiveListChipState extends State<_ActiveListChip> {
+  /// "Copiada N vezes" (F13, N32), lido ao abrir o menu; `null` = ainda não
+  /// leu ou falhou (oculto).
+  int? _copies;
+  int _countSeq = 0;
+
+  SavedViewModel get viewModel => widget.viewModel;
+  PlaceList get list => widget.list;
+
+  @override
+  void didUpdateWidget(_ActiveListChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Outra lista: o contador lido era da anterior (e uma leitura em voo
+    // dela é descartada).
+    if (oldWidget.list.id != widget.list.id) {
+      _copies = null;
+      _countSeq++;
+    }
+  }
 
   void _fail(ScaffoldMessengerState messenger) {
     if (!messenger.mounted) return;
@@ -353,15 +412,54 @@ class _ActiveListChip extends StatelessWidget {
     }
   }
 
+  /// "Visível para quem me segue" (otimista): falha reverte e avisa.
+  Future<void> _toggleVisible(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (!await viewModel.setSelectedListVisible(!list.visible)) {
+      _fail(messenger);
+    }
+  }
+
+  Future<void> _loadCopies() async {
+    final seq = ++_countSeq;
+    final n = await viewModel.copyCountOf(list);
+    if (!mounted || seq != _countSeq) return;
+    setState(() => _copies = n);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final credit = list.copiedFrom;
+    final copies = _copies;
     return MenuAnchor(
+      onOpen: _loadCopies,
       menuChildren: [
         MenuItemButton(
           leadingIcon: const Icon(Icons.edit_outlined),
           onPressed: () => _rename(context),
           child: const Text('Renomear lista'),
         ),
+        CheckboxMenuButton(
+          key: const Key('list-visible'),
+          value: list.visible,
+          onChanged: (_) => _toggleVisible(context),
+          child: const Text(visibleToFollowersLabel),
+        ),
+        if (credit != null)
+          MenuItemButton(
+            key: const Key('list-credit'),
+            leadingIcon: const Icon(Icons.person_outline),
+            onPressed: () => context.push(Routes.person(credit.uid)),
+            child: Text('Copiada de ${credit.name}'),
+          ),
+        if (copies != null && copies > 0)
+          MenuItemButton(
+            key: const Key('list-copies'),
+            leadingIcon: const Icon(Icons.content_copy_outlined),
+            // Informativo: só a contagem.
+            onPressed: null,
+            child: Text(copiesLabel(copies)),
+          ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.delete_outline),
           onPressed: () => _delete(context),
@@ -377,7 +475,7 @@ class _ActiveListChip extends StatelessWidget {
           button: true,
           selected: true,
           label: 'Opções da lista ${list.label}',
-          hint: 'Abre Renomear e Excluir',
+          hint: 'Abre Renomear, Visível para quem me segue e Excluir',
           onTap: toggle,
           excludeSemantics: true,
           child: ChoiceChip(
@@ -397,6 +495,12 @@ class _ActiveListChip extends StatelessWidget {
     );
   }
 }
+
+/// Item do menu da lista (F13).
+const visibleToFollowersLabel = 'Visível para quem me segue';
+
+/// "Copiada 1 vez", "Copiada 3 vezes".
+String copiesLabel(int n) => n == 1 ? 'Copiada 1 vez' : 'Copiada $n vezes';
 
 class _Message extends StatelessWidget {
   const _Message({

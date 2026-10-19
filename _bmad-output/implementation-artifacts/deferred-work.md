@@ -99,3 +99,11 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-f27-faixa-de-preco.md`
   summary: Permitir informar/corrigir o preço depois (ex.: "informar preço" na próxima ida) já que avaliações e visitas são imutáveis.
   evidence: Quem esquece ou erra a faixa não tem como corrigir; o relato só é substituído por uma ida futura.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-onda-4-decisao-curadoria-auditoria.md`
+  summary: Modo decisão (F09) usa só a primeira página de `fetchReviewsByAuthors(seguidos)`; avaliações antigas dos lugares salvos ficam fora do ranking.
+  evidence: Cada lote de 30 autores traz no máximo 100 avaliações recentes; com seguidos muito ativos, as dos candidatos podem não estar no lote. Precisa de consulta por `placeId in` candidatos × autores ou paginação.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-onda-4-decisao-curadoria-auditoria.md`
+  summary: Registro em `copies/{copiador}` não exige que exista uma lista com `copiedFromListId` correspondente; seguir e registrar infla "Copiada N vezes" sem copiar.
+  evidence: As Rules só checam seguir a dona e a lista visível; amarrar exigiria guardar o id da cópia no doc de `copies` (mudança no formato congelado do spec).

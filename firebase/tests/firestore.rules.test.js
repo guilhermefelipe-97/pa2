@@ -26,6 +26,7 @@ const {
   arrayRemove,
   writeBatch,
   Bytes,
+  getCountFromServer,
 } = require('firebase/firestore');
 
 const PROJECT_ID = 'demo-naarea';
@@ -131,12 +132,43 @@ function validLock(reviewId, overrides = {}) {
 
 const lockPath = (uid, placeId) => 'users/' + uid + '/reviewLocks/' + placeId;
 
+/// Entrada de auditoria (F04): `auditLog/{coleção}-{docId}`.
+const auditPath = (collectionName, docId) => 'auditLog/' + collectionName + '-' + docId;
+
+/// Entrada de auditoria como o app grava, com `at` do servidor.
+function validAudit(collectionName, docId, overrides = {}) {
+  return {
+    actorUid: 'alice',
+    action: 'create',
+    collection: collectionName,
+    docId,
+    placeId: 'camaroes',
+    at: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+/// Põe no [batch] a auditoria de `{collectionName}/{docId}` criado por
+/// [data] (mesmo autor e local), com [overrides] aplicados.
+function setAudit(db, batch, collectionName, docId, data, overrides = {}) {
+  batch.set(
+    doc(db, auditPath(collectionName, docId)),
+    validAudit(collectionName, docId, {
+      actorUid: typeof data.authorId === 'string' ? data.authorId : 'alice',
+      placeId: typeof data.placeId === 'string' ? data.placeId : 'camaroes',
+      ...overrides,
+    }),
+  );
+}
+
 let reviewSeq = 0;
 
-/// Avaliação como o app grava (F03): review + trava num único batch, SEM
-/// limpar travas (os testes do F03 controlam o estado). `lock: false` omite a
-/// trava; `lock: {...}` sobrescreve campos; `lockAt` troca o caminho da trava.
-function addReview(db, data, { id, lock = {}, lockAt } = {}) {
+/// Avaliação como o app grava (F03 + F04): review + trava + auditoria num
+/// único batch, SEM limpar travas (os testes do F03 controlam o estado).
+/// `lock: false` omite a trava; `lock: {...}` sobrescreve campos; `lockAt`
+/// troca o caminho da trava. `audit: false` omite a auditoria; `audit: {...}`
+/// sobrescreve campos.
+function addReview(db, data, { id, lock = {}, lockAt, audit = {} } = {}) {
   const reviewId = id || 'r' + (++reviewSeq);
   const batch = writeBatch(db);
   batch.set(doc(db, 'reviews/' + reviewId), data);
@@ -147,6 +179,7 @@ function addReview(db, data, { id, lock = {}, lockAt } = {}) {
       validLock(reviewId, { placeId, ...lock }),
     );
   }
+  if (audit !== false) setAudit(db, batch, 'reviews', reviewId, data, audit);
   return batch.commit();
 }
 
@@ -176,15 +209,16 @@ async function seedLock(uid, placeId, daysAgo, reviewId = 'existing') {
   });
 }
 
-/// Avaliação com foto: review + reviewPhotos/{mesmo id} (+ trava) num único
-/// batch, partindo de nenhuma trava.
-async function reviewWithPhotoBatch(db, { id = 'nova', review = {}, photo = {}, withReview = true, withPhoto = true, withLock = true } = {}) {
+/// Avaliação com foto: review + reviewPhotos/{mesmo id} (+ trava + auditoria)
+/// num único batch, partindo de nenhuma trava.
+async function reviewWithPhotoBatch(db, { id = 'nova', review = {}, photo = {}, withReview = true, withPhoto = true, withLock = true, withAudit = true } = {}) {
   await unlockAll();
   const batch = writeBatch(db);
   const data = validReview({ hasPhoto: true, ...review });
   if (withReview) batch.set(doc(db, 'reviews/' + id), data);
   if (withPhoto) batch.set(doc(db, 'reviewPhotos/' + id), validPhoto(photo));
   if (withLock) batch.set(doc(db, lockPath(data.authorId, data.placeId)), validLock(id, { placeId: data.placeId }));
+  if (withAudit) setAudit(db, batch, 'reviews', id, data);
   return batch.commit();
 }
 
@@ -471,6 +505,249 @@ describe('users/{uid}/lists/{listId} (listas nomeadas)', () => {
     batch.update(doc(db, LIST), { placeIds: arrayRemove('camaroes'), updatedAt: serverTimestamp() });
     await assertSucceeds(batch.commit());
   });
+
+  // ---------- F13: visível para quem me segue + cópia com crédito ----------
+
+  async function follow(follower, target) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users/' + follower + '/following/' + target), { createdAt: Timestamp.now() });
+    });
+  }
+
+  const credit = (overrides = {}) => ({
+    copiedFromUid: 'bob',
+    copiedFromName: 'Bob',
+    copiedFromListId: 'sabado-do-bob',
+    ...overrides,
+  });
+
+  /// Lista de origem de Bob (a que Alice copia).
+  async function seedSource({ visible = true, id = 'sabado-do-bob', owner = 'bob' } = {}) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users/' + owner + '/lists/' + id), {
+        name: 'Sábado',
+        emoji: null,
+        placeIds: ['camaroes'],
+        createdAt: Timestamp.fromMillis(1000),
+        updatedAt: Timestamp.fromMillis(1000),
+        visible,
+      });
+    });
+  }
+
+  /// Alice segue Bob e a lista dele está visível: a cópia é legítima.
+  async function canCopy() {
+    await seedSource();
+    await follow('alice', 'bob');
+  }
+
+  it('visible é opcional e, quando presente, booleano', async () => {
+    await assertSucceeds(setDoc(doc(alice(), LIST), newList({ visible: true })));
+    await assertSucceeds(setDoc(doc(alice(), 'users/alice/lists/b'), newList({ visible: false })));
+    for (const visible of ['true', 1, null, ['x']]) {
+      await assertFails(setDoc(doc(alice(), 'users/alice/lists/c'), newList({ visible })));
+    }
+  });
+
+  it('dono torna a lista visível e privada de novo (lista antiga, sem os opcionais)', async () => {
+    await seedList();
+    await assertSucceeds(updateDoc(doc(alice(), LIST), { visible: true, updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(alice(), LIST), { visible: false, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(alice(), LIST), { visible: 'sim', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(bob(), LIST), { visible: true, updatedAt: serverTimestamp() }));
+  });
+
+  it('cópia: cria com o trio de crédito e o nome da autora', async () => {
+    await canCopy();
+    await assertSucceeds(setDoc(doc(alice(), LIST), newList(credit())));
+    await assertSucceeds(setDoc(doc(alice(), 'users/alice/lists/b'), newList({ ...credit(), visible: true })));
+  });
+
+  it('cópia: trio incompleto, nome divergente, autora inexistente ou tipos errados são negados', async () => {
+    await canCopy();
+    await assertFails(setDoc(doc(alice(), LIST), newList({ copiedFromUid: 'bob' })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ copiedFromUid: 'bob', copiedFromName: 'Bob' })));
+    await assertFails(setDoc(doc(alice(), LIST), newList({ copiedFromName: 'Bob', copiedFromListId: 'x' })));
+    await assertFails(setDoc(doc(alice(), LIST), newList(credit({ copiedFromName: 'Outra Pessoa' }))));
+    await assertFails(setDoc(doc(alice(), LIST), newList(credit({ copiedFromName: 'bob' }))));
+    await assertFails(setDoc(doc(alice(), LIST), newList(credit({ copiedFromUid: 'fantasma', copiedFromName: 'Fantasma' }))));
+    await assertFails(setDoc(doc(alice(), LIST), newList(credit({ copiedFromListId: 7 }))));
+    await assertFails(setDoc(doc(alice(), LIST), newList(credit({ copiedFromUid: null }))));
+  });
+
+  it('forja: crédito de lista inventada, não visível, de quem não sigo ou a mim mesma', async () => {
+    // Lista inventada (Bob existe e Alice o segue, mas a lista não).
+    await follow('alice', 'bob');
+    await assertFails(setDoc(doc(alice(), LIST), newList(credit({ copiedFromListId: 'inventada' }))));
+    // Lista de Bob privada.
+    await seedSource({ visible: false });
+    await assertFails(setDoc(doc(alice(), LIST), newList(credit())));
+    await seedSource({ id: 'sem-chave', visible: null });
+    await assertFails(setDoc(doc(alice(), LIST), newList(credit({ copiedFromListId: 'sem-chave' }))));
+    // Visível, mas Alice não segue Bob.
+    await seedSource();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), 'users/alice/following/bob'));
+    });
+    await assertFails(setDoc(doc(alice(), LIST), newList(credit())));
+    // Crédito a si mesma (mesmo com lista visível e um "seguir" forjado).
+    await seedSource({ owner: 'alice', id: 'minha' });
+    await follow('alice', 'alice');
+    await assertFails(setDoc(doc(alice(), LIST), newList(credit({
+      copiedFromUid: 'alice',
+      copiedFromName: 'Alice',
+      copiedFromListId: 'minha',
+    }))));
+    // Controle: com tudo certo, passa.
+    await follow('alice', 'bob');
+    await assertSucceeds(setDoc(doc(alice(), LIST), newList(credit())));
+  });
+
+  it('crédito é imutável: não muda, não sai e não entra depois do create', async () => {
+    await seedList(credit());
+    await assertSucceeds(updateDoc(doc(alice(), LIST), { name: 'Sábado', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(alice(), LIST), { copiedFromName: 'Alice', copiedFromUid: 'alice', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(alice(), LIST), { copiedFromListId: 'outra', updatedAt: serverTimestamp() }));
+    const { copiedFromUid, copiedFromName, copiedFromListId, ...semCredito } = { ...credit(), name: 'Sábado', emoji: null, placeIds: [] };
+    await assertFails(setDoc(doc(alice(), LIST), { ...semCredito, createdAt: Timestamp.fromMillis(1000), updatedAt: serverTimestamp() }));
+    await seedList();
+    await assertFails(updateDoc(doc(alice(), LIST), { ...credit(), updatedAt: serverTimestamp() }));
+  });
+
+  it('seguidor lê a lista visível (doc e consulta com visible == true)', async () => {
+    await seedList({ visible: true });
+    await follow('bob', 'alice');
+    await assertSucceeds(getDoc(doc(bob(), LIST)));
+    const snap = await assertSucceeds(getDocs(query(collection(bob(), 'users/alice/lists'), where('visible', '==', true))));
+    if (snap.size !== 1) throw new Error('esperava 1 lista visível, veio ' + snap.size);
+  });
+
+  it('seguidor não lê lista privada (sem visible ou visible false) nem consulta sem o filtro', async () => {
+    await follow('bob', 'alice');
+    await seedList();
+    await assertFails(getDoc(doc(bob(), LIST)));
+    await seedList({ visible: false });
+    await assertFails(getDoc(doc(bob(), LIST)));
+    await assertFails(getDocs(collection(bob(), 'users/alice/lists')));
+  });
+
+  it('quem não segue não lê nem a lista visível', async () => {
+    await seedList({ visible: true });
+    await assertFails(getDoc(doc(bob(), LIST)));
+    await assertFails(getDocs(query(collection(bob(), 'users/alice/lists'), where('visible', '==', true))));
+    await assertFails(getDoc(doc(anon(), LIST)));
+  });
+
+  it('seguidor lê, mas não altera nem exclui a lista visível', async () => {
+    await seedList({ visible: true });
+    await follow('bob', 'alice');
+    await assertFails(updateDoc(doc(bob(), LIST), { name: 'Hack', updatedAt: serverTimestamp() }));
+    await assertFails(deleteDoc(doc(bob(), LIST)));
+  });
+});
+
+describe('users/{uid}/lists/{listId}/copies/{copierUid} (F13: contador de cópias)', () => {
+  const LIST = 'users/alice/lists/sabado';
+  const copyPath = (copier) => LIST + '/copies/' + copier;
+
+  async function seedList(data = {}) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), LIST), {
+        name: 'Sábado',
+        emoji: null,
+        placeIds: ['camaroes'],
+        createdAt: Timestamp.fromMillis(1000),
+        updatedAt: Timestamp.fromMillis(1000),
+        visible: true,
+        ...data,
+      });
+    });
+  }
+
+  async function follow(follower, target) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users/' + follower + '/following/' + target), { createdAt: Timestamp.now() });
+    });
+  }
+
+  async function seedCopy(copier) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), copyPath(copier)), { createdAt: Timestamp.now() });
+    });
+  }
+
+  it('seguidor registra a própria cópia de lista visível', async () => {
+    await seedList();
+    await follow('bob', 'alice');
+    await assertSucceeds(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+  });
+
+  it('uma por pessoa e imutável: 2º registro, update e delete de quem copiou negados', async () => {
+    await seedList();
+    await follow('bob', 'alice');
+    await assertSucceeds(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(alice(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await assertFails(deleteDoc(doc(bob(), copyPath('bob'))));
+    await assertFails(deleteDoc(doc(anon(), copyPath('bob'))));
+  });
+
+  it('a dona apaga a lista e o contador num único batch; terceiro não apaga', async () => {
+    await seedList();
+    await seedCopy('bob');
+    await seedCopy('carol');
+    const carol = env.authenticatedContext('carol').firestore();
+    await assertFails(deleteDoc(doc(carol, copyPath('carol'))));
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.delete(doc(db, copyPath('bob')));
+    batch.delete(doc(db, copyPath('carol')));
+    batch.delete(doc(db, LIST));
+    await assertSucceeds(batch.commit());
+    let left = -1;
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      left = (await getDocs(collection(ctx.firestore(), LIST + '/copies'))).size;
+    });
+    if (left !== 0) throw new Error('sobraram ' + left + ' cópias');
+  });
+
+  it('quem não segue a dona, lista privada ou inexistente: negado', async () => {
+    await seedList();
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await follow('bob', 'alice');
+    await seedList({ visible: false });
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), LIST));
+    });
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+  });
+
+  it('forja: cópia em nome de outra pessoa, da própria dona, createdAt do cliente ou chave extra', async () => {
+    await seedList();
+    await follow('bob', 'alice');
+    const carol = env.authenticatedContext('carol').firestore();
+    await assertFails(setDoc(doc(carol, copyPath('bob')), { createdAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(alice(), copyPath('alice')), { createdAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: Timestamp.now() }));
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp(), n: 1 }));
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), {}));
+    await assertFails(setDoc(doc(anon(), copyPath('bob')), { createdAt: serverTimestamp() }));
+  });
+
+  it('a dona lê e conta todas as cópias; quem copiou lê só a própria', async () => {
+    await seedList();
+    await seedCopy('bob');
+    await seedCopy('carol');
+    const count = await assertSucceeds(getCountFromServer(collection(alice(), LIST + '/copies')));
+    if (count.data().count !== 2) throw new Error('esperava 2 cópias, veio ' + count.data().count);
+    await assertSucceeds(getDoc(doc(bob(), copyPath('bob'))));
+    await assertFails(getDoc(doc(bob(), copyPath('carol'))));
+    await assertFails(getDocs(collection(bob(), LIST + '/copies')));
+    await assertFails(getCountFromServer(collection(bob(), LIST + '/copies')));
+    await assertFails(getDoc(doc(anon(), copyPath('bob'))));
+  });
 });
 
 describe('places', () => {
@@ -600,6 +877,7 @@ describe('places: criação pelo app (G2)', () => {
     const batch = writeBatch(db);
     batch.set(doc(db, 'places/osm-n123'), newPlace());
     batch.set(doc(db, 'reviews/nova'), validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    setAudit(db, batch, 'reviews', 'nova', validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
     batch.set(doc(db, lockPath('alice', 'osm-n123')), validLock('nova', { placeId: 'osm-n123' }));
     await assertSucceeds(batch.commit());
   });
@@ -613,6 +891,7 @@ describe('places: criação pelo app (G2)', () => {
     const batch = writeBatch(db);
     batch.set(doc(db, 'places/osm-n123'), newPlace({ lat: 38.7, lng: -9.1 }));
     batch.set(doc(db, 'reviews/nova'), validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    setAudit(db, batch, 'reviews', 'nova', validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
     batch.set(doc(db, lockPath('alice', 'osm-n123')), validLock('nova', { placeId: 'osm-n123' }));
     await assertFails(batch.commit());
   });
@@ -769,6 +1048,7 @@ describe('reviews', () => {
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'reviews/semchave'), data);
+    setAudit(db, batch, 'reviews', 'semchave', data);
     batch.set(doc(db, 'reviewPhotos/semchave'), validPhoto());
     batch.set(doc(db, lockPath('alice', 'camaroes')), validLock('semchave'));
     await assertFails(batch.commit());
@@ -926,6 +1206,7 @@ describe('reviewPhotos/{reviewId}', () => {
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'reviews/y'), validReview({ hasPhoto: true }));
+    setAudit(db, batch, 'reviews', 'y', validReview({ hasPhoto: true }));
     batch.set(doc(db, 'reviewPhotos/y'), semAutor);
     batch.set(doc(db, lockPath('alice', 'camaroes')), validLock('y'));
     await assertFails(batch.commit());
@@ -1032,11 +1313,12 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
     await assertSucceeds(addReview(bob(), validReview({ authorId: 'bob', authorName: 'Bob' })));
   });
 
-  it('batch máximo (local novo + foto + trava + review) cabe no limite de acessos', async () => {
+  it('batch máximo (local novo + foto + trava + review + auditoria) cabe no limite de acessos', async () => {
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'places/osm-n123'), newPlace());
     batch.set(doc(db, 'reviews/max'), validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé', hasPhoto: true }));
+    setAudit(db, batch, 'reviews', 'max', validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé', hasPhoto: true }));
     batch.set(doc(db, 'reviewPhotos/max'), validPhoto());
     batch.set(doc(db, lockPath('alice', 'osm-n123')), validLock('max', { placeId: 'osm-n123' }));
     await assertSucceeds(batch.commit());
@@ -1088,6 +1370,7 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'reviews/x'), validReview());
+    setAudit(db, batch, 'reviews', 'x', validReview());
     batch.set(lockRef(db), { lastAt: serverTimestamp(), reviewId: 'x' });
     await assertFails(batch.commit());
   });
@@ -1104,6 +1387,7 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'reviews/debob'), validReview({ authorId: 'bob', authorName: 'Bob' }));
+    setAudit(db, batch, 'reviews', 'debob', validReview({ authorId: 'bob', authorName: 'Bob' }));
     batch.set(lockRef(db), validLock('debob'));
     await assertFails(batch.commit());
     // Review de Bob que já existe.
@@ -1193,9 +1477,10 @@ function validVisitLock(visitId, overrides = {}) {
 
 let visitSeq = 0;
 
-/// Visita + trava num único batch. `lock: false` omite a trava; `lock: {...}`
-/// sobrescreve campos; `lockAt` troca o caminho da trava.
-function addVisit(db, data, { id, lock = {}, lockAt } = {}) {
+/// Visita + trava + auditoria num único batch. `lock: false` omite a trava;
+/// `lock: {...}` sobrescreve campos; `lockAt` troca o caminho da trava.
+/// `audit: false` omite a auditoria; `audit: {...}` sobrescreve campos.
+function addVisit(db, data, { id, lock = {}, lockAt, audit = {} } = {}) {
   const visitId = id || 'v' + (++visitSeq);
   const batch = writeBatch(db);
   batch.set(doc(db, 'visits/' + visitId), data);
@@ -1206,6 +1491,7 @@ function addVisit(db, data, { id, lock = {}, lockAt } = {}) {
       validVisitLock(visitId, { placeId, ...lock }),
     );
   }
+  if (audit !== false) setAudit(db, batch, 'visits', visitId, data, audit);
   return batch.commit();
 }
 
@@ -1293,6 +1579,7 @@ describe('visits + users/{uid}/visitLocks (F15: "Voltei aqui", 12 h)', () => {
     const batch = writeBatch(db);
     batch.set(doc(db, 'places/osm-n123'), newPlace());
     batch.set(doc(db, 'visits/nova'), validVisit({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    setAudit(db, batch, 'visits', 'nova', validVisit({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
     batch.set(doc(db, visitLockPath('alice', 'osm-n123')), validVisitLock('nova', { placeId: 'osm-n123' }));
     await assertSucceeds(batch.commit());
   });
@@ -1304,6 +1591,7 @@ describe('visits + users/{uid}/visitLocks (F15: "Voltei aqui", 12 h)', () => {
     const batch = writeBatch(db);
     batch.set(doc(db, 'places/osm-n123'), newPlace({ lat: 38.7, lng: -9.1 }));
     batch.set(doc(db, 'visits/nova'), validVisit({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    setAudit(db, batch, 'visits', 'nova', validVisit({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
     batch.set(doc(db, visitLockPath('alice', 'osm-n123')), validVisitLock('nova', { placeId: 'osm-n123' }));
     await assertFails(batch.commit());
   });
@@ -1356,10 +1644,12 @@ describe('visits + users/{uid}/visitLocks (F15: "Voltei aqui", 12 h)', () => {
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'visits/x'), validVisit());
+    setAudit(db, batch, 'visits', 'x', validVisit());
     batch.set(doc(db, lockPath('alice', 'camaroes')), validLock('x'));
     await assertFails(batch.commit());
     const batch2 = writeBatch(db);
     batch2.set(doc(db, 'reviews/y'), validReview());
+    setAudit(db, batch2, 'reviews', 'y', validReview());
     batch2.set(lockRef(db), validVisitLock('y'));
     await assertFails(batch2.commit());
   });
@@ -1491,9 +1781,10 @@ function validOpenLock(reportId, overrides = {}) {
 
 let openSeq = 0;
 
-/// Relato + trava num único batch. `lock: false` omite a trava; `lock: {...}`
-/// sobrescreve campos; `lockAt` troca o caminho da trava.
-function addOpenReport(db, data, { id, lock = {}, lockAt } = {}) {
+/// Relato + trava + auditoria num único batch. `lock: false` omite a trava;
+/// `lock: {...}` sobrescreve campos; `lockAt` troca o caminho da trava.
+/// `audit: false` omite a auditoria; `audit: {...}` sobrescreve campos.
+function addOpenReport(db, data, { id, lock = {}, lockAt, audit = {} } = {}) {
   const reportId = id || 'o' + (++openSeq);
   const batch = writeBatch(db);
   batch.set(doc(db, 'openReports/' + reportId), data);
@@ -1504,6 +1795,7 @@ function addOpenReport(db, data, { id, lock = {}, lockAt } = {}) {
       validOpenLock(reportId, { placeId, ...lock }),
     );
   }
+  if (audit !== false) setAudit(db, batch, 'openReports', reportId, data, audit);
   return batch.commit();
 }
 
@@ -1579,6 +1871,7 @@ describe('openReports + users/{uid}/openReportLocks (F20: "Está aberto agora?",
     const batch = writeBatch(db);
     batch.set(doc(db, 'places/osm-n123'), newPlace());
     batch.set(doc(db, 'openReports/novo'), validOpenReport({ placeId: 'osm-n123' }));
+    setAudit(db, batch, 'openReports', 'novo', validOpenReport({ placeId: 'osm-n123' }));
     batch.set(doc(db, openLockPath('alice', 'osm-n123')), validOpenLock('novo', { placeId: 'osm-n123' }));
     await assertSucceeds(batch.commit());
   });
@@ -1589,6 +1882,7 @@ describe('openReports + users/{uid}/openReportLocks (F20: "Está aberto agora?",
     const batch = writeBatch(db);
     batch.set(doc(db, 'places/osm-n123'), newPlace({ lat: 38.7, lng: -9.1 }));
     batch.set(doc(db, 'openReports/novo'), validOpenReport({ placeId: 'osm-n123' }));
+    setAudit(db, batch, 'openReports', 'novo', validOpenReport({ placeId: 'osm-n123' }));
     batch.set(doc(db, openLockPath('alice', 'osm-n123')), validOpenLock('novo', { placeId: 'osm-n123' }));
     await assertFails(batch.commit());
   });
@@ -1650,10 +1944,12 @@ describe('openReports + users/{uid}/openReportLocks (F20: "Está aberto agora?",
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'openReports/x'), validOpenReport());
+    setAudit(db, batch, 'openReports', 'x', validOpenReport());
     batch.set(doc(db, visitLockPath('alice', 'camaroes')), validVisitLock('x'));
     await assertFails(batch.commit());
     const batch2 = writeBatch(db);
     batch2.set(doc(db, 'visits/y'), validVisit());
+    setAudit(db, batch2, 'visits', 'y', validVisit());
     batch2.set(lockRef(db), validOpenLock('y'));
     await assertFails(batch2.commit());
   });
@@ -1733,5 +2029,180 @@ describe('openReports + users/{uid}/openReportLocks (F20: "Está aberto agora?",
     ]);
     const ok = results.filter((r) => r.status === 'fulfilled').length;
     if (ok !== 1) throw new Error('esperava 1 sucesso, vieram ' + ok);
+  });
+});
+
+// ---------- F04: log de auditoria ----------
+
+describe('auditLog (F04: auditoria de avaliações, visitas e relatos)', () => {
+  /// Lê a entrada sem Rules (o app nunca lê).
+  async function readAudit(collectionName, docId) {
+    let snap;
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      snap = await getDoc(doc(ctx.firestore(), auditPath(collectionName, docId)));
+    });
+    return snap;
+  }
+
+  async function seedAudit(collectionName, docId) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), auditPath(collectionName, docId)), {
+        ...validAudit(collectionName, docId),
+        at: Timestamp.now(),
+      });
+    });
+  }
+
+  beforeEach(unlockAll);
+
+  it('avaliação grava a entrada com chaves exatas, autor e hora do servidor', async () => {
+    await assertSucceeds(addReview(alice(), validReview(), { id: 'aud1' }));
+    const d = (await readAudit('reviews', 'aud1')).data();
+    const keys = Object.keys(d).sort().join(',');
+    if (keys !== 'action,actorUid,at,collection,docId,placeId') throw new Error('chaves: ' + keys);
+    if (d.actorUid !== 'alice' || d.action !== 'create' || d.collection !== 'reviews' || d.docId !== 'aud1' || d.placeId !== 'camaroes') {
+      throw new Error('entrada inesperada: ' + JSON.stringify(d));
+    }
+    if (!(d.at instanceof Timestamp) || Date.now() - d.at.toMillis() > 60 * 1000) {
+      throw new Error('at não é a hora do servidor');
+    }
+  });
+
+  it('visita e relato também gravam a entrada', async () => {
+    await assertSucceeds(addVisit(alice(), validVisit(), { id: 'audv' }));
+    await assertSucceeds(addOpenReport(alice(), validOpenReport(), { id: 'audo' }));
+    if (!(await readAudit('visits', 'audv')).exists()) throw new Error('sem auditoria da visita');
+    if (!(await readAudit('openReports', 'audo')).exists()) throw new Error('sem auditoria do relato');
+  });
+
+  it('avaliação com foto e com local novo: batch com a auditoria passa', async () => {
+    await assertSucceeds(reviewWithPhotoBatch(alice(), { id: 'comfoto' }));
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace());
+    const data = validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé' });
+    batch.set(doc(db, 'reviews/novo'), data);
+    batch.set(doc(db, lockPath('alice', 'osm-n123')), validLock('novo', { placeId: 'osm-n123' }));
+    setAudit(db, batch, 'reviews', 'novo', data);
+    await assertSucceeds(batch.commit());
+  });
+
+  it('forja: review, visita ou relato sem a auditoria no batch', async () => {
+    await assertFails(addReview(alice(), validReview(), { audit: false }));
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'semaud', withAudit: false }));
+    await assertFails(addVisit(alice(), validVisit(), { audit: false }));
+    await assertFails(addOpenReport(alice(), validOpenReport(), { audit: false }));
+  });
+
+  it('forja: auditoria sem o doc auditado no batch', async () => {
+    await assertFails(setDoc(doc(alice(), auditPath('reviews', 'fantasma')), validAudit('reviews', 'fantasma')));
+    await assertFails(setDoc(doc(alice(), auditPath('visits', 'fantasma')), validAudit('visits', 'fantasma')));
+    await assertFails(setDoc(doc(alice(), auditPath('openReports', 'fantasma')), validAudit('openReports', 'fantasma')));
+  });
+
+  it('forja: auditoria de doc já existente (antigo, sem backfill)', async () => {
+    await assertFails(setDoc(doc(alice(), auditPath('reviews', 'existing')), validAudit('reviews', 'existing')));
+    await seedVisit('velha');
+    await assertFails(setDoc(doc(alice(), auditPath('visits', 'velha')), validAudit('visits', 'velha')));
+    await seedOpenReport('velho', 40);
+    await assertFails(setDoc(doc(alice(), auditPath('openReports', 'velho')), validAudit('openReports', 'velho')));
+  });
+
+  it('forja: outro actorUid ou alvo de outro autor', async () => {
+    await assertFails(addReview(alice(), validReview(), { audit: { actorUid: 'bob' } }));
+    await assertFails(addVisit(alice(), validVisit(), { audit: { actorUid: 'bob' } }));
+    await assertFails(addOpenReport(alice(), validOpenReport(), { audit: { actorUid: 'bob' } }));
+    // Bob avalia; Alice tenta gravar a auditoria da review de Bob.
+    await assertFails(setDoc(doc(alice(), auditPath('reviews', 'dobob')), validAudit('reviews', 'dobob')));
+    const db = bob();
+    const data = validReview({ authorId: 'bob', authorName: 'Bob' });
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'reviews/dobob'), data);
+    batch.set(doc(db, lockPath('bob', 'camaroes')), validLock('dobob'));
+    batch.set(doc(db, auditPath('reviews', 'dobob')), validAudit('reviews', 'dobob'));
+    await assertFails(batch.commit());
+  });
+
+  it('forja: placeId diferente do alvo', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'places/mangai'), { name: 'Mangai', category: 'Restaurante' });
+    });
+    await assertFails(addReview(alice(), validReview(), { audit: { placeId: 'mangai' } }));
+    await assertFails(addVisit(alice(), validVisit(), { audit: { placeId: 'mangai' } }));
+    await assertFails(addOpenReport(alice(), validOpenReport(), { audit: { placeId: 'mangai' } }));
+  });
+
+  it('forja: id fora de {coleção}-{docId}, coleção trocada ou fora da lista', async () => {
+    // Entrada no id certo, mas apontando para outro doc.
+    await assertFails(addReview(alice(), validReview(), { id: 'a1', audit: { docId: 'a2' } }));
+    // Entrada de "visita" no lugar da de review.
+    await assertFails(addReview(alice(), validReview(), { id: 'a3', audit: { collection: 'visits' } }));
+    // Coleção fora das auditadas.
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users/alice/saved/camaroes'), { createdAt: serverTimestamp() });
+    batch.set(doc(db, 'auditLog/saved-camaroes'), validAudit('saved', 'camaroes'));
+    await assertFails(batch.commit());
+    // Review de verdade com a entrada num id sem o prefixo da coleção.
+    const b2 = writeBatch(db);
+    b2.set(doc(db, 'reviews/a4'), validReview());
+    b2.set(doc(db, lockPath('alice', 'camaroes')), validLock('a4'));
+    b2.set(doc(db, 'auditLog/a4'), validAudit('reviews', 'a4'));
+    await assertFails(b2.commit());
+  });
+
+  it('forja: at do cliente, action diferente de create, chave extra ou faltando', async () => {
+    await assertFails(addReview(alice(), validReview(), { audit: { at: Timestamp.now() } }));
+    await assertFails(addReview(alice(), validReview(), { audit: { at: Timestamp.fromMillis(0) } }));
+    await assertFails(addReview(alice(), validReview(), { audit: { action: 'update' } }));
+    await assertFails(addReview(alice(), validReview(), { audit: { action: 'delete' } }));
+    await assertFails(addReview(alice(), validReview(), { audit: { ip: '1.2.3.4' } }));
+    await assertFails(addReview(alice(), validReview(), { audit: { placeId: null } }));
+    for (const key of ['actorUid', 'action', 'collection', 'docId', 'placeId', 'at']) {
+      const db = alice();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'reviews/k-' + key), validReview());
+      batch.set(doc(db, lockPath('alice', 'camaroes')), validLock('k-' + key));
+      const audit = validAudit('reviews', 'k-' + key);
+      delete audit[key];
+      batch.set(doc(db, auditPath('reviews', 'k-' + key)), audit);
+      await assertFails(batch.commit());
+    }
+  });
+
+  it('anônimo não grava auditoria', async () => {
+    await assertFails(setDoc(doc(anon(), auditPath('reviews', 'x')), validAudit('reviews', 'x')));
+  });
+
+  it('ninguém lê, altera nem apaga pelo app (nem o autor)', async () => {
+    await assertSucceeds(addReview(alice(), validReview(), { id: 'lida' }));
+    await assertFails(getDoc(doc(alice(), auditPath('reviews', 'lida'))));
+    await assertFails(getDoc(doc(bob(), auditPath('reviews', 'lida'))));
+    await assertFails(getDoc(doc(anon(), auditPath('reviews', 'lida'))));
+    await assertFails(getDocs(collection(alice(), 'auditLog')));
+    await assertFails(getDocs(query(collection(alice(), 'auditLog'), where('actorUid', '==', 'alice'))));
+    await assertFails(updateDoc(doc(alice(), auditPath('reviews', 'lida')), { placeId: 'mangai' }));
+    await assertFails(setDoc(doc(alice(), auditPath('reviews', 'lida')), validAudit('reviews', 'lida')));
+    await assertFails(deleteDoc(doc(alice(), auditPath('reviews', 'lida'))));
+    await seedAudit('visits', 'semar');
+    await assertFails(deleteDoc(doc(alice(), auditPath('visits', 'semar'))));
+  });
+
+  it('retry depois de falha reusa o mesmo id (o batch negado não gravou nada)', async () => {
+    const data = validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé' });
+    // 1ª tentativa negada (local ainda não existe): nada é gravado.
+    await assertFails(addReview(alice(), data, { id: 'retry' }));
+    if ((await readAudit('reviews', 'retry')).exists()) throw new Error('auditoria gravada sem a review');
+    // Retry com o mesmo id, agora criando o local no batch.
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace());
+    batch.set(doc(db, 'reviews/retry'), data);
+    batch.set(doc(db, lockPath('alice', 'osm-n123')), validLock('retry', { placeId: 'osm-n123' }));
+    setAudit(db, batch, 'reviews', 'retry', data);
+    await assertSucceeds(batch.commit());
+    // Reenviar depois de gravado (ack perdido) é negado: o app relê a review
+    // e conclui com sucesso, sem 2ª entrada.
+    await assertFails(addReview(alice(), data, { id: 'retry' }));
   });
 });

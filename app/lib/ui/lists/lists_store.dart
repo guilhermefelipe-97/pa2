@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/lists_repository.dart';
 import '../../domain/models/place_list.dart';
+import '../../domain/models/user_profile.dart';
 import '../saved/saved_places_store.dart';
 
 enum ListsStatus { idle, loading, ready, error }
@@ -90,6 +91,13 @@ class ListsStore extends ChangeNotifier {
   /// Renomeação pendente por lista.
   final Map<String, ({String name, String? emoji, int token})> _meta = {};
 
+  /// "Visível para quem me segue" pendente por lista (F13).
+  final Map<String, ({bool visible, int token})> _visibility = {};
+
+  /// Lista que a aba "Quero ir" deve selecionar ao abrir (ex.: o "Ver" da
+  /// SnackBar de "Lista copiada").
+  String? _focusRequest;
+
   /// Exclusão pendente.
   final Set<String> _deleting = {};
 
@@ -137,7 +145,12 @@ class ListsStore extends ChangeNotifier {
   PlaceList _display(PlaceList base) {
     final meta = _meta[base.id];
     final members = _members[base.id];
-    if (meta == null && (members == null || members.isEmpty)) return base;
+    final visibility = _visibility[base.id];
+    if (meta == null &&
+        visibility == null &&
+        (members == null || members.isEmpty)) {
+      return base;
+    }
     var ids = base.placeIds;
     if (members != null && members.isNotEmpty) {
       ids = [...base.placeIds];
@@ -153,7 +166,22 @@ class ListsStore extends ChangeNotifier {
       name: meta?.name,
       emoji: meta == null ? null : () => meta.emoji,
       placeIds: ids,
+      visible: visibility?.visible,
     );
+  }
+
+  /// Pede que a aba "Quero ir" selecione [listId] (consumido uma vez por
+  /// [takeFocusRequest]).
+  void focusList(String listId) {
+    _focusRequest = listId;
+    _notify();
+  }
+
+  /// Lista a selecionar na aba, se alguém pediu (uma vez só).
+  String? takeFocusRequest() {
+    final id = _focusRequest;
+    _focusRequest = null;
+    return id;
   }
 
   /// Locais da lista que estão no "Quero ir".
@@ -205,6 +233,8 @@ class ListsStore extends ChangeNotifier {
     _server.clear();
     _creating.clear();
     _meta.clear();
+    _visibility.clear();
+    _focusRequest = null;
     _deleting.clear();
     _members.clear();
     _chains.clear();
@@ -392,12 +422,156 @@ class ListsStore extends ChangeNotifier {
         _creating.remove(list.id);
         _members.remove(list.id);
         _meta.remove(list.id);
+        _visibility.remove(list.id);
         if (withPlace != null) _undoAutoSave(withPlace, save?.token);
         _notify();
         return false;
       }
     });
     return (id: list.id, done: done);
+  }
+
+  /// Copia a lista [source] de [author] (F13): snapshot com crédito, mesmo
+  /// emoji e nome (ou "`nome` (de `Autora`)" se já existir). Os locais são
+  /// salvos no "Quero ir" antes e só os confirmados entram na lista
+  /// (lista ⊂ Quero ir). Se a lista não puder ser gravada, desfaz os
+  /// salvamentos que a cópia fez. Registra a cópia (contador da autora,
+  /// uma por pessoa); falha do registro não desfaz a cópia.
+  ///
+  /// `null` se não pode copiar agora (limite de listas, listas não
+  /// carregadas, sem login). A lista aparece já (otimista).
+  ListCreation? copyFrom(PlaceList source, UserProfile author) {
+    final uid = _uid;
+    final authorUid = author.uid;
+    // Exatamente o nome do perfil: as Rules conferem o crédito com ele.
+    final authorName = author.displayName;
+    if (uid == null || uid == authorUid || !canCreate) return null;
+    final generation = _generation;
+    final name = PlaceList.copyName(
+      source.name,
+      authorName,
+      isTaken: (n) => isNameTaken(n),
+    );
+    final emoji = PlaceList.isValidEmoji(source.emoji) ? source.emoji : null;
+    final placeIds = [
+      ...{...source.placeIds},
+    ].take(PlaceList.maxPlaces).toList();
+    final credit = ListCredit(
+      uid: authorUid,
+      name: authorName,
+      listId: source.id,
+    );
+    // Salva já (otimista); a lista só é gravada com os confirmados.
+    final saves = {for (final id in placeIds) id: _saveFor(id)};
+    final list = PlaceList(
+      id: _repo.newListId(uid),
+      name: name,
+      emoji: emoji,
+      placeIds: placeIds,
+      createdAt: _clock(),
+      copiedFrom: credit,
+    );
+    _creating[list.id] = list;
+    _notify();
+    final done = _enqueue(list.id, () async {
+      try {
+        final results = await Future.wait([
+          for (final id in placeIds) saves[id]!.done,
+        ]);
+        if (generation != _generation) return false;
+        final confirmed = [
+          for (var i = 0; i < placeIds.length; i++)
+            if (results[i] && _saved.isSaved(placeIds[i])) placeIds[i],
+        ];
+        if (placeIds.isNotEmpty && confirmed.isEmpty) {
+          throw StateError('nenhum local salvo');
+        }
+        await _repo.createList(
+          uid: uid,
+          listId: list.id,
+          name: list.name,
+          emoji: list.emoji,
+          placeIds: confirmed,
+          copiedFrom: credit,
+        );
+        if (generation != _generation) return false;
+        _server[list.id] = list.copyWith(placeIds: confirmed);
+        _creating.remove(list.id);
+        for (final id in placeIds) {
+          if (_autoSaved[id] == saves[id]!.token) _autoSaved.remove(id);
+        }
+        _notify();
+        unawaited(_recordCopy(source.id, authorUid, uid));
+        return true;
+      } on Object {
+        if (generation != _generation) return false;
+        _creating.remove(list.id);
+        _members.remove(list.id);
+        _meta.remove(list.id);
+        _visibility.remove(list.id);
+        for (final id in placeIds) {
+          _undoAutoSave(id, saves[id]!.token);
+        }
+        _notify();
+        return false;
+      }
+    });
+    return (id: list.id, done: done);
+  }
+
+  /// Contador de cópias da autora: só a 1ª cópia de cada pessoa conta. O
+  /// registro vai direto (sem ler antes): a 2ª cópia é negada pelas Rules e
+  /// o repositório a trata como "já registrada".
+  Future<void> _recordCopy(String listId, String ownerUid, String uid) async {
+    try {
+      await _repo.recordCopy(
+        ownerUid: ownerUid,
+        listId: listId,
+        copierUid: uid,
+      );
+    } on Object catch (e) {
+      // A cópia já está feita; só o contador da autora fica sem esta.
+      debugPrint('Registro de cópia indisponível: $e');
+    }
+  }
+
+  /// Quantas pessoas copiaram a lista [listId] do usuário (F13, N32).
+  Future<int> copyCount(String listId) {
+    final uid = _uid;
+    if (uid == null) return Future.value(0);
+    return _repo.copyCount(ownerUid: uid, listId: listId);
+  }
+
+  /// "Visível para quem me segue" (F13), otimista: falha reverte e
+  /// completa com `false`.
+  Future<bool> setVisible(String listId, bool visible) {
+    final uid = _uid;
+    final current = listById(listId);
+    if (uid == null || !isReady || current == null) {
+      return Future.value(false);
+    }
+    if (current.visible == visible) return Future.value(true);
+    final generation = _generation;
+    final token = ++_seq;
+    _visibility[listId] = (visible: visible, token: token);
+    _notify();
+    return _enqueue(listId, () async {
+      var ok = false;
+      try {
+        await _repo.setVisible(uid: uid, listId: listId, visible: visible);
+        ok = true;
+      } on Object {
+        ok = false;
+      }
+      if (generation != _generation) return false;
+      if (ok) {
+        final base = _server[listId];
+        if (base != null) _server[listId] = base.copyWith(visible: visible);
+      }
+      if (_visibility[listId]?.token == token) _visibility.remove(listId);
+      _notify();
+      return ok;
+    });
   }
 
   /// Põe/tira [placeId] da lista (otimista). Pôr salva o local antes.
@@ -549,6 +723,7 @@ class ListsStore extends ChangeNotifier {
         _creating.remove(listId);
         _members.remove(listId);
         _meta.remove(listId);
+        _visibility.remove(listId);
       } else {
         // A lista volta: sem quem saiu do "Quero ir" enquanto isso (o batch
         // de remoção a pulou por estar sendo excluída).

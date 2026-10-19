@@ -808,6 +808,46 @@ void main() {
       },
     );
 
+    testWidgets(
+      'ícone "Você" no feed abre o próprio perfil, com as próprias avaliações',
+      (tester) async {
+        final data = _anaFoiNoMangai();
+        data.reviews.stored.add(
+          review(
+            authorId: 'me',
+            authorName: 'Eu',
+            placeId: 'mangai',
+            placeName: 'Mangai',
+          ),
+        );
+        final app = await pumpApp(
+          tester,
+          users: data.users,
+          reviews: data.reviews,
+          places: [_mangai],
+        );
+        expect(find.byType(FeedView), findsOneWidget);
+
+        await tester.tap(find.byKey(const Key('feed-me')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ProfileView), findsOneWidget);
+        expect(
+          find.descendant(of: find.byType(AppBar), matching: find.text('Você')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('profile-follow')), findsNothing);
+        expect(find.text('Mangai'), findsOneWidget);
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.byType(FeedView), findsOneWidget);
+        expect(
+          app.router.routerDelegate.currentConfiguration.uri.path,
+          Routes.feed,
+        );
+      },
+    );
+
     testWidgets('link direto para uid inexistente: "Pessoa não encontrada"', (
       tester,
     ) async {

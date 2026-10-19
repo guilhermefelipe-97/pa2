@@ -165,6 +165,10 @@ class FeedViewModel extends SafeChangeNotifier {
 
   Future<void> signOut() => _auth.signOut();
 
+  /// Uid do usuário logado: o ícone "Você" abre o próprio perfil (as
+  /// próprias avaliações e visitas, que o feed não mostra).
+  String? get currentUserId => _auth.currentUserId;
+
   @override
   void dispose() {
     _follow.dispose();

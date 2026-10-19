@@ -23,7 +23,8 @@ class SavedViewModel extends SafeChangeNotifier {
        _lists = lists,
        _clock = clock ?? DateTime.now {
     _store.addListener(_onStoreChanged);
-    _lists?.addListener(notifyListeners);
+    _lists?.addListener(_onListsChanged);
+    _takeFocusRequest();
     _onStoreChanged();
   }
 
@@ -55,6 +56,43 @@ class SavedViewModel extends SafeChangeNotifier {
     if (listId == _selectedListId) return;
     _selectedListId = listId;
     notifyListeners();
+  }
+
+  /// Alguém pediu para abrir uma lista (ex.: "Ver" de "Lista copiada").
+  void _takeFocusRequest() {
+    final lists = _lists;
+    final id = lists?.takeFocusRequest();
+    // A lista pode ter sumido (excluída, troca de usuário): ignora.
+    if (id != null && lists?.listById(id) != null) _selectedListId = id;
+  }
+
+  void _onListsChanged() {
+    _takeFocusRequest();
+    notifyListeners();
+  }
+
+  /// A lista ativa está visível para quem segue o usuário (F13): muda a
+  /// legenda da AppBar.
+  bool get isSelectedListVisible => selectedList?.visible ?? false;
+
+  /// "Visível para quem me segue" da lista ativa (otimista). `false` =
+  /// falhou e voltou ao que era.
+  Future<bool> setSelectedListVisible(bool visible) {
+    final list = selectedList;
+    final lists = _lists;
+    if (list == null || lists == null) return Future.value(false);
+    return lists.setVisible(list.id, visible);
+  }
+
+  /// Quantas pessoas copiaram [list] (F13, N32); `null` se a leitura falhou.
+  Future<int?> copyCountOf(PlaceList list) async {
+    final lists = _lists;
+    if (lists == null) return null;
+    try {
+      return await lists.copyCount(list.id);
+    } on Object {
+      return null;
+    }
   }
 
   /// Cards visíveis da lista (salvos e resolvidos no catálogo): o número do
@@ -201,7 +239,7 @@ class SavedViewModel extends SafeChangeNotifier {
   @override
   void dispose() {
     _store.removeListener(_onStoreChanged);
-    _lists?.removeListener(notifyListeners);
+    _lists?.removeListener(_onListsChanged);
     super.dispose();
   }
 }

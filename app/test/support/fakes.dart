@@ -528,10 +528,16 @@ class FakeSavedRepository implements SavedRepository {
   Object? savedAtOfError;
   int savedAtOfCalls = 0;
 
+  /// Ids cujo salvamento falha (ex.: local fora do catálogo).
+  final Set<String> failSaveIds = {};
+
   /// Como as Rules: `set` num doc que já existe vira update, negado.
   @override
   Future<void> save({required String uid, required String placeId}) =>
       _write(placeId, 'save', () {
+        if (failSaveIds.contains(placeId)) {
+          throw Exception('permission-denied: $placeId');
+        }
         if (byUser[uid]?.containsKey(placeId) ?? false) {
           throw Exception('permission-denied: update');
         }
@@ -582,6 +588,8 @@ class FakeListsRepository implements ListsRepository {
     String? emoji,
     List<String> placeIds = const [],
     DateTime? createdAt,
+    bool visible = false,
+    ListCredit? copiedFrom,
   }) {
     final list = PlaceList(
       id: id,
@@ -595,10 +603,35 @@ class FakeListsRepository implements ListsRepository {
             9,
             1,
           ).add(Duration(minutes: byUser[uid]?.length ?? 0)),
+      visible: visible,
+      copiedFrom: copiedFrom,
     );
     byUser.putIfAbsent(uid, () => {})[id] = list;
     return list;
   }
+
+  /// Quem copiou cada lista: `'{dona}/{listId}'` → uids (F13).
+  final Map<String, Set<String>> copies = {};
+
+  /// Para conferir "segue a dona" como as Rules (sem ele, libera).
+  FakeUserRepository? users;
+
+  /// Quem está lendo (as Rules olham o leitor). Sem ele, libera.
+  FakeAuthRepository? auth;
+
+  Object? visibleListsError;
+  Object? copyCountError;
+  Object? recordCopyError;
+  final List<String> visibleListsCalls = [];
+
+  /// Registros de cópia negados pelas Rules (ex.: 2ª cópia da mesma pessoa).
+  int deniedCopies = 0;
+
+  /// Segura cada [copyCount] até ser liberado.
+  Completer<void>? copyCountGate;
+
+  /// Segura cada [listLists] até ser liberado.
+  Completer<void>? listGate;
 
   PlaceList? get(String uid, String id) => byUser[uid]?[id];
 
@@ -608,6 +641,8 @@ class FakeListsRepository implements ListsRepository {
   @override
   Future<List<PlaceList>> listLists(String uid) async {
     listCalls++;
+    final gate = listGate;
+    if (gate != null) await gate.future;
     if (listError != null) throw listError!;
     return [...(byUser[uid] ?? const <String, PlaceList>{}).values]
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -635,6 +670,7 @@ class FakeListsRepository implements ListsRepository {
     required String name,
     required String? emoji,
     required List<String> placeIds,
+    ListCredit? copiedFrom,
   }) => _write('create:$listId', () {
     if (byUser[uid]?.containsKey(listId) ?? false) {
       throw Exception('permission-denied: update');
@@ -645,8 +681,70 @@ class FakeListsRepository implements ListsRepository {
       emoji: emoji,
       placeIds: [...placeIds],
       createdAt: clock(),
+      copiedFrom: copiedFrom,
     );
   });
+
+  @override
+  Future<void> setVisible({
+    required String uid,
+    required String listId,
+    required bool visible,
+  }) => _write('visible:$listId:$visible', () {
+    byUser[uid]![listId] = _existing(uid, listId).copyWith(visible: visible);
+  });
+
+  bool _follows(String follower, String owner) =>
+      users == null ||
+      (users!.followingByUser[follower]?.contains(owner) ?? false);
+
+  @override
+  Future<List<PlaceList>> listVisibleLists(String ownerUid) async {
+    visibleListsCalls.add(ownerUid);
+    if (visibleListsError != null) throw visibleListsError!;
+    // Como as Rules: só a dona ou quem a segue.
+    final reader = auth?.currentUserId;
+    if (reader != null && reader != ownerUid && !_follows(reader, ownerUid)) {
+      throw const ListAccessDeniedException();
+    }
+    return [
+      for (final l in (byUser[ownerUid] ?? const <String, PlaceList>{}).values)
+        if (l.visible) l,
+    ]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  }
+
+  @override
+  Future<int> copyCount({
+    required String ownerUid,
+    required String listId,
+  }) async {
+    final gate = copyCountGate;
+    if (gate != null) await gate.future;
+    if (copyCountError != null) throw copyCountError!;
+    return copies['$ownerUid/$listId']?.length ?? 0;
+  }
+
+  @override
+  Future<void> recordCopy({
+    required String ownerUid,
+    required String listId,
+    required String copierUid,
+  }) async {
+    writes.add('copy:$ownerUid/$listId:$copierUid');
+    if (recordCopyError != null) throw recordCopyError!;
+    // Como as Rules (segue a dona, lista visível, uma por pessoa) e o
+    // repositório real: negado (inclusive a 2ª cópia) completa sem erro.
+    final list = byUser[ownerUid]?[listId];
+    final key = '$ownerUid/$listId';
+    if (list == null ||
+        !list.visible ||
+        !_follows(copierUid, ownerUid) ||
+        (copies[key]?.contains(copierUid) ?? false)) {
+      deniedCopies++;
+      return;
+    }
+    copies.putIfAbsent(key, () => {}).add(copierUid);
+  }
 
   @override
   Future<void> updateList({
@@ -663,7 +761,11 @@ class FakeListsRepository implements ListsRepository {
 
   @override
   Future<void> deleteList({required String uid, required String listId}) =>
-      _write('delete:$listId', () => byUser[uid]?.remove(listId));
+      _write('delete:$listId', () {
+        byUser[uid]?.remove(listId);
+        // O contador de cópias sai junto (mesmo batch).
+        copies.remove('$uid/$listId');
+      });
 
   @override
   Future<void> setMembership({

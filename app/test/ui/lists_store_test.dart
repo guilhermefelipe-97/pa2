@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:naarea/domain/models/place_list.dart';
+import 'package:naarea/domain/models/user_profile.dart';
 import 'package:naarea/ui/lists/lists_store.dart';
 import 'package:naarea/ui/saved/saved_places_store.dart';
 
@@ -709,6 +710,242 @@ void main() {
       addTearDown(s.dispose);
       expect(await s.lists.rename('a', '  Sábado ', emoji: '🎉'), isTrue);
       expect(s.listsRepo.writes, isEmpty);
+    });
+  });
+
+  group('F13: visível para quem me segue', () {
+    test('otimista: muda já e confirma no servidor', () async {
+      final s = await _make(seed: (_, l) => l.seed('me', 'a', 'Sábado'));
+      addTearDown(s.dispose);
+      final done = s.lists.setVisible('a', true);
+      expect(s.lists.listById('a')!.visible, isTrue);
+      expect(await done, isTrue);
+      expect(s.listsRepo.get('me', 'a')!.visible, isTrue);
+      expect(s.lists.listById('a')!.visible, isTrue);
+      expect(await s.lists.setVisible('a', false), isTrue);
+      expect(s.listsRepo.get('me', 'a')!.visible, isFalse);
+    });
+
+    test('falha: reverte e completa com false', () async {
+      final s = await _make(seed: (_, l) => l.seed('me', 'a', 'Sábado'));
+      addTearDown(s.dispose);
+      s.listsRepo.writeError = Exception('permission-denied');
+      final done = s.lists.setVisible('a', true);
+      expect(s.lists.listById('a')!.visible, isTrue);
+      expect(await done, isFalse);
+      expect(s.lists.listById('a')!.visible, isFalse);
+    });
+
+    test('sem mudança não escreve; lista inexistente: false', () async {
+      final s = await _make(seed: (_, l) => l.seed('me', 'a', 'Sábado'));
+      addTearDown(s.dispose);
+      expect(await s.lists.setVisible('a', false), isTrue);
+      expect(s.listsRepo.writes, isEmpty);
+      expect(await s.lists.setVisible('x', true), isFalse);
+    });
+
+    test('renomear não desfaz a visibilidade', () async {
+      final s = await _make(
+        seed: (_, l) => l.seed('me', 'a', 'Sábado', visible: true),
+      );
+      addTearDown(s.dispose);
+      expect(await s.lists.rename('a', 'Sábado à noite'), isTrue);
+      expect(s.lists.listById('a')!.visible, isTrue);
+      expect(s.listsRepo.get('me', 'a')!.visible, isTrue);
+    });
+  });
+
+  group('F13: copiar lista de quem eu sigo', () {
+    const ana = UserProfile(uid: 'ana', displayName: 'Ana');
+
+    PlaceList anaList(FakeListsRepository l, List<String> ids) => l.seed(
+      'ana',
+      'sab',
+      'Sábado',
+      emoji: '🎉',
+      placeIds: ids,
+      visible: true,
+    );
+
+    test('12 locais, 3 já salvos: salva os 9, cria com os 12 e registra a '
+        'cópia', () async {
+      final ids = [for (var i = 0; i < 12; i++) 'p$i'];
+      late PlaceList source;
+      final s = await _make(
+        seed: (sv, l) {
+          for (final id in ids.take(3)) {
+            sv.seed('me', id, _t);
+          }
+          source = anaList(l, ids);
+        },
+      );
+      addTearDown(s.dispose);
+      // Linha do tempo entre os dois fakes: o que já estava salvo (no
+      // servidor) no instante em que a lista foi gravada.
+      Set<String>? savedWhenCreated;
+      var saveWritesWhenCreated = -1;
+      s.listsRepo.failWhen = (op) {
+        if (op.startsWith('create:')) {
+          savedWhenCreated = {...?s.savedRepo.byUser['me']?.keys};
+          saveWritesWhenCreated = s.savedRepo.writes
+              .where((w) => w.startsWith('save:'))
+              .length;
+        }
+        return false;
+      };
+      final copy = s.lists.copyFrom(source, ana)!;
+      // Otimista: já aparece, com crédito.
+      expect(s.lists.listById(copy.id)!.copiedFrom!.name, 'Ana');
+      expect(await copy.done, isTrue);
+      await pumpEventQueue();
+
+      final saved = s.listsRepo.get('me', copy.id)!;
+      expect(saved.name, 'Sábado');
+      expect(saved.emoji, '🎉');
+      expect(saved.placeIds, ids);
+      expect(saved.visible, isFalse, reason: 'cópia nasce privada');
+      expect(
+        saved.copiedFrom,
+        const ListCredit(uid: 'ana', name: 'Ana', listId: 'sab'),
+      );
+      expect(s.savedRepo.byUser['me']!.keys, containsAll(ids));
+      expect(s.listsRepo.copies['ana/sab'], {'me'});
+      // Lista ⊂ Quero ir: a lista só foi gravada depois dos 9 salvamentos
+      // confirmados no servidor.
+      expect(s.listsRepo.writes, contains('create:${copy.id}'));
+      expect(saveWritesWhenCreated, 9);
+      expect(savedWhenCreated, containsAll(ids));
+      expect(
+        s.savedRepo.writes.where((w) => w.startsWith('save:')),
+        hasLength(9),
+      );
+    });
+
+    test('nome já existe: "<nome> (de <Autora>)"', () async {
+      late PlaceList source;
+      final s = await _make(
+        seed: (_, l) {
+          l.seed('me', 'minha', 'sabado');
+          source = anaList(l, const []);
+        },
+      );
+      addTearDown(s.dispose);
+      final copy = s.lists.copyFrom(source, ana)!;
+      expect(await copy.done, isTrue);
+      expect(s.listsRepo.get('me', copy.id)!.name, 'Sábado (de Ana)');
+    });
+
+    test('só os locais confirmados entram na lista', () async {
+      late PlaceList source;
+      final s = await _make(seed: (_, l) => source = anaList(l, ['a', 'b']));
+      addTearDown(s.dispose);
+      s.savedRepo.failSaveIds.add('b');
+      final copy = s.lists.copyFrom(source, ana)!;
+      expect(await copy.done, isTrue);
+      expect(s.listsRepo.get('me', copy.id)!.placeIds, ['a']);
+      expect(s.saved.isSaved('b'), isFalse);
+    });
+
+    test('falha ao gravar a lista: desfaz os salvamentos feitos pela cópia '
+        '(os que já estavam salvos ficam)', () async {
+      late PlaceList source;
+      final s = await _make(
+        seed: (sv, l) {
+          sv.seed('me', 'a', _t);
+          source = anaList(l, ['a', 'b', 'c']);
+        },
+      );
+      addTearDown(s.dispose);
+      s.listsRepo.failWhen = (op) => op.startsWith('create:');
+      final copy = s.lists.copyFrom(source, ana)!;
+      expect(await copy.done, isFalse);
+      await pumpEventQueue();
+      expect(s.lists.listById(copy.id), isNull);
+      expect(s.saved.isSaved('a'), isTrue);
+      expect(s.saved.isSaved('b'), isFalse);
+      expect(s.saved.isSaved('c'), isFalse);
+      expect(s.savedRepo.byUser['me']!.keys, ['a']);
+      expect(s.listsRepo.copies, isEmpty);
+    });
+
+    test('nenhum local salvo: falha sem criar a lista', () async {
+      late PlaceList source;
+      final s = await _make(seed: (_, l) => source = anaList(l, ['a']));
+      addTearDown(s.dispose);
+      s.savedRepo.failSaveIds.add('a');
+      final copy = s.lists.copyFrom(source, ana)!;
+      expect(await copy.done, isFalse);
+      expect(s.listsRepo.byUser['me'], isNull);
+    });
+
+    test('copiar de novo: 2ª lista criada; o registro repetido é negado e '
+        'tratado como já feito (contador continua 1)', () async {
+      late PlaceList source;
+      final s = await _make(seed: (_, l) => source = anaList(l, ['a']));
+      addTearDown(s.dispose);
+      expect(await s.lists.copyFrom(source, ana)!.done, isTrue);
+      await pumpEventQueue();
+      final second = s.lists.copyFrom(source, ana)!;
+      expect(await second.done, isTrue);
+      await pumpEventQueue();
+      expect(s.listsRepo.get('me', second.id)!.name, 'Sábado (de Ana)');
+      expect(s.listsRepo.copies['ana/sab'], {'me'});
+      // Sem leitura antes: tenta direto, e a 2ª é negada (uma por pessoa).
+      expect(
+        s.listsRepo.writes.where((w) => w.startsWith('copy:')),
+        hasLength(2),
+      );
+      expect(s.listsRepo.deniedCopies, 1);
+    });
+
+    test('falha só no registro da cópia: a cópia continua', () async {
+      late PlaceList source;
+      final s = await _make(seed: (_, l) => source = anaList(l, ['a']));
+      addTearDown(s.dispose);
+      s.listsRepo.recordCopyError = Exception('permission-denied');
+      final copy = s.lists.copyFrom(source, ana)!;
+      expect(await copy.done, isTrue);
+      await pumpEventQueue();
+      expect(s.listsRepo.get('me', copy.id), isNotNull);
+      expect(s.saved.isSaved('a'), isTrue);
+    });
+
+    test('30 listas: não copia', () async {
+      late PlaceList source;
+      final s = await _make(
+        seed: (_, l) {
+          for (var i = 0; i < PlaceList.maxLists; i++) {
+            l.seed('me', 'l$i', 'Lista $i');
+          }
+          source = anaList(l, ['a']);
+        },
+      );
+      addTearDown(s.dispose);
+      expect(s.lists.canCreate, isFalse);
+      expect(s.lists.copyFrom(source, ana), isNull);
+      expect(s.saved.isSaved('a'), isFalse);
+    });
+
+    test('a própria lista não é copiada', () async {
+      final s = await _make(
+        seed: (_, l) => l.seed('me', 'a', 'Minha', visible: true),
+      );
+      addTearDown(s.dispose);
+      expect(
+        s.lists.copyFrom(
+          s.lists.listById('a')!,
+          const UserProfile(uid: 'me', displayName: 'Eu'),
+        ),
+        isNull,
+      );
+    });
+
+    test('pedido de foco é consumido uma vez', () async {
+      final s = await _make();
+      addTearDown(s.dispose);
+      s.lists.focusList('x');
+      expect(s.lists.takeFocusRequest(), 'x');
+      expect(s.lists.takeFocusRequest(), isNull);
     });
   });
 }

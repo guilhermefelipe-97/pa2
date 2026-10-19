@@ -9,6 +9,7 @@ import '../../domain/open_status.dart'
     show openReportsBatchLimit, openReportsPlaceLimit;
 import '../chunk.dart';
 import '../repositories/open_report_repository.dart';
+import 'audit_log.dart';
 import 'place_doc.dart';
 
 /// Relatos "Está aberto agora?" (F20) no Firestore. Mesmo padrão de batch do
@@ -147,6 +148,15 @@ class FirestoreOpenReportRepository implements OpenReportRepository {
       'open': report.open,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    // F04: entrada de auditoria no mesmo batch (as Rules exigem o par).
+    addAuditEntry(
+      batch,
+      _db,
+      collection: reportsCollection,
+      docId: ref.id,
+      actorUid: report.authorId,
+      placeId: report.placeId,
+    );
     batch.set(_lockRef(report.authorId, report.placeId), {
       'lastAt': FieldValue.serverTimestamp(),
       'reportId': ref.id,

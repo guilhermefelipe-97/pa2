@@ -185,7 +185,7 @@ Conversão usada: E=1, EE=2, EEE=3 · $=1, $$=2, $$$=3 · ♥=1, ♥♥=2, ♥�
 | F08 | Sugestão de "gêmeo de gosto" | Cortada do MVP. Reavaliar depois da onda 8, quando F07 tiver dado métrica real de afinidade |
 | F19 | Categoria "Lugares para atividade" | Cortada do MVP por falta de jornada. Volta se o mapa da corrida do Toni for escrito |
 | N31 | Anotação privada de evento interno no painel | Backlog pós-MVP. Candidata natural à onda 9, junto de F23 |
-| N32 | Reconhecimento de quem cura listas | **Pergunta em aberto, não backlog.** A onda 4 entrega F13 (copiar lista) pressupondo curadoras que nenhuma funcionalidade do sequenciador produz. Precisa de decisão antes da onda 4 |
+| N32 | Reconhecimento de quem cura listas | **Decidido na onda 4:** o F13 entrega o contador de cópias. A autora vê "Copiada N vezes" no menu da lista (uma cópia por pessoa, só de quem a segue e com a lista visível), e a cópia leva o crédito "Copiada de `<Autora>`", que abre o perfil dela. Outras formas de reconhecimento ficam fora do MVP |
 
 ## Notas de rigor
 

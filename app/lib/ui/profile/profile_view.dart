@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/models/place_activity.dart';
+import '../../domain/models/place_list.dart';
 import '../../domain/relative_time.dart';
 import '../../routing/routes.dart';
 import '../feed/widgets/author_avatar.dart';
@@ -203,6 +204,26 @@ class _Header extends StatelessWidget {
                   ),
           ),
         ],
+        // F13: listas visíveis, só para quem segue (vazio = seção oculta).
+        if (!vm.isSelf && vm.isFollowing && vm.lists.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Semantics(
+            header: true,
+            child: Text(
+              'Listas',
+              key: const Key('profile-lists'),
+              style: theme.textTheme.titleMedium,
+            ),
+          ),
+          const SizedBox(height: 4),
+          for (final list in vm.lists)
+            _ProfileListTile(
+              key: ValueKey('profile-list-${list.id}'),
+              list: list,
+              onTap: () =>
+                  context.push(Routes.personList(vm.uid, list.id), extra: list),
+            ),
+        ],
         const SizedBox(height: 24),
         Text(
           vm.activities.any((a) => a is Visit)
@@ -215,6 +236,36 @@ class _Header extends StatelessWidget {
     );
   }
 }
+
+/// Uma lista visível no perfil (F13): emoji, nome e quantos locais.
+class _ProfileListTile extends StatelessWidget {
+  const _ProfileListTile({super.key, required this.list, required this.onTap});
+
+  final PlaceList list;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final count = placesCountLabel(list.placeIds.length);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: theme.colorScheme.primaryContainer,
+        child: list.emoji == null
+            ? Icon(Icons.list_alt, color: theme.colorScheme.primary)
+            : Text(list.emoji!, style: const TextStyle(fontSize: 20)),
+      ),
+      title: Text(list.name),
+      subtitle: Text(count),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: onTap,
+    );
+  }
+}
+
+/// "1 local", "12 locais".
+String placesCountLabel(int n) => n == 1 ? '1 local' : '$n locais';
 
 /// Uma avaliação no perfil: local, 3 eixos, comentário e contexto. O item
 /// inteiro é um botão "Abrir `local`".
