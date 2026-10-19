@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:naarea/data/photon/photon_client.dart';
 import 'package:naarea/data/services/location_service.dart';
 import 'package:naarea/domain/geo.dart';
 import 'package:naarea/domain/models/place.dart';
@@ -57,6 +58,7 @@ class _Env {
   final FakeLocationService location;
   final users = FakeUserRepository();
   final reviews = FakeReviewRepository();
+  final visits = FakeVisitRepository();
   final auth = FakeAuthRepository(uid: 'me');
   final saved = FakeSavedRepository();
   final follow = FollowEvents();
@@ -70,6 +72,7 @@ class _Env {
     reviewRepository: reviews,
     followEvents: follow,
     savedStore: store,
+    visitRepository: visits,
   );
 }
 
@@ -185,14 +188,18 @@ void main() {
       expect(NearbyRadius.km3.wider, isNull);
     });
 
-    test('fora de Natal (50 km): fora da área, sem itens', () async {
-      final env = _Env(granted: true, position: (lat: -6.24, lng: -35.211));
-      final vm = env.vm();
-      await vm.start();
-      expect(vm.phase, NearbyPhase.ready);
-      expect(vm.items, isEmpty);
-      expect(vm.outOfArea, isTrue);
-    });
+    test(
+      'fora do Brasil (Lisboa): fora da área, sem itens nem consulta',
+      () async {
+        final env = _Env(granted: true, position: (lat: 38.7223, lng: -9.1393));
+        final vm = env.vm();
+        await vm.start();
+        expect(vm.phase, NearbyPhase.ready);
+        expect(vm.items, isEmpty);
+        expect(vm.outOfArea, isTrue);
+        expect(env.places.nearbyCalls, isEmpty);
+      },
+    );
 
     test('falha de rede: loadError; "Tentar de novo" recupera', () async {
       final env = _Env(granted: true);
@@ -208,6 +215,46 @@ void main() {
       expect(vm.items, hasLength(6));
       // Mesma posição: não pediu de novo.
       expect(env.location.locateCalls, 1);
+    });
+
+    test(
+      'Photon falhou (parcial): mostra os gravados, não guarda no cache; "Tentar de novo" busca tudo',
+      () async {
+        final env = _Env(granted: true);
+        env.places.nearbyPartial = true;
+        final vm = env.vm();
+        await vm.start();
+        expect(vm.phase, NearbyPhase.ready);
+        expect(vm.partial, isTrue);
+        expect(vm.items, hasLength(6));
+        env.places.nearbyPartial = false;
+        await vm.retry();
+        expect(vm.partial, isFalse);
+        expect(env.places.nearbyCalls, hasLength(2));
+        // Agora completo: fica no cache.
+        await vm.retry();
+        expect(env.places.nearbyCalls, hasLength(2));
+      },
+    );
+
+    test('limite do Photon: capped', () async {
+      final env = _Env(granted: true);
+      env.places.nearbyCapped = true;
+      final vm = env.vm();
+      await vm.start();
+      expect(vm.capped, isTrue);
+    });
+
+    test('HTTP 429 nas duas fontes: loadError com rateLimited', () async {
+      final env = _Env(granted: true);
+      env.places.nearbyError = const PhotonRateLimitedException();
+      final vm = env.vm();
+      await vm.start();
+      expect(vm.phase, NearbyPhase.loadError);
+      expect(vm.rateLimited, isTrue);
+      env.places.nearbyError = Exception('rede');
+      await vm.retry();
+      expect(vm.rateLimited, isFalse);
     });
 
     test('resposta antiga é descartada (troca de raio no meio)', () async {
@@ -286,6 +333,74 @@ void main() {
         );
         expect(i.distanceMeters, lessThanOrEqualTo(300));
       }
+    });
+  });
+
+  group('F15: visitas no sinal de amigos', () {
+    test(
+      'quem só registrou visita conta como "foi aqui" e na sugestão',
+      () async {
+        final env = _Env(granted: true);
+        env.users.followingByUser['me'] = {'ana'};
+        env.visits.stored.addAll([
+          visit(authorId: 'ana', authorName: 'Ana', placeId: 'p160'),
+          // Quem não sigo não conta.
+          visit(authorId: 'bia', authorName: 'Bia', placeId: 'p80'),
+        ]);
+        final vm = env.vm();
+        await vm.start();
+        final s = vm.suggestion!;
+        expect(s.item.place.id, 'p160');
+        expect(s.reason, SuggestionReason.friend);
+        expect(s.item.friendsLabel, 'Ana foi aqui');
+        expect(s.item.recurrence, isNull);
+        expect(env.visits.fetchCalls.single, ['ana']);
+      },
+    );
+
+    test('recorrência: avaliação + visita da mesma pessoa = "🔁 Ana voltou 2 '
+        'vezes", sem repetir o nome', () async {
+      final env = _Env(granted: true);
+      env.users.followingByUser['me'] = {'ana', 'bia'};
+      env.reviews.stored.add(
+        review(
+          authorId: 'ana',
+          authorName: 'Ana',
+          placeId: 'p120',
+          createdAt: DateTime.utc(2026, 9, 1),
+        ),
+      );
+      env.visits.stored.addAll([
+        visit(
+          authorId: 'ana',
+          authorName: 'Ana',
+          placeId: 'p120',
+          createdAt: DateTime.utc(2026, 9, 5),
+        ),
+        visit(
+          authorId: 'bia',
+          authorName: 'Bia',
+          placeId: 'p120',
+          createdAt: DateTime.utc(2026, 9, 3),
+        ),
+      ]);
+      final vm = env.vm();
+      await vm.start();
+      final item = vm.items.firstWhere((i) => i.place.id == 'p120');
+      expect(item.friends, ['Ana', 'Bia']);
+      expect(item.recurrence, 'Ana voltou 2 vezes');
+    });
+
+    test('falha só das visitas: sinal com as avaliações', () async {
+      final env = _Env(granted: true);
+      env.users.followingByUser['me'] = {'ana'};
+      env.reviews.stored.add(
+        review(authorId: 'ana', authorName: 'Ana', placeId: 'p160'),
+      );
+      env.visits.fetchError = StateError('offline');
+      final vm = env.vm();
+      await vm.start();
+      expect(vm.suggestion!.item.friendsLabel, 'Ana foi aqui');
     });
   });
 

@@ -1,14 +1,17 @@
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/services/photo_picker.dart';
 import '../../domain/models/companion.dart';
+import '../../domain/price_band.dart';
 import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart';
 import '../../domain/photo_compression.dart';
+import '../../domain/review_lock.dart';
 import '../core/messages.dart';
 import '../core/safe_change_notifier.dart';
 
@@ -17,7 +20,8 @@ Future<Uint8List> compressPhotoInBackground(Uint8List bytes) =>
     compute(compressPhoto, bytes);
 
 /// Avaliação em 3 eixos (F01), cada um opcional com mínimo de 1 (F14), com
-/// contexto (F02), comentário e foto opcionais (G1).
+/// contexto (F02), comentário e foto opcionais (G1). Respeita o período
+/// mínimo entre avaliações do mesmo local (F03): ver [checkLock].
 class ReviewViewModel extends SafeChangeNotifier {
   ReviewViewModel({
     required this.place,
@@ -26,8 +30,12 @@ class ReviewViewModel extends SafeChangeNotifier {
     required ReviewRepository reviewRepository,
     required PhotoPicker photoPicker,
     required Future<Uint8List> Function(Uint8List original) compress,
+    PlaceRepository? placeRepository,
     TargetPlatform? platform,
+    DateTime Function()? clock,
   }) : _auth = authRepository,
+       _clock = clock ?? DateTime.now,
+       _places = placeRepository,
        _users = userRepository,
        _reviews = reviewRepository,
        _picker = photoPicker,
@@ -40,7 +48,9 @@ class ReviewViewModel extends SafeChangeNotifier {
   final ReviewRepository _reviews;
   final PhotoPicker _picker;
   final Future<Uint8List> Function(Uint8List original) _compress;
+  final PlaceRepository? _places;
   final TargetPlatform _platform;
+  final DateTime Function() _clock;
 
   static const String saveError = saveFailureMessage;
 
@@ -71,6 +81,49 @@ class ReviewViewModel extends SafeChangeNotifier {
     };
   }
 
+  bool _isCheckingLock = false;
+
+  /// Consultando a trava do F03 (o formulário ainda não aparece).
+  bool get isCheckingLock => _isCheckingLock;
+
+  DateTime? _blockedSince;
+
+  /// Hora da última avaliação, quando ainda dentro do período mínimo (F03);
+  /// `null` = pode avaliar.
+  DateTime? get blockedSince => _blockedSince;
+
+  /// Avaliou o local há menos de [reviewCooldown]: sem formulário.
+  bool get isBlocked => _blockedSince != null;
+
+  /// "Você avaliou este lugar em 12/10. Pode avaliar de novo a partir de
+  /// 11/11 às 20h."
+  String? get blockedMessage {
+    final since = _blockedSince;
+    return since == null ? null : reviewBlockedMessage(since);
+  }
+
+  /// Consulta a trava do F03 antes de mostrar o formulário (com
+  /// [showProgress], o formulário fica oculto enquanto consulta). Erro ou
+  /// mais de [reviewLockTimeout]: segue sem trava, e as Rules negam o envio
+  /// se ainda estiver travado.
+  Future<void> checkLock({bool showProgress = true}) async {
+    final uid = _auth.currentUserId;
+    if (uid == null || _isCheckingLock) return;
+    _isCheckingLock = showProgress;
+    if (showProgress) notifyListeners();
+    try {
+      final lastAt = await _reviews
+          .reviewLockOf(uid, place.id)
+          .timeout(reviewLockTimeout);
+      _blockedSince = isReviewBlocked(lastAt, _clock()) ? lastAt : null;
+    } on Object catch (e) {
+      debugPrint('Trava de avaliação indisponível: $e');
+    } finally {
+      _isCheckingLock = false;
+      notifyListeners();
+    }
+  }
+
   int? _food;
   int? _ambience;
   int? _service;
@@ -81,6 +134,11 @@ class ReviewViewModel extends SafeChangeNotifier {
   int? get ambience => _ambience;
   int? get service => _service;
   Companion? get companion => _companion;
+
+  PriceBand? _priceBand;
+
+  /// Gasto por pessoa (F27); opcional, nunca bloqueia o envio.
+  PriceBand? get priceBand => _priceBand;
 
   /// Texto como digitado (é aparado só no envio).
   String get comment => _comment;
@@ -121,6 +179,8 @@ class ReviewViewModel extends SafeChangeNotifier {
       Scores.isValidCombination(_food, _ambience, _service);
 
   bool get canSubmit =>
+      !_isCheckingLock &&
+      !isBlocked &&
       !_isSubmitting &&
       !_isPicking &&
       !_isProcessingPhoto &&
@@ -141,6 +201,14 @@ class ReviewViewModel extends SafeChangeNotifier {
       _set(() => _companion = _companion == value ? null : value);
 
   void setComment(String value) => _set(() => _comment = value);
+
+  /// Faixa escolhida (F27); `null` limpa. Ignorada durante o envio. Não
+  /// mexe na mensagem de erro (o preço não resolve erro nenhum).
+  void setPriceBand(PriceBand? value) {
+    if (_isSubmitting || value == _priceBand) return;
+    _priceBand = value;
+    notifyListeners();
+  }
 
   /// Abre a câmera ou a galeria. Cancelar não muda nada (nem a foto atual).
   /// A foto escolhida é sempre recodificada; se não der, avisa e segue com a
@@ -251,7 +319,9 @@ class ReviewViewModel extends SafeChangeNotifier {
     try {
       final profile = await _users.getProfile(uid);
       if (profile == null) throw StateError('perfil ausente');
-      await _reviews.createReview(
+      // Local só descoberto (Photon, G2): nasce no mesmo batch da avaliação.
+      final newPlace = place.discovered ? place : null;
+      final result = await _reviews.createReview(
         NewReview(
           authorId: uid,
           authorName: profile.displayName,
@@ -260,13 +330,27 @@ class ReviewViewModel extends SafeChangeNotifier {
           scores: Scores(food: _food, ambience: _ambience, service: _service),
           companion: _companion,
           comment: _comment, // NewReview normaliza: trim, vazio → null
+          priceBand: _priceBand,
         ),
         photo: _photo,
+        newPlace: newPlace,
       );
+      if (newPlace != null) {
+        if (result.placeCreated) {
+          _places?.markPersisted(newPlace);
+        } else {
+          // Outra pessoa criou o local (dados dela, talvez outro nome): a
+          // próxima leitura busca o doc gravado.
+          _places?.invalidate(newPlace.id);
+        }
+      }
       return true;
     } on Object {
-      // Inclui permission-denied das Rules.
-      _errorMessage = saveError;
+      // Inclui permission-denied das Rules. Uma causa comum é a trava do F03
+      // ter nascido depois de abrir o formulário (outro aparelho, corrida):
+      // confere de novo e, se travou, mostra a tela de bloqueio com as datas.
+      await checkLock(showProgress: false);
+      if (!isBlocked) _errorMessage = saveError;
       return false;
     } finally {
       _isSubmitting = false;

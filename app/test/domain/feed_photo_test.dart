@@ -7,7 +7,7 @@ DateTime t(int hour) => DateTime.utc(2026, 9, 1, hour);
 
 void main() {
   test('A (com foto, há 1 h) e B (sem foto, agora): capa é a foto de A', () {
-    final item = groupReviewsIntoFeed([
+    final item = groupActivitiesIntoFeed([
       review(
         id: 'ra',
         authorId: 'a',
@@ -21,7 +21,7 @@ void main() {
   });
 
   test('várias com foto: a mais recente vence; photoReviews em ordem', () {
-    final item = groupReviewsIntoFeed([
+    final item = groupActivitiesIntoFeed([
       review(id: 'r1', placeId: 'x', createdAt: t(8), hasPhoto: true),
       review(id: 'r2', placeId: 'x', createdAt: t(9)),
       review(id: 'r3', placeId: 'x', createdAt: t(10), hasPhoto: true),
@@ -31,7 +31,7 @@ void main() {
   });
 
   test('ninguém com foto: sem capa de amigo', () {
-    final item = groupReviewsIntoFeed([review(placeId: 'x')]).single;
+    final item = groupActivitiesIntoFeed([review(placeId: 'x')]).single;
     expect(item.latestPhoto, isNull);
     expect(item.photoReviews, isEmpty);
   });

@@ -2,21 +2,28 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:naarea/data/activity_batch.dart';
+import 'package:naarea/data/chunk.dart';
 import 'package:naarea/data/repositories/auth_repository.dart';
 import 'package:naarea/data/repositories/lists_repository.dart';
+import 'package:naarea/data/repositories/open_report_repository.dart';
 import 'package:naarea/data/repositories/place_repository.dart';
 import 'package:naarea/data/repositories/review_photo_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
 import 'package:naarea/data/repositories/saved_repository.dart';
 import 'package:naarea/data/repositories/user_repository.dart';
+import 'package:naarea/data/repositories/visit_repository.dart';
 import 'package:naarea/data/services/location_service.dart';
 import 'package:naarea/data/services/photo_picker.dart';
 import 'package:naarea/domain/geo.dart';
 import 'package:naarea/domain/models/place.dart';
+import 'package:naarea/domain/open_status.dart';
+import 'package:naarea/domain/models/place_activity.dart';
 import 'package:naarea/domain/models/place_list.dart';
-import 'package:naarea/domain/models/review.dart';
 import 'package:naarea/domain/models/user_profile.dart';
+import 'package:naarea/domain/review_lock.dart';
 import 'package:naarea/domain/search_tokens.dart';
+import 'package:naarea/domain/visit_lock.dart';
 
 class FakeAuthRepository extends AuthRepository {
   FakeAuthRepository({String? uid, this.users, bool initialized = true})
@@ -150,15 +157,56 @@ class FakePlaceRepository implements PlaceRepository {
   final List<Set<String>> getCalls = [];
   final List<bool> refreshMissingCalls = [];
 
+  /// Viés de posição de cada [search] (mesma posição de [searchCalls]).
+  final List<LatLng?> searchNear = [];
+
   /// Permite controlar quando/como cada busca responde (ex.: Completer).
   Future<List<Place>> Function(String query)? searchOverride;
+
+  /// Descobertos (Photon) por id: [discoveredPlace] e [ensurePersisted].
+  final Map<String, Place> discovered = {};
+
+  /// Ids passados a [ensurePersisted] (com o uid).
+  final List<String> persistCalls = [];
+  final List<String> markedPersisted = [];
+  Object? persistError;
+
+  /// Segura cada [ensurePersisted] até ser liberado.
+  Completer<void>? persistGate;
+
+  @override
+  Future<void> ensurePersisted(Place place, {required String uid}) async {
+    persistCalls.add('$uid:${place.id}');
+    final gate = persistGate;
+    if (gate != null) await gate.future;
+    if (persistError != null) throw persistError!;
+    discovered.remove(place.id);
+  }
+
+  @override
+  Place? discoveredPlace(String placeId) => discovered[placeId];
+
+  final List<String> invalidated = [];
+
+  @override
+  void invalidate(String placeId) {
+    invalidated.add(placeId);
+    discovered.remove(placeId);
+  }
+
+  @override
+  void markPersisted(Place place) {
+    markedPersisted.add(place.id);
+    discovered.remove(place.id);
+  }
 
   /// Segura cada `getPlaces` até ser liberado.
   Completer<void>? getGate;
 
   @override
-  Future<List<Place>> search(String query) async {
+  Future<List<Place>> search(String query, {LatLng? near}) async {
     searchCalls.add(query);
+    searchNear.add(near);
     if (searchOverride != null) return searchOverride!(query);
     if (fail) throw Exception('network');
     final terms = normalizeQuery(query);
@@ -201,8 +249,16 @@ class FakePlaceRepository implements PlaceRepository {
   /// Segura cada `nearby` até ser liberado.
   Completer<void>? nearbyGate;
 
+  /// Próximos resultados de [nearby] marcados como parciais (Photon falhou)
+  /// ou no limite.
+  bool nearbyPartial = false;
+  bool nearbyCapped = false;
+
+  /// Erro de [nearby] (no lugar do `Exception('network')` de [fail]).
+  Object? nearbyError;
+
   @override
-  Future<List<NearbyPlace>> nearby(
+  Future<NearbyResult> nearby(
     double lat,
     double lng,
     double radiusMeters,
@@ -210,18 +266,23 @@ class FakePlaceRepository implements PlaceRepository {
     nearbyCalls.add((lat: lat, lng: lng, radius: radiusMeters));
     final gate = nearbyGate;
     if (gate != null) await gate.future;
+    if (nearbyError != null) throw nearbyError!;
     if (fail) throw Exception('network');
     final center = (lat: lat, lng: lng);
-    return [
-      for (final p in places)
-        if (p.hasCoordinates)
-          (
-            place: p,
-            distanceMeters: distanceMeters(center, (lat: p.lat!, lng: p.lng!)),
-          ),
-    ].where((n) => n.distanceMeters <= radiusMeters).toList()..sort(
-      compareNearby,
-    );
+    final list =
+        [
+            for (final p in places)
+              if (p.hasCoordinates)
+                (
+                  place: p,
+                  distanceMeters: distanceMeters(center, (
+                    lat: p.lat!,
+                    lng: p.lng!,
+                  )),
+                ),
+          ].where((n) => n.distanceMeters <= radiusMeters).toList()
+          ..sort(compareNearby);
+    return NearbyResult(list, partial: nearbyPartial, capped: nearbyCapped);
   }
 }
 
@@ -266,6 +327,19 @@ class FakeLocationService implements LocationService {
     return (status: LocationStatus.ok, position: position);
   }
 
+  int lastKnownCalls = 0;
+
+  /// Última posição conhecida (padrão: [position]).
+  LatLng? lastKnown;
+  bool useLastKnown = false;
+
+  @override
+  Future<LatLng?> lastKnownPositionIfGranted() async {
+    lastKnownCalls++;
+    if (!granted) return null;
+    return useLastKnown ? lastKnown : position;
+  }
+
   @override
   Future<bool> openAppSettings() async {
     openAppSettingsCalls++;
@@ -294,11 +368,59 @@ class FakeReviewRepository implements ReviewRepository {
   DateTime Function() clock = () =>
       DateTime.utc(2026, 9, 10, 23); // 20h em Natal
 
+  /// Local novo enviado com cada avaliação de [created] (mesma posição).
+  final List<Place?> createdNewPlaces = [];
+
+  /// O que [createReview] informa sobre o local novo (`null` = criou se
+  /// veio um [newPlace]).
+  bool? placeCreated;
+
+  /// Travas do F03 (`users/{uid}/reviewLocks/{placeId}`): `lastAt` por
+  /// `'{uid}/{placeId}'`. [createReview] grava e respeita como as Rules.
+  final Map<String, DateTime> locks = {};
+
+  /// Erro de [reviewLockOf] (ex.: sem conexão).
+  Object? lockError;
+
+  /// Se definido, [reviewLockOf] devolve este futuro (ex.: um que nunca
+  /// completa, para o timeout).
+  Future<DateTime?>? pendingLock;
+
+  /// Chamadas de [reviewLockOf] (`'{uid}/{placeId}'`).
+  final List<String> lockCalls = [];
+
+  void lock(String uid, String placeId, DateTime lastAt) =>
+      locks['$uid/$placeId'] = lastAt;
+
   @override
-  Future<void> createReview(NewReview review, {Uint8List? photo}) async {
+  Future<DateTime?> reviewLockOf(String uid, String placeId) async {
+    lockCalls.add('$uid/$placeId');
+    if (pendingLock != null) return pendingLock!;
+    if (lockError != null) throw lockError!;
+    return locks['$uid/$placeId'];
+  }
+
+  /// Se definido, [createReview] espera por ele antes de responder.
+  Completer<void>? createGate;
+
+  @override
+  Future<CreateReviewResult> createReview(
+    NewReview review, {
+    Uint8List? photo,
+    Place? newPlace,
+  }) async {
+    if (createGate != null) await createGate!.future;
     if (createError != null) throw createError!;
+    final lockId = '${review.authorId}/${review.placeId}';
+    final now = clock();
+    if (isReviewBlocked(locks[lockId], now)) {
+      // Como as Rules: permission-denied dentro do período mínimo.
+      throw StateError('permission-denied: trava do F03');
+    }
+    locks[lockId] = now;
     created.add(review);
     createdPhotos.add(photo);
+    createdNewPlaces.add(newPlace);
     final id = 'r${stored.length + 1}';
     if (photo != null) photos[id] = photo;
     stored.add(
@@ -313,8 +435,10 @@ class FakeReviewRepository implements ReviewRepository {
         comment: review.comment,
         createdAt: clock(),
         hasPhoto: photo != null,
+        priceBand: review.priceBand,
       ),
     );
+    return (placeCreated: placeCreated ?? newPlace != null);
   }
 
   final List<String> placeFetchCalls = [];
@@ -335,18 +459,18 @@ class FakeReviewRepository implements ReviewRepository {
   }
 
   @override
-  Future<List<Review>> fetchReviewsByAuthors(
+  Future<ActivityBatch<Review>> fetchReviewsByAuthors(
     List<String> authorIds, {
     int? limit,
   }) async {
     fetchCalls.add(authorIds);
     fetchLimits.add(limit);
     if (fetchError != null) throw fetchError!;
-    final ids = authorIds.toSet();
-    final found = stored.where((r) => ids.contains(r.authorId)).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return limit == null ? found : found.take(limit).toList();
+    return fakeAuthorBatches(stored, authorIds, perBatchLimit, limit);
   }
+
+  /// Limite por lote de 30 autores, como o `perBatchLimit` do Firestore.
+  int perBatchLimit = 100;
 
   /// `limit` de cada chamada de [fetchReviewsByAuthors] (mesma posição).
   final List<int?> fetchLimits = [];
@@ -634,5 +758,236 @@ class FakePhotoPicker implements PhotoPicker {
     final l = lost;
     lost = null;
     return l;
+  }
+}
+
+/// Visitas ("Voltei aqui", F15) em memória, com a trava de 12 h aplicada
+/// como as Rules.
+class FakeVisitRepository implements VisitRepository {
+  final List<Visit> stored = [];
+  final List<NewVisit> created = [];
+  final List<Place?> createdNewPlaces = [];
+  Object? createError;
+  Object? fetchError;
+  Object? lockError;
+
+  /// Se definido, [createVisit] espera por ele antes de responder.
+  Completer<void>? createGate;
+
+  /// Se definido, [visitLockOf] devolve este futuro.
+  Future<DateTime?>? pendingLock;
+
+  DateTime Function() clock = () => DateTime.utc(2026, 9, 10, 23);
+
+  /// `lastAt` por `'{uid}/{placeId}'`.
+  final Map<String, DateTime> locks = {};
+  final List<String> lockCalls = [];
+  final List<List<String>> fetchCalls = [];
+  final List<String> placeFetchCalls = [];
+
+  /// O que [createVisit] informa sobre o local novo (`null` = criou se veio
+  /// um newPlace).
+  bool? placeCreated;
+
+  void lock(String uid, String placeId, DateTime lastAt) =>
+      locks['$uid/$placeId'] = lastAt;
+
+  @override
+  Future<DateTime?> visitLockOf(String uid, String placeId) async {
+    lockCalls.add('$uid/$placeId');
+    if (pendingLock != null) return pendingLock!;
+    if (lockError != null) throw lockError!;
+    return locks['$uid/$placeId'];
+  }
+
+  @override
+  Future<CreateVisitResult> createVisit(
+    NewVisit visit, {
+    Place? newPlace,
+  }) async {
+    if (createGate != null) await createGate!.future;
+    if (createError != null) throw createError!;
+    final lockId = '${visit.authorId}/${visit.placeId}';
+    final now = clock();
+    if (isVisitBlocked(locks[lockId], now)) {
+      throw StateError('permission-denied: trava do F15');
+    }
+    locks[lockId] = now;
+    created.add(visit);
+    createdNewPlaces.add(newPlace);
+    stored.add(
+      Visit(
+        id: 'v${stored.length + 1}',
+        authorId: visit.authorId,
+        authorName: visit.authorName,
+        placeId: visit.placeId,
+        placeName: visit.placeName,
+        companion: visit.companion,
+        createdAt: now,
+        priceBand: visit.priceBand,
+      ),
+    );
+    return (placeCreated: placeCreated ?? newPlace != null);
+  }
+
+  @override
+  Future<ActivityBatch<Visit>> fetchVisitsByAuthors(
+    List<String> authorIds, {
+    int? limit,
+  }) async {
+    fetchCalls.add(authorIds);
+    if (fetchError != null) throw fetchError!;
+    return fakeAuthorBatches(stored, authorIds, perBatchLimit, limit);
+  }
+
+  /// Limite por lote de 30 autores, como o `perBatchLimit` do Firestore.
+  int perBatchLimit = 100;
+
+  @override
+  Future<List<Visit>> fetchVisitsForPlace(
+    String placeId,
+    List<String> authorIds,
+  ) async {
+    placeFetchCalls.add(placeId);
+    if (fetchError != null) throw fetchError!;
+    final ids = authorIds.toSet();
+    return stored
+        .where((v) => v.placeId == placeId && ids.contains(v.authorId))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+}
+
+/// Simula a consulta por autores do Firestore: lotes de [whereInLimit]
+/// autores, cada um com as suas [perBatchLimit] (ou [limit]) idas mais
+/// recentes, juntados com o mesmo corte do app ([mergeAuthorBatches]).
+ActivityBatch<T> fakeAuthorBatches<T extends PlaceActivity>(
+  List<T> stored,
+  List<String> authorIds,
+  int perBatchLimit,
+  int? limit,
+) {
+  final batchLimit = limit == null || limit > perBatchLimit
+      ? perBatchLimit
+      : limit;
+  return mergeAuthorBatches(
+    [
+      for (final batch in chunked(authorIds.toSet().toList(), whereInLimit))
+        () {
+          final ids = batch.toSet();
+          final items =
+              (stored.where((a) => ids.contains(a.authorId)).toList()
+                    ..sort((a, b) => b.createdAt.compareTo(a.createdAt)))
+                  .take(batchLimit)
+                  .toList();
+          return (
+            items: items,
+            createdAts: [for (final a in items) a.createdAt],
+            docCount: items.length,
+          );
+        }(),
+    ],
+    batchLimit: batchLimit,
+    limit: limit,
+  );
+}
+
+/// Relatos "Está aberto agora?" (F20) em memória, com a trava de 30 min
+/// aplicada como as Rules.
+class FakeOpenReportRepository implements OpenReportRepository {
+  final List<OpenReport> stored = [];
+  final List<NewOpenReport> created = [];
+  final List<Place?> createdNewPlaces = [];
+  Object? createError;
+  Object? fetchError;
+  Object? lockError;
+
+  /// Se definido, [createReport] espera por ele antes de responder.
+  Completer<void>? createGate;
+
+  DateTime Function() clock = () => DateTime.utc(2026, 9, 10, 23);
+
+  /// `lastAt` por `'{uid}/{placeId}'`.
+  final Map<String, DateTime> locks = {};
+  final List<String> placeFetchCalls = [];
+  final List<List<String>> placesFetchCalls = [];
+
+  void lock(String uid, String placeId, DateTime lastAt) =>
+      locks['$uid/$placeId'] = lastAt;
+
+  /// Relato já gravado (de qualquer pessoa).
+  void add(
+    String placeId, {
+    required bool open,
+    required DateTime at,
+    String authorId = 'ana',
+    String authorName = 'Ana',
+  }) => stored.add(
+    OpenReport(
+      id: 'o${stored.length + 1}',
+      authorId: authorId,
+      authorName: authorName,
+      placeId: placeId,
+      open: open,
+      createdAt: at,
+    ),
+  );
+
+  @override
+  Future<DateTime?> openReportLockOf(String uid, String placeId) async {
+    if (lockError != null) throw lockError!;
+    return locks['$uid/$placeId'];
+  }
+
+  @override
+  Future<CreateOpenReportResult> createReport(
+    NewOpenReport report, {
+    Place? newPlace,
+  }) async {
+    if (createGate != null) await createGate!.future;
+    if (createError != null) throw createError!;
+    final lockId = '${report.authorId}/${report.placeId}';
+    final now = clock();
+    if (isOpenReportBlocked(locks[lockId], now)) {
+      throw StateError('permission-denied: trava do F20');
+    }
+    locks[lockId] = now;
+    created.add(report);
+    createdNewPlaces.add(newPlace);
+    add(
+      report.placeId,
+      open: report.open,
+      at: now,
+      authorId: report.authorId,
+      authorName: report.authorName,
+    );
+    return (placeCreated: newPlace != null);
+  }
+
+  @override
+  Future<List<OpenReport>> fetchForPlace(
+    String placeId, {
+    required DateTime since,
+  }) async {
+    placeFetchCalls.add(placeId);
+    if (fetchError != null) throw fetchError!;
+    return stored
+        .where((r) => r.placeId == placeId && !r.createdAt.isBefore(since))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  @override
+  Future<List<OpenReport>> fetchForPlaces(
+    List<String> placeIds, {
+    required DateTime since,
+  }) async {
+    placesFetchCalls.add(placeIds);
+    if (fetchError != null) throw fetchError!;
+    final ids = placeIds.toSet();
+    return stored
+        .where((r) => ids.contains(r.placeId) && !r.createdAt.isBefore(since))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 }

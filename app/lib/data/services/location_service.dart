@@ -22,6 +22,9 @@ enum LocationStatus {
   unavailable,
 }
 
+/// Quanto o viés da busca espera pela última posição conhecida.
+const lastKnownTimeout = Duration(milliseconds: 800);
+
 /// [position] só existe com [LocationStatus.ok].
 typedef LocationResult = ({LocationStatus status, LatLng? position});
 
@@ -34,6 +37,12 @@ abstract class LocationService {
   /// Pede a permissão se preciso (pedido do sistema) e devolve a posição
   /// atual, ou o motivo de não ter conseguido.
   Future<LocationResult> locate();
+
+  /// Última posição conhecida do aparelho, SÓ se a permissão já foi
+  /// concedida (nunca mostra pedido do sistema nem liga o GPS): viés da busca
+  /// do seletor (G2). `null` quando não há (sem permissão, sem posição
+  /// recente, web, erro ou mais de [lastKnownTimeout]).
+  Future<LatLng?> lastKnownPositionIfGranted();
 
   /// Abre as configurações do app (permissão negada para sempre).
   Future<bool> openAppSettings();
@@ -99,6 +108,22 @@ class GeolocatorLocationService implements LocationService {
     } on Object {
       return (status: LocationStatus.unavailable, position: null);
     }
+  }
+
+  @override
+  Future<LatLng?> lastKnownPositionIfGranted() async {
+    try {
+      return await _lastKnown().timeout(lastKnownTimeout);
+    } on Object {
+      return null;
+    }
+  }
+
+  Future<LatLng?> _lastKnown() async {
+    if (!await hasPermission()) return null;
+    // Sem esperar por GPS: a busca não pode travar pelo viés.
+    final p = await Geolocator.getLastKnownPosition();
+    return p == null ? null : (lat: p.latitude, lng: p.longitude);
   }
 
   @override

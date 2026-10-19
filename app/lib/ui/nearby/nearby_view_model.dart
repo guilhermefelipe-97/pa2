@@ -1,13 +1,22 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
+import '../../data/photon/photon_client.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/open_report_repository.dart';
 import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
+import '../../data/repositories/visit_repository.dart';
 import '../../data/services/location_service.dart';
+import '../../domain/feed.dart';
 import '../../domain/geo.dart';
 import '../../domain/models/place.dart';
+import '../../domain/open_status.dart';
+import '../../domain/price_summary.dart';
 import '../core/follow_events.dart';
+import '../core/load_visits.dart';
 import '../core/safe_change_notifier.dart';
 import '../feed/widgets/trust_sources.dart' show displayAuthorName;
 import '../saved/saved_places_store.dart';
@@ -58,20 +67,37 @@ enum NearbyPhase {
   loadError,
 }
 
+/// Sinal de amigos de um local no "Perto": quem foi, a recorrência e o
+/// preço relatado (F27).
+typedef FriendSignal = ({
+  List<String> names,
+  String? recurrence,
+  PriceSummary? price,
+});
+
 /// Item da lista: local, distância e quem o usuário segue que foi lá.
 class NearbyItem {
   const NearbyItem({
     required this.place,
     required this.distanceMeters,
     this.friends = const [],
+    this.recurrence,
+    this.price,
   });
 
   final Place place;
   final double distanceMeters;
 
-  /// Nomes de quem o usuário segue que avaliou o local (mais recente
-  /// primeiro, sem repetição).
+  /// Nomes de quem o usuário segue que foi ao local — avaliou ou registrou
+  /// visita (F15) —, mais recente primeiro, sem repetição.
   final List<String> friends;
+
+  /// "Ana voltou 3 vezes" quando um amigo foi 2 vezes ou mais (F15; a
+  /// tela acrescenta o ícone 🔁).
+  final String? recurrence;
+
+  /// Preço relatado pelos amigos (F27); `null` = ninguém informou.
+  final PriceSummary? price;
 
   /// "Ana foi aqui", "Ana e Bia foram aqui", "Ana e mais 2 foram aqui".
   String? get friendsLabel => friendsWentLabel(friends);
@@ -119,8 +145,9 @@ NearbySuggestion? pickSuggestion(
 /// Aba "Perto" (F10): o que está a 300 m / 1 km / 3 km de onde a pessoa
 /// está agora, com uma sugestão em 1 toque.
 ///
-/// A posição fica só em memória ([position]); ao servidor vão apenas os
-/// prefixos de geohash da consulta.
+/// A posição fica só em memória ([position]): ao Firestore vão apenas os
+/// prefixos de geohash e ao Photon (G2), só o centro da célula de geohash 7
+/// da posição (~150 m), nunca a posição exata. Nada é gravado.
 class NearbyViewModel extends SafeChangeNotifier {
   NearbyViewModel({
     required LocationService locationService,
@@ -130,11 +157,17 @@ class NearbyViewModel extends SafeChangeNotifier {
     required ReviewRepository reviewRepository,
     FollowEvents? followEvents,
     SavedPlacesStore? savedStore,
+    required VisitRepository visitRepository,
+    OpenReportRepository? openReportRepository,
+    DateTime Function()? clock,
   }) : _location = locationService,
+       _openReports = openReportRepository,
+       _clock = clock ?? DateTime.now,
        _places = placeRepository,
        _auth = authRepository,
        _users = userRepository,
        _reviews = reviewRepository,
+       _visits = visitRepository,
        _follow = followEvents == null ? null : FollowStaleness(followEvents),
        _saved = savedStore {
     _saved?.addListener(notifyListeners);
@@ -145,8 +178,13 @@ class NearbyViewModel extends SafeChangeNotifier {
   final AuthRepository _auth;
   final UserRepository _users;
   final ReviewRepository _reviews;
+  final VisitRepository _visits;
+  final OpenReportRepository? _openReports;
   final FollowStaleness? _follow;
   final SavedPlacesStore? _saved;
+
+  /// Hora atual (janela de 12 meses do preço, F27).
+  final DateTime Function() _clock;
 
   /// Lado da célula de geohash de precisão 7 é ~153 m: a consulta em cache
   /// parte do centro da célula com esta folga (meia diagonal, arredondada
@@ -166,7 +204,51 @@ class NearbyViewModel extends SafeChangeNotifier {
   LatLng? get position => _position;
 
   List<NearbyItem> _items = const [];
+
+  /// Todos os locais no raio, por distância (sem o filtro "Aberto agora").
   List<NearbyItem> get items => _items;
+
+  /// O que a lista mostra: [items], ou só os confirmados abertos com o
+  /// filtro "Aberto agora (confirmado)" ligado.
+  List<NearbyItem> get visibleItems => _openOnly
+      ? [
+          for (final i in _items)
+            if (_openStatuses[i.place.id]?.isOpen ?? false) i,
+        ]
+      : _items;
+
+  /// Hora atual (rótulos "há 20 min" do status de aberto).
+  DateTime now() => _clock();
+
+  /// Usuário logado (o próprio relato aparece como "você").
+  String? get currentUserId => _auth.currentUserId;
+
+  /// Status "Está aberto agora?" (F20) por local da lista.
+  Map<String, OpenStatus> _openStatuses = const {};
+
+  OpenStatus? openStatusOf(String placeId) => _openStatuses[placeId];
+
+  /// O filtro "Aberto agora (confirmado)" existe (há repositório de
+  /// relatos).
+  bool get hasOpenFilter => _openReports != null;
+
+  bool _openOnly = false;
+
+  /// Filtro "Aberto agora (confirmado)": só status Aberto (não divergente).
+  bool get openOnly => _openOnly;
+
+  bool _openReadFailed = false;
+
+  /// A leitura dos relatos falhou: sem status nos itens e o chip
+  /// desabilitado com aviso.
+  bool get openReadFailed => _openReadFailed;
+
+  void setOpenOnly(bool value) {
+    if (value && _openReadFailed) return;
+    if (value == _openOnly) return;
+    _openOnly = value;
+    notifyListeners();
+  }
 
   /// A posição está fora da área que o catálogo cobre.
   bool get outOfArea {
@@ -175,16 +257,32 @@ class NearbyViewModel extends SafeChangeNotifier {
   }
 
   NearbySuggestion? get suggestion =>
-      pickSuggestion(_items, _saved?.isSaved ?? (_) => false);
+      pickSuggestion(visibleItems, _saved?.isSaved ?? (_) => false);
 
   bool isSaved(String placeId) => _saved?.isSaved(placeId) ?? false;
 
   /// Resultados por (geohash 7 da posição, raio), durante a sessão.
-  final Map<String, List<NearbyPlace>> _cache = {};
+  final Map<String, NearbyResult> _cache = {};
 
-  /// placeId → nomes de quem o usuário segue que foi lá. `null`: ainda não
-  /// carregado (ou falhou: tenta de novo na próxima carga).
-  Map<String, List<String>>? _friends;
+  bool _partial = false;
+
+  /// A descoberta ao vivo falhou: a lista tem só os lugares já conhecidos
+  /// (aviso discreto + "Tentar de novo").
+  bool get partial => _partial;
+
+  bool _capped = false;
+
+  /// A descoberta devolveu o máximo: "Mostrando os 50 mais próximos".
+  bool get capped => _capped;
+
+  bool _rateLimited = false;
+
+  /// A falha foi o Photon pedindo para esperar (HTTP 429).
+  bool get rateLimited => _rateLimited;
+
+  /// placeId → quem o usuário segue que foi lá (e a recorrência). `null`:
+  /// ainda não carregado (ou falhou: tenta de novo na próxima carga).
+  Map<String, FriendSignal>? _friends;
   String? _friendsUid;
 
   /// Muda a cada carga: respostas antigas são descartadas.
@@ -286,40 +384,90 @@ class NearbyViewModel extends SafeChangeNotifier {
 
   Future<void> _load(LatLng position, int gen) async {
     final radius = _radius;
+    _rateLimited = false;
     _phase = NearbyPhase.loading;
     notifyListeners();
     _follow?.clear();
+    // Fora do Brasil não há o que buscar (G2): nem vai à rede.
+    if (!inServiceArea(position)) {
+      _items = const [];
+      _partial = false;
+      _capped = false;
+      _phase = NearbyPhase.ready;
+      notifyListeners();
+      return;
+    }
     try {
       final results = await Future.wait([
         _nearby(position, radius),
         _loadFriends(),
       ]);
       if (gen != _generation) return;
-      final found = results[0] as List<NearbyPlace>;
-      final friends = results[1] as Map<String, List<String>>;
+      final result = results[0] as NearbyResult;
+      final friends = results[1] as Map<String, FriendSignal>;
+      _partial = result.partial;
+      _capped = result.capped;
       _items = [
-        for (final n in found)
+        for (final n in result.places)
           NearbyItem(
             place: n.place,
             distanceMeters: n.distanceMeters,
-            friends: friends[n.place.id] ?? const [],
+            friends: friends[n.place.id]?.names ?? const [],
+            recurrence: friends[n.place.id]?.recurrence,
+            price: friends[n.place.id]?.price,
           ),
       ];
       _phase = NearbyPhase.ready;
-    } on Object {
+      // A lista aparece já; o status de aberto chega depois.
+      notifyListeners();
+      await _loadOpenStatuses(gen);
+      return;
+    } on Object catch (e) {
       if (gen != _generation) return;
       _items = const [];
+      _partial = false;
+      _capped = false;
+      _rateLimited = e is PhotonRateLimitedException;
       _phase = NearbyPhase.loadError;
+    }
+    notifyListeners();
+  }
+
+  /// Status "Está aberto agora?" (F20) só dos itens da lista: `placeId in`
+  /// em lotes de 30, relatos das últimas 3 h. Falha não derruba a lista:
+  /// sem status, filtro desligado e chip desabilitado com aviso.
+  Future<void> _loadOpenStatuses(int gen) async {
+    final repo = _openReports;
+    if (repo == null) return;
+    final ids = [for (final i in _items) i.place.id];
+    if (ids.isEmpty || _auth.currentUserId == null) {
+      _openStatuses = const {};
+      _openReadFailed = false;
+      notifyListeners();
+      return;
+    }
+    try {
+      final now = _clock();
+      final reports = await repo.fetchForPlaces(
+        ids,
+        since: openReportsSince(now),
+      );
+      if (gen != _generation) return;
+      _openStatuses = openStatusesByPlace(reports, now);
+      _openReadFailed = false;
+    } on Object catch (e) {
+      if (gen != _generation) return;
+      debugPrint('Relatos de aberto indisponíveis (Perto): $e');
+      _openStatuses = const {};
+      _openReadFailed = true;
+      _openOnly = false;
     }
     notifyListeners();
   }
 
   /// Locais a até [radius] de [position], do cache quando a posição cai na
   /// mesma célula de geohash 7 já consultada com esse raio.
-  Future<List<NearbyPlace>> _nearby(
-    LatLng position,
-    NearbyRadius radius,
-  ) async {
+  Future<NearbyResult> _nearby(LatLng position, NearbyRadius radius) async {
     final cell = geohashEncode(
       position.lat,
       position.lng,
@@ -334,44 +482,70 @@ class NearbyViewModel extends SafeChangeNotifier {
         center.lng,
         radius.meters + cacheCellSlackMeters,
       );
-      _cache[key] = candidates;
+      // Parcial (Photon falhou) não fica no cache: "Tentar de novo" busca
+      // tudo outra vez.
+      if (!candidates.partial) _cache[key] = candidates;
     }
     // Filtro final pela distância real a partir da posição exata.
     final out = <NearbyPlace>[];
-    for (final c in candidates) {
+    for (final c in candidates.places) {
       final p = c.place;
       if (!p.hasCoordinates) continue;
       final d = distanceMeters(position, (lat: p.lat!, lng: p.lng!));
       if (d <= radius.meters) out.add((place: p, distanceMeters: d));
     }
-    return out..sort(compareNearby);
+    return NearbyResult(
+      out..sort(compareNearby),
+      partial: candidates.partial,
+      capped: candidates.capped,
+    );
   }
 
-  /// Sinal "foi aqui": avaliações de quem o usuário segue (mesma fonte do
-  /// feed). Falha não derruba a lista: fica sem o sinal e tenta de novo na
-  /// próxima carga.
-  Future<Map<String, List<String>>> _loadFriends() async {
+  /// Sinal "foi aqui": avaliações e visitas (F15) de quem o usuário segue
+  /// (mesma fonte e mesmo corte comum do feed). Falha não derruba a lista:
+  /// fica sem o sinal e tenta de novo na próxima carga; falha só das visitas
+  /// mostra o sinal só com as avaliações, sem guardá-lo (a próxima carga
+  /// tenta as visitas de novo).
+  Future<Map<String, FriendSignal>> _loadFriends() async {
     final uid = _auth.currentUserId;
     if (uid == null) return const {};
     final cached = _friends;
     if (cached != null && _friendsUid == uid) return cached;
     try {
       final following = {...await _users.getFollowing(uid)}..remove(uid);
-      final byPlace = <String, List<String>>{};
+      final byPlace = <String, FriendSignal>{};
+      var visitsOk = true;
       if (following.isNotEmpty) {
-        final reviews = await _reviews.fetchReviewsByAuthors(
-          following.toList(),
+        final read = await loadFriendActivities(
+          reviews: _reviews,
+          visits: _visits,
+          authors: following.toList(),
+          where: 'Perto',
         );
-        final seen = <String, Set<String>>{};
-        // Mais recentes primeiro (contrato do repositório).
-        for (final r in reviews) {
-          if (!following.contains(r.authorId)) continue;
-          if (!(seen[r.placeId] ??= {}).add(r.authorId)) continue;
-          (byPlace[r.placeId] ??= []).add(displayAuthorName(r.authorName));
+        visitsOk = read.visitsOk;
+        final items = groupActivitiesIntoFeed(
+          read.activities.where((a) => following.contains(a.authorId)),
+        );
+        for (final item in items) {
+          final recurrent = item.recurrent;
+          byPlace[item.placeId] = (
+            names: [
+              for (final s in item.sources) displayAuthorName(s.authorName),
+            ],
+            recurrence: recurrent == null
+                ? null
+                : recurrenceLabel(
+                    displayAuthorName(recurrent.authorName),
+                    recurrent.trips,
+                  ),
+            price: item.priceAt(_clock()),
+          );
         }
       }
-      _friends = byPlace;
-      _friendsUid = uid;
+      if (visitsOk) {
+        _friends = byPlace;
+        _friendsUid = uid;
+      }
       return byPlace;
     } on Object {
       return const {};

@@ -6,25 +6,32 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import 'data/catalog/catalog_place_repository.dart';
 import 'data/firebase/firebase_auth_repository.dart';
 import 'data/firebase/firestore_lists_repository.dart';
+import 'data/firebase/firestore_open_report_repository.dart';
 import 'data/firebase/firestore_place_repository.dart';
 import 'data/firebase/firestore_review_photo_repository.dart';
 import 'data/firebase/firestore_review_repository.dart';
 import 'data/firebase/firestore_saved_repository.dart';
 import 'data/firebase/firestore_user_repository.dart';
+import 'data/firebase/firestore_visit_repository.dart';
+import 'data/photon/photon_client.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/lists_repository.dart';
+import 'data/repositories/open_report_repository.dart';
 import 'data/repositories/place_repository.dart';
 import 'data/repositories/review_photo_repository.dart';
 import 'data/repositories/review_repository.dart';
 import 'data/repositories/saved_repository.dart';
 import 'data/repositories/user_repository.dart';
+import 'data/repositories/visit_repository.dart';
 import 'data/services/location_service.dart';
 import 'data/services/photo_picker.dart';
 import 'firebase_config.dart';
 import 'firebase_options.dart';
 import 'routing/router.dart';
+import 'ui/core/app_clock.dart';
 import 'ui/core/follow_events.dart';
 import 'ui/core/theme.dart';
 import 'ui/lists/lists_store.dart';
@@ -38,6 +45,13 @@ const bool useEmulator = bool.fromEnvironment('USE_EMULATOR');
 /// localhost no resto). Num celular físico, passe o IP do PC na rede local:
 /// `--dart-define=EMULATOR_HOST=192.168.0.10`.
 const String emulatorHost = String.fromEnvironment('EMULATOR_HOST');
+
+/// Endpoint do Photon (descoberta de lugares, G2). Padrão: a instância
+/// pública; outra via `--dart-define=PHOTON_URL=https://...`.
+const String photonUrl = String.fromEnvironment(
+  'PHOTON_URL',
+  defaultValue: PhotonClient.defaultBaseUrl,
+);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,11 +90,30 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
+        Provider<AppClock>.value(value: const AppClock()),
         ChangeNotifierProvider<AuthRepository>.value(value: authRepository),
         Provider<UserRepository>.value(value: userRepository),
-        Provider<PlaceRepository>(create: (_) => FirestorePlaceRepository(db)),
+        // Cliente HTTP do Photon: fechado quando o app sai da árvore.
+        Provider<PhotonClient>(
+          create: (_) => PhotonClient(baseUrl: photonUrl),
+          dispose: (_, client) => client.close(),
+        ),
+        // Catálogo do Brasil (G2): Photon para descobrir + `places` para o
+        // que alguém já avaliou/salvou (Natal vem do seed).
+        Provider<PlaceRepository>(
+          create: (context) => CatalogPlaceRepository(
+            persisted: FirestorePlaceRepository(db),
+            photon: context.read<PhotonClient>(),
+          ),
+        ),
         Provider<ReviewRepository>(
           create: (_) => FirestoreReviewRepository(db),
+        ),
+        // "Voltei aqui" (F15): visitas sem nota, contam como recorrência.
+        Provider<VisitRepository>(create: (_) => FirestoreVisitRepository(db)),
+        // "Está aberto agora?" (F20): relatos de quem está no local.
+        Provider<OpenReportRepository>(
+          create: (_) => FirestoreOpenReportRepository(db),
         ),
         // Fotos de quem avaliou (G1): cache em memória, limpo na troca de usuário.
         Provider<ReviewPhotoRepository>(
@@ -102,10 +135,16 @@ Future<void> main() async {
         // "Quero ir": ids salvos carregados uma vez por sessão (segue o login).
         ChangeNotifierProvider<SavedPlacesStore>(
           lazy: false,
-          create: (context) => SavedPlacesStore(
-            authRepository: authRepository,
-            savedRepository: context.read(),
-          ),
+          create: (context) {
+            final places = context.read<PlaceRepository>();
+            return SavedPlacesStore(
+              authRepository: authRepository,
+              savedRepository: context.read(),
+              // Local descoberto pelo Photon nasce em `places` antes do salvo.
+              persistPlace: (uid, placeId) =>
+                  ensurePlaceForSave(places, uid: uid, placeId: placeId),
+            );
+          },
         ),
         Provider<ListsRepository>(create: (_) => FirestoreListsRepository(db)),
         // Listas nomeadas (F12): coerentes com o "Quero ir" (assume a remoção

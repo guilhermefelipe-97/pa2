@@ -54,6 +54,7 @@ void main() {
     userRepository: users,
     reviewRepository: reviews,
     followEvents: events,
+    visitRepository: FakeVisitRepository(),
     clock: () => _now,
   );
 
@@ -107,7 +108,10 @@ void main() {
       final vm = vmFor('x');
       await vm.load();
       expect(vm.title, 'Usuário');
-      expect(vm.emptyText, 'Usuário ainda não avaliou nenhum lugar');
+      expect(
+        vm.emptyText,
+        'Usuário ainda não avaliou nem registrou visita em nenhum lugar',
+      );
     });
 
     test('erro de rede: estado de erro; tentar de novo recupera', () async {
@@ -126,7 +130,10 @@ void main() {
       final vm = vmFor('caio');
       await vm.load();
       expect(vm.reviews, isEmpty);
-      expect(vm.emptyText, 'Caio ainda não avaliou nenhum lugar');
+      expect(
+        vm.emptyText,
+        'Caio ainda não avaliou nem registrou visita em nenhum lugar',
+      );
       expect(vm.isFollowing, isFalse);
     });
 
@@ -282,13 +289,19 @@ void main() {
       expect(find.text('Não foi possível atualizar'), findsOneWidget);
     });
 
-    testWidgets('sem avaliações: "Ana ainda não avaliou nenhum lugar"', (
-      tester,
-    ) async {
-      reviews.stored.clear();
-      await pump(tester, 'ana');
-      expect(find.text('Ana ainda não avaliou nenhum lugar'), findsOneWidget);
-    });
+    testWidgets(
+      'sem idas: "Ana ainda não avaliou nem registrou visita em nenhum lugar"',
+      (tester) async {
+        reviews.stored.clear();
+        await pump(tester, 'ana');
+        expect(
+          find.text(
+            'Ana ainda não avaliou nem registrou visita em nenhum lugar',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
 
     testWidgets('perfil próprio: título "Você" e sem botão Seguir', (
       tester,

@@ -135,9 +135,31 @@ void main() {
     });
   });
 
-  test('área atendida: Natal sim, 50 km fora não', () {
-    expect(inServiceArea((lat: -5.8817, lng: -35.1708)), isTrue);
-    // ~50 km ao sul (São José de Mipibu).
-    expect(inServiceArea((lat: -6.2400, lng: -35.2110)), isFalse);
+  test('área atendida (G2): o Brasil inteiro; Lisboa e Montevidéu não', () {
+    expect(inServiceArea((lat: -5.8817, lng: -35.1708)), isTrue); // Natal
+    expect(inServiceArea((lat: -23.5503, lng: -46.6339)), isTrue); // SP, Sé
+    expect(inServiceArea((lat: -3.8549, lng: -32.4243)), isTrue); // Noronha
+    expect(inServiceArea((lat: -33.6866, lng: -53.4567)), isTrue); // Chuí
+    expect(inServiceArea((lat: 38.7223, lng: -9.1393)), isFalse); // Lisboa
+    expect(inServiceArea((lat: -34.9011, lng: -56.1645)), isFalse);
+    expect(inBrazilBounds(brazilCenter), isTrue);
+  });
+
+  test('brazilBounds = inBrazilBounds() das Rules (paridade)', () {
+    final rules = File('../firebase/firestore.rules').readAsStringSync();
+    final fn = RegExp(
+      r'function inBrazilBounds\(lat, lng\) \{([\s\S]*?)\}',
+    ).firstMatch(rules);
+    expect(fn, isNotNull, reason: 'inBrazilBounds() não está nas Rules');
+    double bound(String v, String op) {
+      final m = RegExp('$v $op (-?[0-9.]+)').firstMatch(fn!.group(1)!);
+      expect(m, isNotNull, reason: '$v $op ausente');
+      return double.parse(m!.group(1)!);
+    }
+
+    expect(bound('lat', '>='), brazilBounds.south);
+    expect(bound('lat', '<='), brazilBounds.north);
+    expect(bound('lng', '>='), brazilBounds.west);
+    expect(bound('lng', '<='), brazilBounds.east);
   });
 }

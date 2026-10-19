@@ -1,0 +1,1493 @@
+{
+  "_comment": "Casos compartilhados: firebase/tests/osm.test.js (category.js) e app/test/domain/osm_category_test.dart (osm_category.dart) devem dar o mesmo resultado.",
+  "amenities": [
+    "restaurant",
+    "fast_food",
+    "pub",
+    "bar",
+    "cafe",
+    "ice_cream",
+    "food_court",
+    "biergarten"
+  ],
+  "categories": [
+    "Restaurante",
+    "Lanchonete",
+    "Pub",
+    "Bar",
+    "Café",
+    "Sorveteria",
+    "Praça de alimentação",
+    "Cervejaria",
+    "Pizzaria",
+    "Hamburgueria",
+    "Japonês",
+    "Churrascaria",
+    "Frutos do mar",
+    "Padaria",
+    "Tapiocaria",
+    "Açaí",
+    "Comida regional",
+    "Comida brasileira",
+    "Italiano",
+    "Chinês",
+    "Árabe",
+    "Mexicano",
+    "Vegetariano",
+    "Vegano",
+    "Mercado",
+    "Feira"
+  ],
+  "category": [
+    {
+      "amenity": "restaurant",
+      "cuisine": null,
+      "expected": "Restaurante"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "",
+      "expected": "Restaurante"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "pizza",
+      "expected": "Pizzaria"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "pizza;italian",
+      "expected": "Pizzaria"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "xyz;seafood",
+      "expected": "Frutos do mar"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "burger",
+      "expected": "Hamburgueria"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "regional",
+      "expected": "Comida regional"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "desconhecida",
+      "expected": "Restaurante"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "sushi;japanese",
+      "expected": "Japonês"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "steak_house",
+      "expected": "Churrascaria"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "barbecue",
+      "expected": "Churrascaria"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "fish",
+      "expected": "Frutos do mar"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "ice_cream",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "coffee_shop",
+      "expected": "Café"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "bakery",
+      "expected": "Padaria"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "tapioca",
+      "expected": "Tapiocaria"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "acai",
+      "expected": "Açaí"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "açaí",
+      "expected": "Açaí"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "brazilian",
+      "expected": "Comida brasileira"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "chinese",
+      "expected": "Chinês"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "arab",
+      "expected": "Árabe"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "mexican",
+      "expected": "Mexicano"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "vegetarian",
+      "expected": "Vegetariano"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "vegan",
+      "expected": "Vegano"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": " Pizza ; ITALIAN ",
+      "expected": "Pizzaria"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": ";;",
+      "expected": "Restaurante"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "local",
+      "expected": "Restaurante"
+    },
+    {
+      "amenity": "restaurant",
+      "cuisine": "churrascaria",
+      "expected": "Churrascaria"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": null,
+      "expected": "Lanchonete"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "",
+      "expected": "Lanchonete"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "pizza",
+      "expected": "Pizzaria"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "pizza;italian",
+      "expected": "Pizzaria"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "xyz;seafood",
+      "expected": "Frutos do mar"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "burger",
+      "expected": "Hamburgueria"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "regional",
+      "expected": "Comida regional"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "desconhecida",
+      "expected": "Lanchonete"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "sushi;japanese",
+      "expected": "Japonês"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "steak_house",
+      "expected": "Churrascaria"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "barbecue",
+      "expected": "Churrascaria"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "fish",
+      "expected": "Frutos do mar"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "ice_cream",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "coffee_shop",
+      "expected": "Café"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "bakery",
+      "expected": "Padaria"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "tapioca",
+      "expected": "Tapiocaria"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "acai",
+      "expected": "Açaí"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "açaí",
+      "expected": "Açaí"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "brazilian",
+      "expected": "Comida brasileira"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "chinese",
+      "expected": "Chinês"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "arab",
+      "expected": "Árabe"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "mexican",
+      "expected": "Mexicano"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "vegetarian",
+      "expected": "Vegetariano"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "vegan",
+      "expected": "Vegano"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": " Pizza ; ITALIAN ",
+      "expected": "Pizzaria"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": ";;",
+      "expected": "Lanchonete"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "local",
+      "expected": "Lanchonete"
+    },
+    {
+      "amenity": "fast_food",
+      "cuisine": "churrascaria",
+      "expected": "Churrascaria"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": null,
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "pizza",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "pizza;italian",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "xyz;seafood",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "burger",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "regional",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "desconhecida",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "sushi;japanese",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "steak_house",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "barbecue",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "fish",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "ice_cream",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "coffee_shop",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "bakery",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "tapioca",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "acai",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "açaí",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "brazilian",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "chinese",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "arab",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "mexican",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "vegetarian",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "vegan",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": " Pizza ; ITALIAN ",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": ";;",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "local",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "pub",
+      "cuisine": "churrascaria",
+      "expected": "Pub"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": null,
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "pizza",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "pizza;italian",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "xyz;seafood",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "burger",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "regional",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "desconhecida",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "sushi;japanese",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "steak_house",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "barbecue",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "fish",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "ice_cream",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "coffee_shop",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "bakery",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "tapioca",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "acai",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "açaí",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "brazilian",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "chinese",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "arab",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "mexican",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "vegetarian",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "vegan",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": " Pizza ; ITALIAN ",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": ";;",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "local",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "bar",
+      "cuisine": "churrascaria",
+      "expected": "Bar"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": null,
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "pizza",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "pizza;italian",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "xyz;seafood",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "burger",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "regional",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "desconhecida",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "sushi;japanese",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "steak_house",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "barbecue",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "fish",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "ice_cream",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "coffee_shop",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "bakery",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "tapioca",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "acai",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "açaí",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "brazilian",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "chinese",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "arab",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "mexican",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "vegetarian",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "vegan",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": " Pizza ; ITALIAN ",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": ";;",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "local",
+      "expected": "Café"
+    },
+    {
+      "amenity": "cafe",
+      "cuisine": "churrascaria",
+      "expected": "Café"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": null,
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "pizza",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "pizza;italian",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "xyz;seafood",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "burger",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "regional",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "desconhecida",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "sushi;japanese",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "steak_house",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "barbecue",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "fish",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "ice_cream",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "coffee_shop",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "bakery",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "tapioca",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "acai",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "açaí",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "brazilian",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "chinese",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "arab",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "mexican",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "vegetarian",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "vegan",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": " Pizza ; ITALIAN ",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": ";;",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "local",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "ice_cream",
+      "cuisine": "churrascaria",
+      "expected": "Sorveteria"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": null,
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "pizza",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "pizza;italian",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "xyz;seafood",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "burger",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "regional",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "desconhecida",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "sushi;japanese",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "steak_house",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "barbecue",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "fish",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "ice_cream",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "coffee_shop",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "bakery",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "tapioca",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "acai",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "açaí",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "brazilian",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "chinese",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "arab",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "mexican",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "vegetarian",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "vegan",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": " Pizza ; ITALIAN ",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": ";;",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "local",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "food_court",
+      "cuisine": "churrascaria",
+      "expected": "Praça de alimentação"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": null,
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "pizza",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "pizza;italian",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "xyz;seafood",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "burger",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "regional",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "desconhecida",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "sushi;japanese",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "steak_house",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "barbecue",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "fish",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "ice_cream",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "coffee_shop",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "bakery",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "tapioca",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "acai",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "açaí",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "brazilian",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "chinese",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "arab",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "mexican",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "vegetarian",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "vegan",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": " Pizza ; ITALIAN ",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": ";;",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "local",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "biergarten",
+      "cuisine": "churrascaria",
+      "expected": "Cervejaria"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": null,
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "pizza",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "pizza;italian",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "xyz;seafood",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "burger",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "regional",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "desconhecida",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "sushi;japanese",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "steak_house",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "barbecue",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "fish",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "ice_cream",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "coffee_shop",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "bakery",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "tapioca",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "acai",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "açaí",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "brazilian",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "chinese",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "arab",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "mexican",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "vegetarian",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "vegan",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": " Pizza ; ITALIAN ",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": ";;",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "local",
+      "expected": "Local"
+    },
+    {
+      "amenity": "nightclub",
+      "cuisine": "churrascaria",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": null,
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "pizza",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "pizza;italian",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "xyz;seafood",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "burger",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "regional",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "desconhecida",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "sushi;japanese",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "steak_house",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "barbecue",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "fish",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "ice_cream",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "coffee_shop",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "bakery",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "tapioca",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "acai",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "açaí",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "brazilian",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "chinese",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "arab",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "mexican",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "vegetarian",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "vegan",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": " Pizza ; ITALIAN ",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": ";;",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "local",
+      "expected": "Local"
+    },
+    {
+      "amenity": "",
+      "cuisine": "churrascaria",
+      "expected": "Local"
+    }
+  ],
+  "cuisine": [
+    {
+      "input": null,
+      "expected": ""
+    },
+    {
+      "input": "",
+      "expected": ""
+    },
+    {
+      "input": "pizza;italian",
+      "expected": "Pizza, Italiana"
+    },
+    {
+      "input": "japanese;chinese",
+      "expected": "Japonesa, Chinesa"
+    },
+    {
+      "input": " seafood ; fish_and_chips ",
+      "expected": "Frutos do mar, Fish and chips"
+    },
+    {
+      "input": "lebanese;arab",
+      "expected": "Árabe"
+    },
+    {
+      "input": "açaí",
+      "expected": "Açaí"
+    },
+    {
+      "input": "coffee_shop;cafe;coffee",
+      "expected": "Café"
+    },
+    {
+      "input": "hot_dog",
+      "expected": "Cachorro-quente"
+    },
+    {
+      "input": "brazilian;regional;local",
+      "expected": "Brasileira, Comida regional"
+    },
+    {
+      "input": "XYZ",
+      "expected": "Xyz"
+    },
+    {
+      "input": "steak_house;barbecue",
+      "expected": "Churrasco"
+    }
+  ]
+}

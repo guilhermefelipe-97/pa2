@@ -231,7 +231,7 @@ void main() {
         reviews: data.reviews,
         places: [_mangai],
       );
-      final item = groupReviewsIntoFeed(
+      final item = groupActivitiesIntoFeed(
         data.reviews.stored,
         places: {'mangai': _mangai},
       ).single;

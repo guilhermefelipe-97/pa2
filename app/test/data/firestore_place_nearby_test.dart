@@ -66,7 +66,7 @@ void main() {
     });
 
     test('só o que está no raio, ordenado por distância real', () async {
-      final found = await repo.nearby(_here.lat, _here.lng, 300);
+      final found = (await repo.nearby(_here.lat, _here.lng, 300)).places;
       expect(found.map((n) => n.place.id), ['a80', 'b250', 'c299']);
       expect(found[0].distanceMeters, closeTo(80, 0.01));
       expect(found[1].distanceMeters, closeTo(250, 0.01));
@@ -74,21 +74,38 @@ void main() {
     });
 
     test('raio maior inclui o que estava fora', () async {
-      final found = await repo.nearby(_here.lat, _here.lng, 1000);
+      final found = (await repo.nearby(_here.lat, _here.lng, 1000)).places;
       expect(found.map((n) => n.place.id), ['a80', 'b250', 'c299', 'fora301']);
     });
 
     test('local sem coordenada nunca aparece', () async {
-      final found = await repo.nearby(_here.lat, _here.lng, 3000);
+      final found = (await repo.nearby(_here.lat, _here.lng, 3000)).places;
       final ids = found.map((n) => n.place.id);
       expect(ids, isNot(contains('curado-sem-coordenada')));
       expect(ids, isNot(contains('longe')));
     });
 
     test('nada por perto (fora de Natal): lista vazia', () async {
-      final found = await repo.nearby(-6.24, -35.211, 3000);
+      final found = (await repo.nearby(-6.24, -35.211, 3000)).places;
       expect(found, isEmpty);
     });
+
+    test(
+      'geohash forjado (do centro) com lat/lng longe: fora do raio real',
+      () async {
+        final far = _at(5000);
+        await db.doc('places/osm-n666').set({
+          'name': 'Forjado',
+          'category': 'Bar',
+          'lat': far.lat,
+          'lng': far.lng,
+          // Aponta para o centro da consulta, mas as coordenadas estão a 5 km.
+          'geohash': geohashEncode(_here.lat, _here.lng),
+        });
+        final found = (await repo.nearby(_here.lat, _here.lng, 300)).places;
+        expect(found.map((n) => n.place.id), isNot(contains('osm-n666')));
+      },
+    );
 
     test('o que a consulta leu vai para o cache por id', () async {
       await repo.nearby(_here.lat, _here.lng, 300);

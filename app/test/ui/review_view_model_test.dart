@@ -177,6 +177,7 @@ void main() {
         reviewRepository: reviews,
         placeRepository: FakePlaceRepository([_place]),
         followEvents: FollowEvents(),
+        visitRepository: FakeVisitRepository(),
       );
       await feed.load();
       final r = feed.items.single.reviews.single;
@@ -199,6 +200,7 @@ void main() {
       reviewRepository: reviews,
       placeRepository: FakePlaceRepository([_place]),
       followEvents: FollowEvents(),
+      visitRepository: FakeVisitRepository(),
     );
     await feed.load();
     final r = feed.items.single.reviews.single;
@@ -261,6 +263,7 @@ void main() {
         reviewRepository: reviews,
         placeRepository: FakePlaceRepository([_place]),
         followEvents: FollowEvents(),
+        visitRepository: FakeVisitRepository(),
       );
       await feed.load();
       expect(feed.items.single.latestComment?.comment, 'Vale cada centavo');
@@ -558,11 +561,81 @@ void main() {
           reviewRepository: reviews,
           placeRepository: FakePlaceRepository([_place]),
           followEvents: FollowEvents(),
+          visitRepository: FakeVisitRepository(),
         );
         await feed.load();
         final cover = feed.items.single.latestPhoto!;
         expect(cover.authorName, 'Ana');
         expect(reviews.photos[cover.id], jpeg);
+      },
+    );
+  });
+
+  group('local descoberto pelo Photon (G2)', () {
+    const discovered = Place(
+      id: 'osm-n123',
+      name: 'Bar do Zé',
+      category: 'Bar',
+      neighborhood: 'Sé',
+      city: 'São Paulo',
+      lat: -23.5503,
+      lng: -46.6339,
+      source: PlaceSource.osm,
+      discovered: true,
+    );
+
+    ReviewViewModel make(Place p, FakePlaceRepository places) =>
+        ReviewViewModel(
+          place: p,
+          authRepository: FakeAuthRepository(uid: 'bianca'),
+          userRepository: users,
+          reviewRepository: reviews,
+          photoPicker: FakePhotoPicker(),
+          placeRepository: places,
+          compress: (b) async => b,
+        );
+
+    test(
+      'avaliar local novo manda o local junto (mesmo batch) e o marca gravado',
+      () async {
+        final places = FakePlaceRepository([]);
+        final vm = make(discovered, places)..setFood(5);
+        expect(await vm.submit(), isTrue);
+        expect(reviews.created.single.placeId, 'osm-n123');
+        expect(reviews.createdNewPlaces.single, same(discovered));
+        expect(places.markedPersisted, ['osm-n123']);
+      },
+    );
+
+    test(
+      'outra pessoa criou o local antes: não marca, invalida o cache',
+      () async {
+        final places = FakePlaceRepository([]);
+        reviews.placeCreated = false;
+        final vm = make(discovered, places)..setFood(5);
+        expect(await vm.submit(), isTrue);
+        expect(places.markedPersisted, isEmpty);
+        expect(places.invalidated, ['osm-n123']);
+      },
+    );
+
+    test('local já gravado: sem local novo', () async {
+      final places = FakePlaceRepository([]);
+      final vm = make(_place, places)..setFood(5);
+      expect(await vm.submit(), isTrue);
+      expect(reviews.createdNewPlaces.single, isNull);
+      expect(places.markedPersisted, isEmpty);
+    });
+
+    test(
+      'Rules negam (forja/falha): "Não foi possível salvar", nada marcado',
+      () async {
+        final places = FakePlaceRepository([]);
+        reviews.createError = Exception('permission-denied');
+        final vm = make(discovered, places)..setFood(5);
+        expect(await vm.submit(), isFalse);
+        expect(vm.errorMessage, ReviewViewModel.saveError);
+        expect(places.markedPersisted, isEmpty);
       },
     );
   });

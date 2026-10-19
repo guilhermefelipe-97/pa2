@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:naarea/data/repositories/auth_repository.dart';
 import 'package:naarea/data/repositories/place_repository.dart';
 import 'package:naarea/data/repositories/review_repository.dart';
+import 'package:naarea/data/repositories/visit_repository.dart';
 import 'package:naarea/data/services/photo_picker.dart';
 import 'package:naarea/data/repositories/user_repository.dart';
 import 'package:naarea/domain/feed.dart';
@@ -182,6 +183,7 @@ void main() {
               value: FakePlaceRepository(_catalog),
             ),
             Provider<ReviewRepository>.value(value: FakeReviewRepository()),
+            Provider<VisitRepository>.value(value: FakeVisitRepository()),
             Provider<PhotoPicker>.value(value: FakePhotoPicker()),
           ],
           child: MaterialApp.router(routerConfig: router),
@@ -217,6 +219,7 @@ void main() {
           Provider<UserRepository>.value(value: users),
           Provider<PlaceRepository>.value(value: FakePlaceRepository(_catalog)),
           Provider<ReviewRepository>.value(value: FakeReviewRepository()),
+          Provider<VisitRepository>.value(value: FakeVisitRepository()),
           Provider<PhotoPicker>.value(value: FakePhotoPicker()),
         ],
         child: MaterialApp.router(routerConfig: router),
@@ -265,8 +268,10 @@ void main() {
   );
 
   group('detalhe do local', () {
-    FeedItem itemFor(Place p) =>
-        groupReviewsIntoFeed([review(placeId: p.id)], places: {p.id: p}).single;
+    FeedItem itemFor(Place p) => groupActivitiesIntoFeed(
+      [review(placeId: p.id)],
+      places: {p.id: p},
+    ).single;
 
     testWidgets('mostra endereço, cozinha e crédito © OpenStreetMap', (
       tester,

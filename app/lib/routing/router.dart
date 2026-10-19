@@ -3,9 +3,14 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../data/repositories/auth_repository.dart';
+import '../data/repositories/open_report_repository.dart';
+import '../data/repositories/place_repository.dart';
+import '../data/repositories/visit_repository.dart';
+import '../data/services/location_service.dart';
 import '../domain/models/place.dart';
 import '../ui/auth/auth_view.dart';
 import '../ui/auth/auth_view_model.dart';
+import '../ui/core/app_clock.dart';
 import '../ui/core/app_shell.dart';
 import '../ui/core/follow_events.dart';
 import '../ui/core/view_model_host.dart';
@@ -14,6 +19,7 @@ import '../ui/feed/feed_view_model.dart';
 import '../ui/lists/lists_store.dart';
 import '../ui/nearby/nearby_view.dart';
 import '../ui/nearby/nearby_view_model.dart';
+import '../ui/open/open_now_view_model.dart';
 import '../ui/place/place_detail_view.dart';
 import '../ui/place/place_detail_view_model.dart';
 import '../ui/people/people_view.dart';
@@ -42,6 +48,22 @@ String? authRedirect({
   if (!isSignedIn) return atAuth ? null : Routes.login;
   if (atAuth || atSplash) return Routes.feed;
   return null;
+}
+
+/// "Está aberto agora?" (F20) do detalhe; `null` sem o repositório de
+/// relatos (ex.: testes que não o fornecem).
+OpenNowViewModel? _openNowFor(BuildContext context, String placeId) {
+  final reports = context.read<OpenReportRepository?>();
+  if (reports == null) return null;
+  return OpenNowViewModel(
+    placeId: placeId,
+    openReportRepository: reports,
+    authRepository: context.read(),
+    userRepository: context.read(),
+    locationService: context.read<LocationService?>(),
+    placeRepository: context.read<PlaceRepository?>(),
+    clock: context.read<AppClock?>()?.now,
+  );
 }
 
 GoRouter buildRouter(AuthRepository auth) {
@@ -94,6 +116,7 @@ GoRouter buildRouter(AuthRepository auth) {
                     reviewRepository: context.read(),
                     placeRepository: context.read(),
                     followEvents: context.read<FollowEvents>(),
+                    visitRepository: context.read<VisitRepository>(),
                   ),
                   builder: (context, vm) => FeedView(viewModel: vm),
                 ),
@@ -115,6 +138,9 @@ GoRouter buildRouter(AuthRepository auth) {
                     reviewRepository: context.read(),
                     followEvents: context.read<FollowEvents>(),
                     savedStore: context.read<SavedPlacesStore?>(),
+                    visitRepository: context.read<VisitRepository>(),
+                    openReportRepository: context.read<OpenReportRepository?>(),
+                    clock: context.read<AppClock?>()?.now,
                   ),
                   builder: (context, vm) => NearbyView(viewModel: vm),
                 ),
@@ -170,6 +196,9 @@ GoRouter buildRouter(AuthRepository auth) {
               placeRepository: context.read(),
               reviewRepository: context.read(),
               followEvents: context.read<FollowEvents>(),
+              visitRepository: context.read<VisitRepository>(),
+              openNow: _openNowFor(context, placeId),
+              clock: context.read<AppClock?>()?.now,
             ),
             builder: (context, vm) => PlaceDetailView(viewModel: vm),
           );
@@ -188,6 +217,7 @@ GoRouter buildRouter(AuthRepository auth) {
               userRepository: context.read(),
               reviewRepository: context.read(),
               followEvents: context.read<FollowEvents>(),
+              visitRepository: context.read<VisitRepository>(),
             ),
             builder: (context, vm) => ProfileView(viewModel: vm),
           );
@@ -196,8 +226,10 @@ GoRouter buildRouter(AuthRepository auth) {
       GoRoute(
         path: Routes.pickPlace,
         builder: (context, state) => ViewModelHost<PlacePickerViewModel>(
-          create: (context) =>
-              PlacePickerViewModel(placeRepository: context.read()),
+          create: (context) => PlacePickerViewModel(
+            placeRepository: context.read(),
+            locationService: context.read<LocationService?>(),
+          ),
           builder: (context, vm) => PlacePickerView(viewModel: vm),
         ),
         routes: [
@@ -213,7 +245,9 @@ GoRouter buildRouter(AuthRepository auth) {
                 userRepository: context.read(),
                 reviewRepository: context.read(),
                 photoPicker: context.read(),
+                placeRepository: context.read(),
                 compress: compressPhotoInBackground,
+                clock: context.read<AppClock?>()?.now,
               ),
               builder: (context, vm) => ReviewView(viewModel: vm),
             ),

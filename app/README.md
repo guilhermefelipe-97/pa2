@@ -173,6 +173,71 @@ normalização são as mesmas no script (`seed/osm/tokens.js`) e no app
 O `.gitignore` bloqueia os nomes usuais de chave, mas não conte com isso: a
 chave não deve ficar dentro do repositório.
 
+### 3.3 Fora de Natal: descoberta ao vivo pelo Photon (G2)
+
+Fora do seed, "Perto" e a busca do seletor consultam ao vivo o
+[Photon](https://photon.komoot.io) (dados do OpenStreetMap, sem chave):
+`/reverse` com raio para o "Perto" e `/api` com viés pela posição para a busca,
+sempre filtrando `amenity` de comer/beber e só o Brasil. Nada é gravado só por
+ter sido visto: na 1ª avaliação (no mesmo batch) ou no 1º salvamento o app cria
+`places/osm-{n|w|r}{id}` — mesmo id do seed, então não há duplicata — e as
+Rules só aceitam essa criação (nunca edição/remoção), sem campos de busca
+(`nameLower`/`searchTokens`: locais criados são achados pelo Photon). A
+categoria segue o mesmo
+mapeamento do seed (`lib/domain/osm_category.dart` ↔ `seed/osm/category.js`,
+fixture `firebase/tests/fixtures/osm-category.json`).
+
+Ordem da busca: até 10 locais gravados que casam com o texto (o que amigos já
+avaliaram/salvaram), depois os descobertos, sem repetir, até 20. Busca no
+Photon só com 3+ caracteres; cache em memória (LRU de 200 entradas, 30 min);
+HTTP 429 suspende as consultas por 60 s. Se o Photon falhar, o "Perto" mostra
+os lugares já gravados com um aviso; erro de tela inteira só se as duas fontes
+falharem.
+
+**Privacidade (LGPD).** A localização é dado pessoal: o app usa a posição só em
+memória, para a consulta, e nunca a grava (nem no Firestore, nem em log). Ao
+Photon (serviço de terceiros, komoot) vai apenas uma posição aproximada: no
+"Perto", o centro da célula de geohash 7 (~150 m) em que a pessoa está; na
+busca, a última posição conhecida arredondada a 3 casas decimais (~100 m), e
+só se a permissão de localização já tiver sido dada (o seletor nunca pede).
+A tela do "Perto" informa isso antes do pedido de permissão (finalidade e
+compartilhamento, art. 9º). Ao Firestore vão só prefixos de geohash. Uma
+instância própria do Photon (abaixo) elimina o envio a terceiros.
+
+Outra instância do Photon (ex.: uma própria):
+
+```bash
+flutter run --dart-define=PHOTON_URL=https://photon.exemplo.br
+```
+
+### 3.4 Período mínimo entre avaliações (F03)
+
+Um usuário só avalia de novo o mesmo local 30 dias depois da última avaliação.
+A garantia é das Rules: cada avaliação nasce no mesmo batch que cria ou renova
+`users/{uid}/reviewLocks/{placeId}` (`lastAt` do servidor + `reviewId`), e a
+renovação só passa depois de 30 dias. O app lê a trava (timeout de 5 s) para
+explicar o bloqueio em vez de abrir o formulário.
+
+Avaliações anteriores ao F03 não têm trava. O backfill cria as travas delas
+(`lastAt` = `createdAt` da avaliação mais recente de cada autor/local), usando
+as mesmas variáveis do seed:
+
+```bash
+cd ../firebase
+# Só mostra o que mudaria:
+GOOGLE_APPLICATION_CREDENTIALS=/caminho/fora/do/repo/sa.json GCLOUD_PROJECT=<id> npm run backfill:locks -- --dry-run
+# Grava (idempotente: rodar de novo não muda nada):
+GOOGLE_APPLICATION_CREDENTIALS=/caminho/fora/do/repo/sa.json GCLOUD_PROJECT=<id> npm run backfill:locks
+```
+
+**Ordem de deploy em produção:**
+
+1. **Juntos:** Rules (`firebase deploy --only firestore:rules --project prod`)
+   e o APK novo. A partir das Rules novas, um app antigo (que não grava a
+   trava) tem toda avaliação negada; distribua o APK novo na mesma janela.
+2. **Depois:** o backfill (comandos acima). Até ele rodar, quem avaliou antes
+   do F03 pode fazer uma (só uma) avaliação nova sem esperar os 30 dias.
+
 ## 4. Testes
 
 App (ViewModels com fakes escritos à mão; repositórios Firestore com

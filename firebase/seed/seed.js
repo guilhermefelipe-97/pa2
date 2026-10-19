@@ -113,7 +113,7 @@ async function seedPlaces({
   return { written: changed.map((d) => d.id), unchanged: docs.length - changed.length, stale };
 }
 
-module.exports = { seedPlaces };
+module.exports = { seedPlaces, firestoreFromEnv };
 
 if (require.main === module) {
   seedPlaces().catch((err) => {

@@ -20,7 +20,7 @@ Finder _pill(String text, {Finder? within}) => within == null
     ? find.text(text)
     : find.descendant(of: within, matching: find.text(text));
 
-FeedItem _fourPeople() => groupReviewsIntoFeed(
+FeedItem _fourPeople() => groupActivitiesIntoFeed(
   [
     review(
       authorId: 'c',
@@ -84,7 +84,7 @@ void main() {
     });
 
     test('rótulo de acessibilidade completo de uma fonte', () {
-      final item = groupReviewsIntoFeed([
+      final item = groupActivitiesIntoFeed([
         review(
           authorId: 'a',
           authorName: 'Ana',
@@ -116,7 +116,7 @@ void main() {
     testWidgets(
       '1 pessoa: linha dela com os eixos dela (AxisScores), sem "+N"',
       (tester) async {
-        final item = groupReviewsIntoFeed([
+        final item = groupActivitiesIntoFeed([
           review(
             authorId: 'a',
             authorName: 'Ana',
@@ -207,7 +207,7 @@ void main() {
     testWidgets('mesma pessoa 3 vezes: 1 linha, eixos da mais recente', (
       tester,
     ) async {
-      final item = groupReviewsIntoFeed([
+      final item = groupActivitiesIntoFeed([
         for (final (day, food) in [(1, 1), (10, 2), (27, 5)])
           review(
             authorId: 'a',
@@ -224,7 +224,7 @@ void main() {
     });
 
     testWidgets('sem seguir: sem selo "você segue"', (tester) async {
-      final item = groupReviewsIntoFeed([review(placeId: 'x')]).single;
+      final item = groupActivitiesIntoFeed([review(placeId: 'x')]).single;
       await tester.pumpWidget(
         _host(TrustSources(item: item, now: _now, isFollowing: (_) => false)),
       );
@@ -232,7 +232,7 @@ void main() {
     });
 
     testWidgets('autor sem nome aparece como "Alguém"', (tester) async {
-      final item = groupReviewsIntoFeed([
+      final item = groupActivitiesIntoFeed([
         review(authorId: 'a', authorName: '  ', placeId: 'x'),
       ]).single;
       await tester.pumpWidget(_host(TrustSources(item: item, now: _now)));
@@ -240,7 +240,7 @@ void main() {
     });
 
     testWidgets('toque na pessoa chama onOpenPerson com ela', (tester) async {
-      final item = groupReviewsIntoFeed([
+      final item = groupActivitiesIntoFeed([
         review(authorId: 'a', authorName: 'Ana', placeId: 'x'),
       ]).single;
       final opened = <String>[];
@@ -263,7 +263,7 @@ void main() {
       tester.view.physicalSize = const Size(320, 1200);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final item = groupReviewsIntoFeed(
+      final item = groupActivitiesIntoFeed(
         [
           review(
             authorId: 'a',
@@ -310,7 +310,7 @@ void main() {
       'leitor de tela: cada linha é um botão com a frase completa, dentro do card',
       (tester) async {
         final handle = tester.ensureSemantics();
-        final item = groupReviewsIntoFeed(
+        final item = groupActivitiesIntoFeed(
           [
             review(
               authorId: 'a',
@@ -352,7 +352,7 @@ void main() {
     tester,
   ) async {
     final handle = tester.ensureSemantics();
-    final item = groupReviewsIntoFeed(
+    final item = groupActivitiesIntoFeed(
       [
         review(
           authorId: 'ana',
@@ -378,7 +378,7 @@ void main() {
 
   testWidgets('AC F14: Bianca só com ambiente 5 aparece no card com "✨ 5" e '
       'nenhum outro eixo', (tester) async {
-    final item = groupReviewsIntoFeed(
+    final item = groupActivitiesIntoFeed(
       [
         review(
           authorId: 'bianca',
@@ -398,7 +398,7 @@ void main() {
 
   testWidgets('AC: Bianca segue Ana; o card mostra "Ana" + "você segue" e '
       '🍽️ 5 de Ana, sem número sem nome', (tester) async {
-    final item = groupReviewsIntoFeed(
+    final item = groupActivitiesIntoFeed(
       [
         review(
           authorId: 'ana',

@@ -7,13 +7,13 @@ import '../support/builders.dart';
 DateTime t(int day, [int hour = 12]) => DateTime.utc(2026, 9, day, hour);
 
 void main() {
-  group('groupReviewsIntoFeed', () {
+  group('groupActivitiesIntoFeed', () {
     test('lista vazia gera feed vazio', () {
-      expect(groupReviewsIntoFeed([]), isEmpty);
+      expect(groupActivitiesIntoFeed([]), isEmpty);
     });
 
     test('A e B avaliaram X: um único card com os dois', () {
-      final feed = groupReviewsIntoFeed([
+      final feed = groupActivitiesIntoFeed([
         review(authorId: 'a', authorName: 'Ana', placeId: 'x', createdAt: t(1)),
         review(
           authorId: 'b',
@@ -31,7 +31,7 @@ void main() {
     });
 
     test('cards ordenados pela avaliação mais recente de cada local', () {
-      final feed = groupReviewsIntoFeed([
+      final feed = groupActivitiesIntoFeed([
         review(placeId: 'x', createdAt: t(1)),
         review(placeId: 'y', createdAt: t(3)),
         review(placeId: 'x', createdAt: t(5)),
@@ -44,7 +44,7 @@ void main() {
     test(
       'reviews dentro do card ordenadas da mais recente para a mais antiga',
       () {
-        final feed = groupReviewsIntoFeed([
+        final feed = groupActivitiesIntoFeed([
           review(id: 'old', placeId: 'x', createdAt: t(1)),
           review(id: 'new', placeId: 'x', createdAt: t(9)),
           review(id: 'mid', placeId: 'x', createdAt: t(5)),
@@ -54,7 +54,7 @@ void main() {
     );
 
     test('mesmo autor duas vezes no local aparece uma vez no título', () {
-      final feed = groupReviewsIntoFeed([
+      final feed = groupActivitiesIntoFeed([
         review(authorId: 'a', authorName: 'Ana', placeId: 'x', createdAt: t(1)),
         review(authorId: 'a', authorName: 'Ana', placeId: 'x', createdAt: t(2)),
       ]);
@@ -63,7 +63,7 @@ void main() {
     });
 
     test('empate de data é determinístico (por placeId)', () {
-      final feed = groupReviewsIntoFeed([
+      final feed = groupActivitiesIntoFeed([
         review(placeId: 'b', createdAt: t(1)),
         review(placeId: 'a', createdAt: t(1)),
       ]);
@@ -82,7 +82,7 @@ void main() {
     });
   });
 
-  group('groupReviewsIntoFeed com locais', () {
+  group('groupActivitiesIntoFeed com locais', () {
     test('anexa o Place do card (foto, bairro, categoria)', () {
       final mangai = place(
         id: 'x',
@@ -90,7 +90,7 @@ void main() {
         neighborhood: 'Tirol',
         photoUrl: 'https://f/x.jpg',
       );
-      final feed = groupReviewsIntoFeed(
+      final feed = groupActivitiesIntoFeed(
         [review(placeId: 'x', placeName: 'Mangai', createdAt: t(1))],
         places: {'x': mangai},
       );
@@ -102,7 +102,7 @@ void main() {
     test(
       'local ausente da lista: Place mínimo com o nome da avaliação, sem foto',
       () {
-        final feed = groupReviewsIntoFeed([
+        final feed = groupActivitiesIntoFeed([
           review(placeId: 'x', placeName: 'Sumiu', createdAt: t(1)),
         ]);
         expect(feed.single.place.id, 'x');
@@ -115,7 +115,7 @@ void main() {
 
   group('FeedItem', () {
     test('latestComment: avaliação mais recente que tem comentário', () {
-      final feed = groupReviewsIntoFeed([
+      final feed = groupActivitiesIntoFeed([
         review(
           id: 'old',
           authorId: 'a',
@@ -147,14 +147,14 @@ void main() {
     });
 
     test('latestComment é null quando ninguém comentou', () {
-      final feed = groupReviewsIntoFeed([
+      final feed = groupActivitiesIntoFeed([
         review(placeId: 'x', createdAt: t(1)),
       ]);
       expect(feed.single.latestComment, isNull);
     });
 
     test('averages: média de cada eixo entre as avaliações do card', () {
-      final feed = groupReviewsIntoFeed([
+      final feed = groupActivitiesIntoFeed([
         review(
           placeId: 'x',
           createdAt: t(1),
@@ -166,25 +166,25 @@ void main() {
           scores: Scores(food: 4, ambience: 3, service: 5),
         ),
       ]);
-      expect(feed.single.averages.food.value, 4.5);
-      expect(feed.single.averages.ambience.value, 2.5);
-      expect(feed.single.averages.service.value, 4.5);
+      expect(feed.single.averages!.food.value, 4.5);
+      expect(feed.single.averages!.ambience.value, 2.5);
+      expect(feed.single.averages!.service.value, 4.5);
     });
   });
 
   group('FeedItem.sources (F06: quem foi)', () {
     test('1 pessoa, 1 avaliação: uma fonte com 1 visita', () {
       final r = review(authorId: 'a', authorName: 'Ana', placeId: 'x');
-      final sources = groupReviewsIntoFeed([r]).single.sources;
+      final sources = groupActivitiesIntoFeed([r]).single.sources;
       expect(sources, hasLength(1));
       expect(sources.single.authorId, 'a');
       expect(sources.single.authorName, 'Ana');
       expect(sources.single.latest, same(r));
-      expect(sources.single.visits, 1);
+      expect(sources.single.trips, 1);
     });
 
     test('várias pessoas: ordenadas pela avaliação mais recente de cada', () {
-      final feed = groupReviewsIntoFeed([
+      final feed = groupActivitiesIntoFeed([
         review(
           authorId: 'c',
           authorName: 'Caio',
@@ -209,7 +209,7 @@ void main() {
     });
 
     test('mesma pessoa voltou 3 vezes: 1 fonte, eixos da mais recente', () {
-      final feed = groupReviewsIntoFeed([
+      final feed = groupActivitiesIntoFeed([
         review(
           id: 'old',
           authorId: 'a',
@@ -231,18 +231,18 @@ void main() {
       expect(sources.map((s) => s.authorId), ['a', 'b']);
       expect(sources.first.latest.id, 'new');
       expect(
-        sources.first.latest.scores,
+        sources.first.latestReview!.scores,
         Scores(food: 5, ambience: 4, service: 5),
       );
-      expect(sources.first.visits, 3);
-      expect(sources.last.visits, 1);
+      expect(sources.first.trips, 3);
+      expect(sources.last.trips, 1);
     });
 
     test('não depende da ordem de entrada: escolhe pela data e ordena', () {
       // FeedItem montado direto, com reviews fora de ordem.
       final item = FeedItem(
         place: place(id: 'x'),
-        reviews: [
+        activities: [
           review(id: 'a-old', authorId: 'a', placeId: 'x', createdAt: t(2)),
           review(id: 'b-new', authorId: 'b', placeId: 'x', createdAt: t(9)),
           review(id: 'a-new', authorId: 'a', placeId: 'x', createdAt: t(5)),
@@ -251,7 +251,7 @@ void main() {
         ],
       );
       expect(item.sources.map((s) => s.latest.id), ['b-new', 'c', 'a-new']);
-      expect(item.sources.map((s) => s.visits), [2, 1, 2]);
+      expect(item.sources.map((s) => s.trips), [2, 1, 2]);
       expect(
         identical(item.sources, item.sources),
         isTrue,

@@ -3,7 +3,7 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:naarea/data/firebase/firestore_review_repository.dart';
 import 'package:naarea/data/firebase/firestore_saved_repository.dart';
-import 'package:naarea/data/repositories/review_repository.dart';
+import 'package:naarea/data/chunk.dart';
 
 void main() {
   group('FirestoreSavedRepository', () {
@@ -141,7 +141,7 @@ void main() {
         expect(list, hasLength(65));
         expect(list.first.authorId, 'u64');
         expect(list.last.authorId, 'u0');
-        expect(ReviewRepository.whereInLimit, 30);
+        expect(whereInLimit, 30);
       },
     );
 

@@ -4,6 +4,7 @@ import '../../../domain/feed.dart';
 import '../../../domain/relative_time.dart';
 import '../../core/save_button.dart';
 import 'place_photo.dart';
+import 'price_chip.dart';
 import 'trust_sources.dart';
 
 /// "Bairro · Categoria", pulando partes vazias.
@@ -14,8 +15,8 @@ String placeSubtitle(String neighborhood, String category) =>
 List<({String id, String name})> distinctAuthors(FeedItem item) {
   final seen = <String>{};
   return [
-    for (final r in item.reviews)
-      if (seen.add(r.authorId)) (id: r.authorId, name: r.authorName),
+    for (final a in item.activities)
+      if (seen.add(a.authorId)) (id: a.authorId, name: a.authorName),
   ];
 }
 
@@ -47,6 +48,7 @@ class FeedCard extends StatelessWidget {
     final place = item.place;
     final commented = item.latestComment;
     final subtitle = placeSubtitle(place.neighborhood, place.category);
+    final price = item.priceAt(now);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -98,6 +100,14 @@ class FeedCard extends StatelessWidget {
                                 ),
                               ),
                             ],
+                          ),
+                        ],
+                        // F27: quanto os amigos gastaram por pessoa.
+                        if (price != null) ...[
+                          const SizedBox(height: 8),
+                          PriceChip(
+                            key: const Key('feed-price'),
+                            summary: price,
                           ),
                         ],
                         const SizedBox(height: 10),

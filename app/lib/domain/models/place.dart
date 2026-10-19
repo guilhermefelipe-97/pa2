@@ -11,7 +11,8 @@ enum PlaceSource {
       value == 'osm' ? PlaceSource.osm : PlaceSource.curated;
 }
 
-/// Local avaliável (somente leitura para o cliente; populado via seed).
+/// Local avaliável. Populado via seed (Natal) ou criado pelo app na 1ª
+/// interação com um local descoberto pelo Photon (G2); nunca editado pelo app.
 class Place {
   const Place({
     required this.id,
@@ -32,6 +33,7 @@ class Place {
     this.osmId,
     this.source = PlaceSource.curated,
     this.inCatalog = true,
+    this.discovered = false,
   });
 
   final String id;
@@ -79,6 +81,38 @@ class Place {
   /// `false` no Place mínimo que o feed monta quando o id da avaliação não
   /// está no catálogo: sem doc em `places`, as Rules negam salvar.
   final bool inCatalog;
+
+  /// Veio só da descoberta ao vivo (Photon/OSM, G2) e ainda não existe em
+  /// `places`: a 1ª avaliação ou salvamento cria o doc (o app nunca grava
+  /// local só visto).
+  final bool discovered;
+
+  /// Cópia com [discovered] trocado (único campo que muda no ciclo de vida
+  /// do local no app: o resto vem do OSM/seed e o app nunca edita).
+  Place copyWith({bool? discovered}) => Place(
+    id: id,
+    name: name,
+    category: category,
+    neighborhood: neighborhood,
+    city: city,
+    photoUrl: photoUrl,
+    photoAuthor: photoAuthor,
+    photoLicense: photoLicense,
+    photoIllustrative: photoIllustrative,
+    lat: lat,
+    lng: lng,
+    geohash: geohash,
+    cuisine: cuisine,
+    address: address,
+    openingHours: openingHours,
+    osmId: osmId,
+    source: source,
+    inCatalog: inCatalog,
+    discovered: discovered ?? this.discovered,
+  );
+
+  /// Mesmo local, agora gravado em `places` (não é mais só descoberto).
+  Place asPersisted() => discovered ? copyWith(discovered: false) : this;
 
   /// Tem dados vindos do OpenStreetMap (exige o crédito © OpenStreetMap).
   bool get hasOsmData => source == PlaceSource.osm || osmId != null;

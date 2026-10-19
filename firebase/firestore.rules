@@ -47,6 +47,54 @@ service cloud.firestore {
       // "Quero ir" (F11): privado — só o dono lê e escreve. Doc só com o
       // createdAt do servidor; sem notas nem listas (F12). Salvar de novo um
       // local já salvo seria update: negado (o cliente só cria ou apaga).
+      // Trava do F03: período mínimo entre avaliações do mesmo usuário no
+      // mesmo local (Fase 1, "Não faz"). `lastAt` = hora da última avaliação
+      // (sempre do servidor). Só nasce/renova no mesmo batch que cria a
+      // avaliação nova `reviewId` do mesmo autor e local. Avaliações
+      // anteriores ao F03 sem trava não bloqueiam a 1ª nova (o backfill
+      // `seed/backfill-review-locks.js` cria as travas delas pelo Admin SDK).
+      // MESMO período de `reviewCooldown` em app/lib/domain/review_lock.dart
+      // (teste de paridade lê este arquivo).
+      match /reviewLocks/{placeId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && validLock(placeId, request.resource.data);
+        allow update: if isOwner(uid)
+          && validLock(placeId, request.resource.data)
+          && request.time >= resource.data.lastAt + duration.value(30, 'd');
+        allow delete: if false;
+      }
+
+      // Trava do F15 ("Voltei aqui"): no máximo 1 visita a cada 12 h por
+      // usuário e local. Mesmo padrão do F03: `lastAt` do servidor, só
+      // nasce/renova no mesmo batch que cria a visita nova `visitId` do mesmo
+      // autor e local; nunca apagável. Separada da trava de avaliação: quem
+      // está no período do F03 pode registrar visita.
+      // MESMO período de `visitCooldown` em app/lib/domain/visit_lock.dart
+      // (teste de paridade lê este arquivo).
+      match /visitLocks/{placeId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && validVisitLock(placeId, request.resource.data);
+        allow update: if isOwner(uid)
+          && validVisitLock(placeId, request.resource.data)
+          && request.time >= resource.data.lastAt + duration.value(12, 'h');
+        allow delete: if false;
+      }
+
+      // Trava do F20 ("Está aberto agora?"): no máximo 1 relato a cada 30 min
+      // por usuário e local. Mesmo padrão do F03/F15: `lastAt` do servidor,
+      // só nasce/renova no mesmo batch que cria o relato novo `reportId` do
+      // mesmo autor e local; nunca apagável.
+      // MESMO período de `openReportCooldown` em app/lib/domain/open_status.dart
+      // (teste de paridade lê este arquivo).
+      match /openReportLocks/{placeId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && validOpenReportLock(placeId, request.resource.data);
+        allow update: if isOwner(uid)
+          && validOpenReportLock(placeId, request.resource.data)
+          && request.time >= resource.data.lastAt + duration.value(30, 'm');
+        allow delete: if false;
+      }
+
       match /saved/{placeId} {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid)
@@ -74,6 +122,63 @@ service cloud.firestore {
       }
     }
 
+    function lockKeys() {
+      return ['lastAt', 'reviewId', 'placeId'];
+    }
+
+    // A avaliação `reviewId` é nova, nasce neste batch, do mesmo autor e local.
+    function validLock(placeId, data) {
+      let reviewPath = /databases/$(database)/documents/reviews/$(data.reviewId);
+      let review = getAfter(reviewPath);
+      return data.keys().hasOnly(lockKeys())
+        && data.keys().hasAll(lockKeys())
+        && data.placeId == placeId
+        && data.reviewId is string
+        && data.lastAt == request.time
+        && !exists(reviewPath)
+        && review != null
+        && review.data.authorId == request.auth.uid
+        && review.data.placeId == placeId;
+    }
+
+    function visitLockKeys() {
+      return ['lastAt', 'visitId', 'placeId'];
+    }
+
+    // A visita `visitId` é nova, nasce neste batch, do mesmo autor e local.
+    function validVisitLock(placeId, data) {
+      let visitPath = /databases/$(database)/documents/visits/$(data.visitId);
+      let visit = getAfter(visitPath);
+      return data.keys().hasOnly(visitLockKeys())
+        && data.keys().hasAll(visitLockKeys())
+        && data.placeId == placeId
+        && data.visitId is string
+        && data.lastAt == request.time
+        && !exists(visitPath)
+        && visit != null
+        && visit.data.authorId == request.auth.uid
+        && visit.data.placeId == placeId;
+    }
+
+    function openReportLockKeys() {
+      return ['lastAt', 'reportId', 'placeId'];
+    }
+
+    // O relato `reportId` é novo, nasce neste batch, do mesmo autor e local.
+    function validOpenReportLock(placeId, data) {
+      let reportPath = /databases/$(database)/documents/openReports/$(data.reportId);
+      let report = getAfter(reportPath);
+      return data.keys().hasOnly(openReportLockKeys())
+        && data.keys().hasAll(openReportLockKeys())
+        && data.placeId == placeId
+        && data.reportId is string
+        && data.lastAt == request.time
+        && !exists(reportPath)
+        && report != null
+        && report.data.authorId == request.auth.uid
+        && report.data.placeId == placeId;
+    }
+
     function listKeys() {
       return ['name', 'emoji', 'placeIds', 'createdAt', 'updatedAt'];
     }
@@ -97,10 +202,78 @@ service cloud.firestore {
         && data.placeIds.size() <= 200;
     }
 
-    // ---------- places (somente seed/admin escreve) ----------
+    // ---------- places ----------
+    // Seed/admin grava Natal (ignora as Rules). Fora disso (G2), o app cria o
+    // local descoberto pelo Photon/OSM na 1ª interação (avaliar ou salvar):
+    // só create, nunca update/delete; id `osm-{n|w|r}{id}` (sem zero à
+    // esquerda) = mesmo esquema do
+    // seed, então o mesmo local nunca vira dois docs (o 2º create de uma
+    // corrida é um update, negado, e o app segue com o doc que já existe).
+    // Sem `nameLower`/`searchTokens`: o cliente não grava campos de busca
+    // (não dá para validá-los e um forjado poluiria a busca de todos). Fora
+    // de Natal, a busca acha os locais criados pelo Photon.
+    function placeKeys() {
+      return ['name', 'category', 'neighborhood', 'city', 'address', 'lat',
+              'lng', 'geohash', 'osmId', 'source', 'createdBy', 'createdAt'];
+    }
+
+    // MESMO vocabulário de `CATEGORIES` em firebase/seed/osm/category.js e
+    // `osmCategories` em app/lib/domain/osm_category.dart (teste de paridade
+    // em firebase/tests/osm.test.js).
+    function placeCategories() {
+      return ['Restaurante', 'Lanchonete', 'Pub', 'Bar', 'Café', 'Sorveteria',
+              'Praça de alimentação', 'Cervejaria', 'Pizzaria', 'Hamburgueria',
+              'Japonês', 'Churrascaria', 'Frutos do mar', 'Padaria',
+              'Tapiocaria', 'Açaí', 'Comida regional', 'Comida brasileira',
+              'Italiano', 'Chinês', 'Árabe', 'Mexicano', 'Vegetariano', 'Vegano',
+              'Mercado', 'Feira'];
+    }
+
+    function osmTypeName(letter) {
+      return {'n': 'node', 'w': 'way', 'r': 'relation'}.get(letter, '');
+    }
+
+    function optionalText(v) {
+      return v is string && v.size() <= 120;
+    }
+
+    // Retângulo APROXIMADO do Brasil (com Fernando de Noronha e Trindade;
+    // inclui pedaços de países vizinhos). MESMO de `brazilBounds` em
+    // app/lib/domain/geo.dart (teste de paridade lê este arquivo).
+    function inBrazilBounds(lat, lng) {
+      return lat is number && lng is number
+        && lat >= -34.0 && lat <= 5.5
+        && lng >= -74.0 && lng <= -28.5;
+    }
+
+    function validNewPlace(data, placeId) {
+      return placeId.matches('osm-[nwr][1-9][0-9]*')
+        && data.keys().hasOnly(placeKeys())
+        && data.keys().hasAll(placeKeys())
+        && data.name is string
+        && data.name == data.name.trim()
+        && data.name.size() >= 1
+        && data.name.size() <= 120
+        && data.category in placeCategories()
+        && optionalText(data.neighborhood)
+        && optionalText(data.city)
+        && optionalText(data.address)
+        && inBrazilBounds(data.lat, data.lng)
+        // Só o formato: um geohash forjado não tem efeito, porque o "Perto"
+        // usa o geohash apenas para escolher candidatos e sempre filtra pela
+        // distância real (haversine) sobre lat/lng, que são validados acima.
+        && data.geohash is string
+        && data.geohash.matches('[0-9b-hjkmnp-z]{9}')
+        && data.osmId == osmTypeName(placeId[4]) + '/' + placeId[5:placeId.size()]
+        && data.source == 'osm'
+        && data.createdBy == request.auth.uid
+        && data.createdAt == request.time;
+    }
+
     match /places/{placeId} {
       allow read: if signedIn();
-      allow write: if false;
+      allow create: if signedIn() && validNewPlace(request.resource.data, placeId);
+      allow update, delete: if false;
     }
 
     // ---------- reviews ----------
@@ -138,10 +311,21 @@ service cloud.firestore {
               'food', 'ambience', 'service', 'companion', 'comment', 'createdAt'];
     }
 
-    // Permitidas: as 10 + `hasPhoto` (G1). Janela de transição: clientes
-    // antigos ainda gravam sem `hasPhoto`, tratado como false.
+    // Permitidas: as 10 + `hasPhoto` (G1) + `priceBand` (F27). Janela de
+    // transição: clientes antigos ainda gravam sem `hasPhoto` (= false) e
+    // sem `priceBand` (= não informado).
     function reviewKeys() {
-      return reviewRequiredKeys().concat(['hasPhoto']);
+      return reviewRequiredKeys().concat(['hasPhoto', 'priceBand']);
+    }
+
+    // Faixa de preço por pessoa (F27), opcional em avaliações e visitas:
+    // ausente (build antigo), null (não informada) ou int de 1 a 5.
+    // MESMOS limites de `PriceBand` em app/lib/domain/price_band.dart (teste
+    // de paridade lê este arquivo).
+    function validPriceBand(data) {
+      return !('priceBand' in data)
+        || data.priceBand == null
+        || (data.priceBand is int && data.priceBand >= 1 && data.priceBand <= 5);
     }
 
     function photoPath(reviewId) {
@@ -158,20 +342,34 @@ service cloud.firestore {
             && (data.hasPhoto == false || existsAfter(photoPath(reviewId))));
     }
 
+    function lockPath(uid, placeId) {
+      return /databases/$(database)/documents/users/$(uid)/reviewLocks/$(placeId);
+    }
+
     function validReview(data, reviewId) {
       let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
       let placePath = /databases/$(database)/documents/places/$(data.placeId);
+      // F03: uma leitura só da trava (estado ao fim do batch).
+      let lock = getAfter(lockPath(request.auth.uid, data.placeId));
       return data.keys().hasOnly(reviewKeys())
         && data.keys().hasAll(reviewRequiredKeys())
         && data.authorId == request.auth.uid
         && data.authorName == profile.data.displayName
         && data.placeId is string
-        && exists(placePath)
-        && data.placeName == get(placePath).data.name
+        // `After`: o local pode nascer no mesmo batch da avaliação (G2).
+        && existsAfter(placePath)
+        && data.placeName == getAfter(placePath).data.name
         && validAxes(data)
         && validCompanion(data.companion)
         && validComment(data.comment)
         && validHasPhoto(data, reviewId)
+        && validPriceBand(data)
+        // F03: a trava `users/{uid}/reviewLocks/{placeId}` é criada ou
+        // renovada no MESMO batch, apontando para esta avaliação (as Rules da
+        // trava exigem o intervalo de 30 dias desde a anterior).
+        && lock != null
+        && lock.data.lastAt == request.time
+        && lock.data.reviewId == reviewId
         && data.createdAt == request.time;
     }
 
@@ -179,6 +377,89 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && validReview(request.resource.data, reviewId);
       // Editar/excluir fica para F03/F04.
+      allow update, delete: if false;
+    }
+
+    // ---------- visits (F15: "Voltei aqui") ----------
+    // Ida leve ao local: sem notas, companhia opcional, período derivado do
+    // `createdAt` (F02). Nunca anônima (autor e nome do perfil validados
+    // como na review), imutável e limitada a 1 a cada 12 h por usuário e
+    // local pela trava `users/{uid}/visitLocks/{placeId}` do mesmo batch.
+    function visitKeys() {
+      return ['authorId', 'authorName', 'placeId', 'placeName', 'companion', 'createdAt'];
+    }
+
+    // Permitidas: as 6 obrigatórias + `priceBand` opcional (F27; builds
+    // antigos gravam sem a chave).
+    function visitAllowedKeys() {
+      return visitKeys().concat(['priceBand']);
+    }
+
+    function visitLockPath(uid, placeId) {
+      return /databases/$(database)/documents/users/$(uid)/visitLocks/$(placeId);
+    }
+
+    function validVisit(data, visitId) {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let placePath = /databases/$(database)/documents/places/$(data.placeId);
+      let lock = getAfter(visitLockPath(request.auth.uid, data.placeId));
+      return data.keys().hasOnly(visitAllowedKeys())
+        && data.keys().hasAll(visitKeys())
+        && data.authorId == request.auth.uid
+        && data.authorName == profile.data.displayName
+        && data.placeId is string
+        // `After`: o local pode nascer no mesmo batch da visita (G2).
+        && existsAfter(placePath)
+        && data.placeName == getAfter(placePath).data.name
+        && validCompanion(data.companion)
+        && validPriceBand(data)
+        && lock != null
+        && lock.data.lastAt == request.time
+        && lock.data.visitId == visitId
+        && data.createdAt == request.time;
+    }
+
+    match /visits/{visitId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validVisit(request.resource.data, visitId);
+      allow update, delete: if false;
+    }
+
+    // ---------- openReports (F20: "Está aberto agora?") ----------
+    // Fato relatado por quem está no local: `open` (Sim/Não). Nunca anônimo
+    // (autor e nome do perfil validados como na visita), imutável,
+    // `createdAt` do servidor, local existente (pode nascer no mesmo batch,
+    // G2) e limitado a 1 a cada 30 min por usuário e local pela trava
+    // `users/{uid}/openReportLocks/{placeId}` do mesmo batch. A proximidade
+    // (até 150 m) é checada no app: a localização nunca é enviada.
+    function openReportKeys() {
+      return ['authorId', 'authorName', 'placeId', 'open', 'createdAt'];
+    }
+
+    function openReportLockPath(uid, placeId) {
+      return /databases/$(database)/documents/users/$(uid)/openReportLocks/$(placeId);
+    }
+
+    function validOpenReport(data, reportId) {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let lock = getAfter(openReportLockPath(request.auth.uid, data.placeId));
+      return data.keys().hasOnly(openReportKeys())
+        && data.keys().hasAll(openReportKeys())
+        && data.authorId == request.auth.uid
+        && data.authorName == profile.data.displayName
+        && data.placeId is string
+        // `After`: o local pode nascer no mesmo batch do relato (G2).
+        && existsAfter(/databases/$(database)/documents/places/$(data.placeId))
+        && data.open is bool
+        && lock != null
+        && lock.data.lastAt == request.time
+        && lock.data.reportId == reportId
+        && data.createdAt == request.time;
+    }
+
+    match /openReports/{reportId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validOpenReport(request.resource.data, reportId);
       allow update, delete: if false;
     }
 

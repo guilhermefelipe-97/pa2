@@ -1,9 +1,12 @@
+import '../../data/activity_batch.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
-import '../../domain/models/review.dart';
+import '../../data/repositories/visit_repository.dart';
+import '../../domain/models/place_activity.dart';
 import '../../domain/models/user_profile.dart';
 import '../core/follow_events.dart';
+import '../core/load_visits.dart';
 import '../core/safe_change_notifier.dart';
 
 enum ProfileState { loading, ready, notFound, error, signedOut }
@@ -18,8 +21,8 @@ enum ProfileNotice {
 }
 
 /// Perfil simples de uma pessoa (F06): nome, Seguir/Deixar de seguir e as
-/// avaliações dela, mais recentes primeiro. Sem foto, sem contagem de
-/// seguidores, sem edição.
+/// avaliações e visitas ("Voltei aqui", F15) dela, mais recentes primeiro.
+/// Sem foto, sem contagem de seguidores, sem edição.
 class ProfileViewModel extends SafeChangeNotifier {
   ProfileViewModel({
     required this.uid,
@@ -27,10 +30,12 @@ class ProfileViewModel extends SafeChangeNotifier {
     required UserRepository userRepository,
     required ReviewRepository reviewRepository,
     required FollowEvents followEvents,
+    required VisitRepository visitRepository,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _users = userRepository,
        _reviews = reviewRepository,
+       _visits = visitRepository,
        _follow = FollowStaleness(followEvents),
        _clock = clock ?? DateTime.now;
 
@@ -40,13 +45,18 @@ class ProfileViewModel extends SafeChangeNotifier {
   static const youLabel = 'Você';
   static const unnamedLabel = 'Usuário';
 
-  /// O perfil mostra só as avaliações mais recentes.
+  /// O perfil mostra só as avaliações mais recentes...
   static const int maxReviews = 50;
+
+  /// ...e só as visitas ("Voltei aqui", F15) mais recentes, com limite
+  /// próprio (visitas frequentes não empurram as avaliações para fora).
+  static const int maxVisits = 50;
 
   final String uid;
   final AuthRepository _auth;
   final UserRepository _users;
   final ReviewRepository _reviews;
+  final VisitRepository _visits;
   final FollowStaleness _follow;
   final DateTime Function() _clock;
 
@@ -72,10 +82,17 @@ class ProfileViewModel extends SafeChangeNotifier {
   /// Até [maxReviews] avaliações da pessoa, mais recentes primeiro.
   List<Review> get reviews => _reviewList;
 
-  /// "Ana ainda não avaliou nenhum lugar".
+  List<PlaceActivity> _activities = const [];
+
+  /// Até [maxReviews] avaliações e até [maxVisits] visitas da pessoa,
+  /// juntas, mais recentes primeiro.
+  List<PlaceActivity> get activities => _activities;
+
+  /// Sem avaliações nem visitas: "Ana ainda não avaliou nem registrou
+  /// visita em nenhum lugar".
   String get emptyText => isSelf
-      ? 'Você ainda não avaliou nenhum lugar'
-      : '$title ainda não avaliou nenhum lugar';
+      ? 'Você ainda não avaliou nem registrou visita em nenhum lugar'
+      : '$title ainda não avaliou nem registrou visita em nenhum lugar';
 
   bool _following = false;
   bool get isFollowing => _following;
@@ -117,6 +134,11 @@ class ProfileViewModel extends SafeChangeNotifier {
       final results = await Future.wait<Object?>([
         _users.getProfile(uid),
         _reviews.fetchReviewsByAuthors([uid], limit: maxReviews),
+        // Falha só das visitas: perfil com as avaliações.
+        loadVisitsOrEmpty(
+          'perfil',
+          () => _visits.fetchVisitsByAuthors([uid], limit: maxVisits),
+        ),
         if (!self) _users.getFollowing(me),
       ]);
       if (seq != _seq) return;
@@ -126,12 +148,15 @@ class ProfileViewModel extends SafeChangeNotifier {
       } else {
         _profile = profile;
         _reviewList =
-            ([...results[1]! as List<Review>]
+            ([...(results[1]! as ActivityBatch<Review>).items]
                   ..sort((a, b) => b.createdAt.compareTo(a.createdAt)))
                 .take(maxReviews)
                 .toList();
+        final visits = (results[2]! as VisitsRead).batch.items.take(maxVisits);
+        _activities = [..._reviewList, ...visits]
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         if (!self && !_busy) {
-          _following = (results[2]! as Set<String>).contains(uid);
+          _following = (results[3]! as Set<String>).contains(uid);
         }
         _state = ProfileState.ready;
       }

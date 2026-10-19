@@ -38,6 +38,7 @@ FeedViewModel _feedVm({
   placeRepository: FakePlaceRepository(places),
   clock: () => _now,
   followEvents: FollowEvents(),
+  visitRepository: FakeVisitRepository(),
 );
 
 /// Tela de celular alta (412x2000 dp) para as listas preguiçosas construírem
@@ -55,9 +56,13 @@ class _GatedReviewRepository extends FakeReviewRepository {
   final Future<void> gate;
 
   @override
-  Future<void> createReview(NewReview review, {Uint8List? photo}) async {
+  Future<CreateReviewResult> createReview(
+    NewReview review, {
+    Uint8List? photo,
+    Place? newPlace,
+  }) async {
     await gate;
-    return super.createReview(review, photo: photo);
+    return super.createReview(review, photo: photo, newPlace: newPlace);
   }
 }
 
@@ -95,6 +100,7 @@ void main() {
     _tallPhone(tester);
     final vm = reviewVm();
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
+    await tester.pump(); // trava do F03 (checkLock)
 
     FilledButton submit() =>
         tester.widget<FilledButton>(find.byKey(const Key('review-submit')));
@@ -149,6 +155,7 @@ void main() {
     final handle = tester.ensureSemantics();
     final vm = reviewVm();
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
+    await tester.pump(); // trava do F03 (checkLock)
 
     expect(
       tester.getSemantics(find.bySemanticsLabel('Comida 4 de 5')),
@@ -187,6 +194,7 @@ void main() {
     final gate = Completer<void>();
     final vm = reviewVm(reviews: _GatedReviewRepository(gate.future));
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
+    await tester.pump(); // trava do F03 (checkLock)
     await tester.tap(find.byKey(const Key('axis-food-4')));
     await tester.pump();
 
@@ -332,9 +340,11 @@ void main() {
       compress: (b) async => b,
     );
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
+    await tester.pump(); // trava do F03 (checkLock)
 
     final field = find.byKey(const Key('review-comment'));
-    await tester.ensureVisible(field);
+    // O seletor de preço (F27) empurra o campo para fora da área montada.
+    await tester.scrollUntilVisible(field, 200);
     expect(tester.widget<TextField>(field).maxLength, 280);
 
     await tester.enterText(field, 'x' * 300);
@@ -503,7 +513,7 @@ void main() {
     'PlaceDetailView: foto grande e todas as avaliações dos amigos no local',
     (tester) async {
       _tallPhone(tester);
-      final item = groupReviewsIntoFeed(
+      final item = groupActivitiesIntoFeed(
         [
           review(
             authorId: 'a',
@@ -556,7 +566,7 @@ void main() {
       'avaliações por eixo (F14)', (tester) async {
     _tallPhone(tester);
     final handle = tester.ensureSemantics();
-    final item = groupReviewsIntoFeed(
+    final item = groupActivitiesIntoFeed(
       [
         review(authorId: 'a', placeId: 'x', scores: Scores(food: 4)),
         review(authorId: 'b', placeId: 'x', scores: Scores(food: 5)),
@@ -589,7 +599,7 @@ void main() {
       '(F14)', (tester) async {
     _tallPhone(tester);
     final handle = tester.ensureSemantics();
-    final item = groupReviewsIntoFeed(
+    final item = groupActivitiesIntoFeed(
       [
         review(
           authorId: 'a',
@@ -634,7 +644,7 @@ void main() {
 
   testWidgets('PlaceDetailView: singular com 1 avaliação', (tester) async {
     _tallPhone(tester);
-    final item = groupReviewsIntoFeed([
+    final item = groupActivitiesIntoFeed([
       review(authorId: 'a', placeId: 'x'),
     ]).single;
     await tester.pumpWidget(
@@ -650,8 +660,10 @@ void main() {
     tester,
   ) async {
     _tallPhone(tester);
-    FeedItem itemFor(Place p) =>
-        groupReviewsIntoFeed([review(placeId: p.id)], places: {p.id: p}).single;
+    FeedItem itemFor(Place p) => groupActivitiesIntoFeed(
+      [review(placeId: p.id)],
+      places: {p.id: p},
+    ).single;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -740,7 +752,7 @@ void main() {
   testWidgets(
     'FeedCard: sem bairro nem categoria, a linha de local não aparece',
     (tester) async {
-      final item = groupReviewsIntoFeed([
+      final item = groupActivitiesIntoFeed([
         review(placeId: 'x', placeName: 'Sumiu'),
       ]).single;
       await tester.pumpWidget(
@@ -759,7 +771,7 @@ void main() {
 
   testWidgets('FeedCard: rótulo "Abrir <local>" como botão', (tester) async {
     final handle = tester.ensureSemantics();
-    final item = groupReviewsIntoFeed(
+    final item = groupActivitiesIntoFeed(
       [review(placeId: 'x')],
       places: {'x': place(id: 'x', name: 'Mangai')},
     ).single;

@@ -7,7 +7,10 @@ import 'package:go_router/go_router.dart';
 import '../../data/services/photo_picker.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/models/review.dart';
+import '../core/price_band_picker.dart';
 import '../feed/widgets/axis_scores.dart' show noScoresLabel;
+import '../visit/visit_sheet.dart';
+import '../visit/visit_view_model.dart';
 import 'review_view_model.dart';
 
 /// Dica abaixo do Enviar enquanto nenhum eixo tem nota (F14).
@@ -28,6 +31,8 @@ class _ReviewViewState extends State<ReviewView> {
   @override
   void initState() {
     super.initState();
+    // F03: avaliou há menos de 30 dias → explica em vez do formulário.
+    viewModel.checkLock();
     // Android: foto tirada antes de o sistema encerrar o app (no-op nas
     // outras plataformas).
     viewModel.recoverLostPhoto();
@@ -36,6 +41,18 @@ class _ReviewViewState extends State<ReviewView> {
   Future<void> _submit(BuildContext context) async {
     final ok = await viewModel.submit();
     if (ok && context.mounted) context.pop(true);
+  }
+
+  /// F15: bloqueado pelo F03, a alternativa é registrar a visita (mesmo
+  /// fluxo do detalhe). Registrada, avisa e volta com `false` (nenhuma
+  /// avaliação nova, mas quem abriu recarrega para mostrar a visita).
+  Future<void> _registerVisit(BuildContext context) async {
+    final registered = await showVisitSheet(context, place: viewModel.place);
+    if (!registered || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text(VisitViewModel.successMessage)),
+    );
+    context.pop(false);
   }
 
   @override
@@ -47,6 +64,18 @@ class _ReviewViewState extends State<ReviewView> {
         listenable: viewModel,
         builder: (context, _) {
           final vm = viewModel;
+          if (vm.isCheckingLock) {
+            return const Center(
+              key: Key('review-lock-checking'),
+              child: CircularProgressIndicator(),
+            );
+          }
+          if (vm.isBlocked) {
+            return _BlockedReview(
+              message: vm.blockedMessage!,
+              onRegisterVisit: () => _registerVisit(context),
+            );
+          }
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -118,6 +147,12 @@ class _ReviewViewState extends State<ReviewView> {
                     ),
                 ],
               ),
+              const SizedBox(height: 16),
+              PriceBandPicker(
+                value: vm.priceBand,
+                onChanged: vm.setPriceBand,
+                enabled: !vm.isSubmitting,
+              ),
               const SizedBox(height: 24),
               TextField(
                 key: const Key('review-comment'),
@@ -172,6 +207,61 @@ class _ReviewViewState extends State<ReviewView> {
           );
         },
       ),
+    );
+  }
+}
+
+/// F03: o usuário avaliou o local há menos de 30 dias. Sem formulário de
+/// notas: a explicação com as datas e, como alternativa, "Registrar visita"
+/// (F15: voltar conta como recorrência, sem nota).
+class _BlockedReview extends StatelessWidget {
+  const _BlockedReview({required this.message, required this.onRegisterVisit});
+
+  final String message;
+  final VoidCallback onRegisterVisit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Icon(
+          Icons.event_repeat,
+          size: 48,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          message,
+          key: const Key('review-blocked'),
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Assim cada avaliação conta uma experiência de verdade.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Voltou aqui? Registre a visita: ela conta para quem segue você.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: FilledButton.icon(
+            key: const Key('review-register-visit'),
+            onPressed: onRegisterVisit,
+            icon: const Icon(Icons.replay),
+            label: const Text('Registrar visita'),
+          ),
+        ),
+      ],
     );
   }
 }

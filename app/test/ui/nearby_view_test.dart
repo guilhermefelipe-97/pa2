@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:naarea/data/photon/photon_client.dart';
 import 'package:naarea/data/services/location_service.dart';
+import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/routing/routes.dart';
 import 'package:naarea/ui/nearby/nearby_view.dart';
 import 'package:naarea/ui/place/place_detail_view.dart';
@@ -31,6 +33,7 @@ Future<TestApp> _openNearby(
   FakeLocationService? location,
   FakeUserRepository? users,
   FakeReviewRepository? reviews,
+  FakeVisitRepository? visits,
 }) async {
   final app = await pumpApp(
     tester,
@@ -38,6 +41,7 @@ Future<TestApp> _openNearby(
     location: location,
     users: users,
     reviews: reviews,
+    visits: visits,
   );
   await tester.tap(_tab('Perto'));
   await tester.pumpAndSettle();
@@ -82,7 +86,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(app.location.locateCalls, 1);
       expect(find.text('Tapiocaria 80'), findsWidgets);
-      expect(find.text('80 m · Restaurante'), findsWidgets);
+      expect(find.text('80 m · Restaurante · Ponta Negra'), findsWidgets);
       expect(find.text('Fora 301'), findsNothing);
     },
   );
@@ -143,6 +147,50 @@ void main() {
     },
   );
 
+  testWidgets('F15: item mostra "🔁 Ana voltou 2 vezes" (avaliação + visita)', (
+    tester,
+  ) async {
+    final users = FakeUserRepository()
+      ..addUser('me', 'Bianca')
+      ..addUser('ana', 'Ana')
+      ..followingByUser['me'] = {'ana'};
+    final reviews = FakeReviewRepository()
+      ..stored.add(
+        review(authorId: 'ana', authorName: 'Ana', placeId: 'perto240'),
+      );
+    final visits = FakeVisitRepository()
+      ..stored.add(
+        visit(
+          authorId: 'ana',
+          authorName: 'Ana',
+          placeId: 'perto240',
+          createdAt: DateTime.utc(2026, 9, 2),
+        ),
+      );
+    await _openNearby(
+      tester,
+      places: _places,
+      users: users,
+      reviews: reviews,
+      visits: visits,
+      location: FakeLocationService(position: pontaNegra, granted: true),
+    );
+    final item = find.byKey(const ValueKey('nearby-perto240'));
+    expect(
+      find.descendant(of: item, matching: find.text('Ana voltou 2 vezes')),
+      findsOneWidget,
+    );
+    // Ícone decorativo ao lado do texto.
+    expect(
+      find.descendant(of: item, matching: find.text('🔁')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: item, matching: find.text('Ana foi aqui')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('AC: nada em 300 m → "Ampliar para 1 km" mostra até 1 km', (
     tester,
   ) async {
@@ -155,7 +203,7 @@ void main() {
     await tester.tap(find.text('Ampliar para 1 km'));
     await tester.pumpAndSettle();
     expect(find.text('Longe 700'), findsWidgets);
-    expect(find.text('700 m · Restaurante'), findsWidgets);
+    expect(find.text('700 m · Restaurante · Ponta Negra'), findsWidgets);
     expect(app.places.nearbyCalls, hasLength(2));
     // A sugestão foi recalculada (o único local).
     expect(find.byKey(const Key('nearby-suggestion')), findsOneWidget);
@@ -196,14 +244,14 @@ void main() {
     handle.dispose();
   });
 
-  testWidgets('fora de Natal: "Ainda não temos lugares por aqui"', (
+  testWidgets('fora do Brasil (Lisboa): "Ainda não temos lugares por aqui"', (
     tester,
   ) async {
     await _openNearby(
       tester,
       places: _places,
       location: FakeLocationService(
-        position: (lat: -6.24, lng: -35.211),
+        position: (lat: 38.7223, lng: -9.1393),
         granted: true,
       ),
     );
@@ -225,6 +273,92 @@ void main() {
     await tester.tap(find.text(NearbyView.retryLabel));
     await tester.pumpAndSettle();
     expect(find.text('Tapiocaria 80'), findsWidgets);
+  });
+
+  testWidgets(
+    'Photon falhou: lista dos conhecidos com aviso discreto e "Tentar de novo"',
+    (tester) async {
+      final app = await pumpApp(
+        tester,
+        places: _places,
+        location: FakeLocationService(position: pontaNegra, granted: true),
+      );
+      app.places.nearbyPartial = true;
+      await tester.tap(_tab('Perto'));
+      await tester.pumpAndSettle();
+      expect(find.text(NearbyView.partialMessage), findsOneWidget);
+      expect(find.text('Tapiocaria 80'), findsWidgets);
+      app.places.nearbyPartial = false;
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('nearby-partial')),
+          matching: find.text(NearbyView.retryLabel),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(NearbyView.partialMessage), findsNothing);
+      expect(app.places.nearbyCalls, hasLength(2));
+    },
+  );
+
+  testWidgets(
+    'Photon falhou e nada conhecido por perto: aviso, não "Nada a 300 m"',
+    (tester) async {
+      final app = await pumpApp(
+        tester,
+        location: FakeLocationService(position: pontaNegra, granted: true),
+      );
+      app.places.nearbyPartial = true;
+      await tester.tap(_tab('Perto'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('nearby-partial-empty')), findsOneWidget);
+      expect(find.textContaining('Nada a'), findsNothing);
+    },
+  );
+
+  testWidgets('50 do Photon: "Mostrando os 50 mais próximos" no fim', (
+    tester,
+  ) async {
+    final app = await pumpApp(
+      tester,
+      places: _places,
+      location: FakeLocationService(position: pontaNegra, granted: true),
+    );
+    app.places.nearbyCapped = true;
+    await tester.tap(_tab('Perto'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text(NearbyView.cappedMessage),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text(NearbyView.cappedMessage), findsOneWidget);
+  });
+
+  testWidgets('HTTP 429: "Muitas buscas seguidas"', (tester) async {
+    final app = await pumpApp(
+      tester,
+      places: _places,
+      location: FakeLocationService(position: pontaNegra, granted: true),
+    );
+    app.places.nearbyError = const PhotonRateLimitedException();
+    await tester.tap(_tab('Perto'));
+    await tester.pumpAndSettle();
+    expect(find.text(PhotonRateLimitedException.userMessage), findsOneWidget);
+  });
+
+  test('explicação cita o Photon/OpenStreetMap e que nada fica guardado', () {
+    expect(
+      NearbyView.explainBody,
+      contains(
+        'Sua localização aproximada é usada para buscar lugares no '
+        'OpenStreetMap (serviço Photon) e não fica guardada',
+      ),
+    );
+    expect(
+      NearbyView.outOfAreaMessage,
+      'O NaÁrea funciona só no Brasil por enquanto',
+    );
   });
 
   group('permissão negada / GPS', () {
@@ -291,4 +425,47 @@ void main() {
       );
     });
   });
+
+  testWidgets(
+    'G2: Bianca na Sé (SP) vê lugares do Photon com crédito OSM e salva um local novo',
+    (tester) async {
+      const se = (lat: -23.5503, lng: -46.6339);
+      final bar = placeNear(
+        'osm-n123',
+        120,
+        from: se,
+        name: 'Bar do Zé',
+        category: 'Bar',
+      );
+      final discovered = Place(
+        id: bar.id,
+        name: bar.name,
+        category: bar.category,
+        neighborhood: 'Sé',
+        city: 'São Paulo',
+        lat: bar.lat,
+        lng: bar.lng,
+        osmId: 'node/123',
+        source: PlaceSource.osm,
+        discovered: true,
+      );
+      final repo = FakePlaceRepository([discovered])
+        ..discovered[discovered.id] = discovered;
+      final app = await pumpApp(
+        tester,
+        placeRepository: repo,
+        location: FakeLocationService(position: se, granted: true),
+      );
+      await tester.tap(_tab('Perto'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bar do Zé'), findsWidgets);
+      expect(find.text('120 m · Bar · Sé'), findsWidgets);
+      expect(find.byKey(const Key('osm-credit')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('save-osm-n123')).last);
+      await tester.pumpAndSettle();
+      expect(repo.persistCalls, ['me:osm-n123']);
+      expect(app.saved.writes, ['save:osm-n123']);
+    },
+  );
 }

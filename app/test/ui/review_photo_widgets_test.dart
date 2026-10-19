@@ -104,6 +104,7 @@ void main() {
     ) async {
       _tallPhone(tester);
       await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
+      await tester.pump(); // trava do F03 (checkLock)
       expect(find.text('Foto (opcional)'), findsOneWidget);
 
       picker.next = Uint8List.fromList([1, 2, 3]);
@@ -133,6 +134,7 @@ void main() {
     testWidgets('fechar a câmera sem foto não muda nada', (tester) async {
       _tallPhone(tester);
       await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
+      await tester.pump(); // trava do F03 (checkLock)
       picker.next = null;
       await choose(tester, 'photo-add');
       await choose(tester, 'photo-source-camera');
@@ -143,6 +145,7 @@ void main() {
     testWidgets('permissão negada explica como liberar', (tester) async {
       _tallPhone(tester);
       await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
+      await tester.pump(); // trava do F03 (checkLock)
       picker.error = const PhotoPermissionDeniedException(PhotoSource.camera);
       await choose(tester, 'photo-add');
       await choose(tester, 'photo-source-camera');
@@ -167,6 +170,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(home: ReviewView(viewModel: failing)),
       );
+      await tester.pump(); // trava do F03 (checkLock)
       await choose(tester, 'photo-add');
       await choose(tester, 'photo-source-gallery');
       expect(find.text('Não foi possível usar essa foto'), findsOneWidget);
@@ -175,7 +179,7 @@ void main() {
   });
 
   group('FeedCard: foto do amigo', () {
-    FeedItem anaComFotoBetoSem() => groupReviewsIntoFeed(
+    FeedItem anaComFotoBetoSem() => groupActivitiesIntoFeed(
       [
         review(
           id: 'ra',
@@ -244,7 +248,7 @@ void main() {
 
     testWidgets('ninguém com foto: não consulta fotos', (tester) async {
       final photos = FakeReviewPhotoRepository();
-      final item = groupReviewsIntoFeed(
+      final item = groupActivitiesIntoFeed(
         [review(placeId: 'mangai')],
         places: {'mangai': _mangai},
       ).single;
@@ -423,7 +427,7 @@ void main() {
     (tester) async {
       final handle = tester.ensureSemantics();
       final photos = FakeReviewPhotoRepository({'ra': _png});
-      final item = groupReviewsIntoFeed(
+      final item = groupActivitiesIntoFeed(
         [
           review(
             id: 'ra',

@@ -21,6 +21,7 @@ const {
   orderBy,
   limit,
   getDocs,
+  collectionGroup,
   arrayUnion,
   arrayRemove,
   writeBatch,
@@ -117,11 +118,73 @@ function validPhoto(overrides = {}) {
   };
 }
 
-/// Avaliação com foto: review + reviewPhotos/{mesmo id} num único batch.
-function reviewWithPhotoBatch(db, { id = 'nova', review = {}, photo = {}, withReview = true, withPhoto = true } = {}) {
+/// Trava do F03 como o app grava em `users/{uid}/reviewLocks/{placeId}`,
+/// com lastAt do servidor.
+function validLock(reviewId, overrides = {}) {
+  return {
+    lastAt: serverTimestamp(),
+    reviewId,
+    placeId: 'camaroes',
+    ...overrides,
+  };
+}
+
+const lockPath = (uid, placeId) => 'users/' + uid + '/reviewLocks/' + placeId;
+
+let reviewSeq = 0;
+
+/// Avaliação como o app grava (F03): review + trava num único batch, SEM
+/// limpar travas (os testes do F03 controlam o estado). `lock: false` omite a
+/// trava; `lock: {...}` sobrescreve campos; `lockAt` troca o caminho da trava.
+function addReview(db, data, { id, lock = {}, lockAt } = {}) {
+  const reviewId = id || 'r' + (++reviewSeq);
   const batch = writeBatch(db);
-  if (withReview) batch.set(doc(db, 'reviews/' + id), validReview({ hasPhoto: true, ...review }));
+  batch.set(doc(db, 'reviews/' + reviewId), data);
+  if (lock !== false) {
+    const placeId = typeof data.placeId === 'string' ? data.placeId : 'camaroes';
+    batch.set(
+      doc(db, lockAt || lockPath(data.authorId, placeId)),
+      validLock(reviewId, { placeId, ...lock }),
+    );
+  }
+  return batch.commit();
+}
+
+/// Remove todas as travas (estado limpo, sem depender da ordem das asserções).
+async function unlockAll() {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await getDocs(collectionGroup(ctx.firestore(), 'reviewLocks'));
+    await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+  });
+}
+
+/// [addReview] partindo de nenhuma trava: para os testes que não são do F03,
+/// cada asserção vale sozinha, em qualquer ordem.
+async function freshReview(db, data, opts) {
+  await unlockAll();
+  return addReview(db, data, opts);
+}
+
+/// Trava semeada sem Rules, com a última avaliação há [daysAgo] dias.
+async function seedLock(uid, placeId, daysAgo, reviewId = 'existing') {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), lockPath(uid, placeId)), {
+      lastAt: Timestamp.fromMillis(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
+      reviewId,
+      placeId,
+    });
+  });
+}
+
+/// Avaliação com foto: review + reviewPhotos/{mesmo id} (+ trava) num único
+/// batch, partindo de nenhuma trava.
+async function reviewWithPhotoBatch(db, { id = 'nova', review = {}, photo = {}, withReview = true, withPhoto = true, withLock = true } = {}) {
+  await unlockAll();
+  const batch = writeBatch(db);
+  const data = validReview({ hasPhoto: true, ...review });
+  if (withReview) batch.set(doc(db, 'reviews/' + id), data);
   if (withPhoto) batch.set(doc(db, 'reviewPhotos/' + id), validPhoto(photo));
+  if (withLock) batch.set(doc(db, lockPath(data.authorId, data.placeId)), validLock(id, { placeId: data.placeId }));
   return batch.commit();
 }
 
@@ -416,10 +479,148 @@ describe('places', () => {
     await assertFails(getDoc(doc(anon(), 'places/camaroes')));
   });
 
-  it('cliente nunca escreve', async () => {
+  it('cliente nunca edita nem apaga local existente', async () => {
     await assertFails(setDoc(doc(alice(), 'places/novo'), { name: 'X' }));
     await assertFails(updateDoc(doc(alice(), 'places/camaroes'), { name: 'X' }));
     await assertFails(deleteDoc(doc(alice(), 'places/camaroes')));
+  });
+});
+
+/// Local descoberto pelo Photon (G2), como o app grava na 1ª interação.
+function newPlace(overrides = {}) {
+  return {
+    name: 'Bar do Zé',
+    category: 'Bar',
+    neighborhood: 'Sé',
+    city: 'São Paulo',
+    address: 'Praça da Sé, 1',
+    lat: -23.5503,
+    lng: -46.6339,
+    geohash: '6gyf4bf1x',
+    osmId: 'node/123',
+    source: 'osm',
+    createdBy: 'alice',
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+describe('places: criação pelo app (G2)', () => {
+  it('logado cria local OSM válido (node, way, relation)', async () => {
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace()));
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-w45'), newPlace({ osmId: 'way/45' })));
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-r7'), newPlace({ osmId: 'relation/7' })));
+  });
+
+  it('campos de texto vazios são aceitos (Photon sem bairro/cidade/endereço)', async () => {
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ neighborhood: '', city: '', address: '' })));
+  });
+
+  it('anônimo não cria', async () => {
+    await assertFails(setDoc(doc(anon(), 'places/osm-n123'), newPlace()));
+  });
+
+  it('id fora do padrão osm-[nwr][1-9][0-9]* é negado (inclusive zero à esquerda)', async () => {
+    for (const id of ['novo', 'osm-x123', 'osm-n', 'osm-n12a', 'mangai-natal', 'osm-N123', 'xosm-n123', 'osm-n0', 'osm-n0123']) {
+      await assertFails(setDoc(doc(alice(), 'places/' + id), newPlace()));
+    }
+  });
+
+  it('zero à esquerda é negado mesmo com osmId coerente (seria duplicata de osm-n123)', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n0123'), newPlace({ osmId: 'node/0123' })));
+  });
+
+  it('osmId precisa casar com o id', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ osmId: 'node/124' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ osmId: 'way/123' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-w123'), newPlace({ osmId: 'node/123' })));
+  });
+
+  it('coordenadas fora do Brasil ou não numéricas são negadas', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: 38.7223, lng: -9.1393 }))); // Lisboa
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: -34.9, lng: -56.16 }))); // Montevidéu
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: 6, lng: -60 })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: -10, lng: -75 })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: '-23.5', lng: -46.6 })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: null })));
+  });
+
+  it('chave extra ou faltando é negada', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ photoUrl: 'https://x/y.jpg' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ updatedAt: serverTimestamp() })));
+    // Campos de busca não são do cliente.
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ searchTokens: ['ba', 'bar'] })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ nameLower: 'bar do ze' })));
+    const { address: _a, ...missing } = newPlace();
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), missing));
+  });
+
+  it('nome: 1–120 caracteres, aparado', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ name: '' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ name: ' Bar ' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ name: 'x'.repeat(121) })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ name: 42 })));
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ name: 'x'.repeat(120) })));
+  });
+
+  it('categoria precisa ser do vocabulário', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ category: 'Local' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ category: 'Boate' })));
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ category: 'Praça de alimentação' })));
+  });
+
+  it('geohash: 9 caracteres base32', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: '6gyf4bf8' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: '6gyf4bf8ma' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: '6gyf4bf8a' }))); // "a" não é base32
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: 123456789 })));
+  });
+
+  it('source "osm", createdBy = uid e createdAt do servidor', async () => {
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ source: 'curated' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ createdBy: 'bob' })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ createdAt: Timestamp.now() })));
+  });
+
+  it('corrida: create num doc que já existe vira update e é negado (o app segue)', async () => {
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace()));
+    await assertFails(setDoc(doc(bob(), 'places/osm-n123'), newPlace({ createdBy: 'bob' })));
+    const snap = await assertSucceeds(getDoc(doc(bob(), 'places/osm-n123')));
+    if (snap.data().createdBy !== 'alice') throw new Error('o doc da 1ª criação deveria ficar');
+  });
+
+  it('update e delete do local criado são negados (inclusive ao criador)', async () => {
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace()));
+    await assertFails(updateDoc(doc(alice(), 'places/osm-n123'), { name: 'Outro' }));
+    await assertFails(deleteDoc(doc(alice(), 'places/osm-n123')));
+  });
+
+  it('avaliação e local novo no mesmo batch', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace());
+    batch.set(doc(db, 'reviews/nova'), validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    batch.set(doc(db, lockPath('alice', 'osm-n123')), validLock('nova', { placeId: 'osm-n123' }));
+    await assertSucceeds(batch.commit());
+  });
+
+  it('avaliação de local inexistente continua negada', async () => {
+    await assertFails(setDoc(doc(alice(), 'reviews/nova'), validReview({ placeId: 'osm-n999', placeName: 'Bar do Zé' })));
+  });
+
+  it('batch com local forjado derruba a avaliação junto', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace({ lat: 38.7, lng: -9.1 }));
+    batch.set(doc(db, 'reviews/nova'), validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    batch.set(doc(db, lockPath('alice', 'osm-n123')), validLock('nova', { placeId: 'osm-n123' }));
+    await assertFails(batch.commit());
+  });
+
+  it('salvar no Quero ir depois de criar o local', async () => {
+    await assertFails(setDoc(doc(alice(), 'users/alice/saved/osm-n123'), { createdAt: serverTimestamp() }));
+    await assertSucceeds(setDoc(doc(alice(), 'places/osm-n123'), newPlace()));
+    await assertSucceeds(setDoc(doc(alice(), 'users/alice/saved/osm-n123'), { createdAt: serverTimestamp() }));
   });
 });
 
@@ -441,147 +642,181 @@ describe('reviews', () => {
   });
 
   it('cria avaliação válida', async () => {
-    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview()));
+    await assertSucceeds(freshReview(alice(), validReview()));
   });
 
   it('cria avaliação válida sem companhia (null)', async () => {
-    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ companion: null })));
+    await assertSucceeds(freshReview(alice(), validReview({ companion: null })));
   });
 
   it('anônimo não avalia', async () => {
-    await assertFails(addDoc(collection(anon(), 'reviews'), validReview()));
+    await assertFails(freshReview(anon(), validReview()));
   });
 
   it('não forja authorId de outro uid', async () => {
-    await assertFails(addDoc(collection(bob(), 'reviews'), validReview()));
+    await assertFails(freshReview(bob(), validReview()));
   });
 
   it('authorName precisa ser o nome do perfil', async () => {
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ authorName: 'Outra Pessoa' })));
+    await assertFails(freshReview(alice(), validReview({ authorName: 'Outra Pessoa' })));
   });
 
   it('usuário sem perfil não avalia', async () => {
     const db = env.authenticatedContext('ghost').firestore();
-    await assertFails(addDoc(collection(db, 'reviews'), validReview({ authorId: 'ghost', authorName: 'Ghost' })));
+    await assertFails(freshReview(db, validReview({ authorId: 'ghost', authorName: 'Ghost' })));
   });
 
   for (const axis of ['food', 'ambience', 'service']) {
     it(axis + ': rejeita 0, 6, decimal e string', async () => {
-      await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ [axis]: 0 })));
-      await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ [axis]: 6 })));
-      await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ [axis]: 3.5 })));
-      await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ [axis]: '3' })));
+      await assertFails(freshReview(alice(), validReview({ [axis]: 0 })));
+      await assertFails(freshReview(alice(), validReview({ [axis]: 6 })));
+      await assertFails(freshReview(alice(), validReview({ [axis]: 3.5 })));
+      await assertFails(freshReview(alice(), validReview({ [axis]: '3' })));
     });
 
     it(axis + ': rejeita 4.5 e "5" (F14)', async () => {
-      await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ [axis]: 4.5 })));
-      await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ [axis]: '5' })));
+      await assertFails(freshReview(alice(), validReview({ [axis]: 4.5 })));
+      await assertFails(freshReview(alice(), validReview({ [axis]: '5' })));
     });
 
     it(axis + ': chave obrigatória, mesmo quando não avaliado (null)', async () => {
       const data = validReview();
       delete data[axis];
-      await assertFails(addDoc(collection(alice(), 'reviews'), data));
+      await assertFails(freshReview(alice(), data));
     });
 
     it(axis + ': opcional (null) quando outro eixo foi avaliado (F14)', async () => {
-      await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ [axis]: null })));
+      await assertSucceeds(freshReview(alice(), validReview({ [axis]: null })));
     });
 
     it(axis + ': avaliação só com este eixo é válida (F14)', async () => {
       const only = { food: null, ambience: null, service: null, [axis]: 4 };
-      await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview(only)));
+      await assertSucceeds(freshReview(alice(), validReview(only)));
     });
   }
 
   it('os 3 eixos null é negado (mínimo 1 eixo; F14)', async () => {
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ food: null, ambience: null, service: null })));
+    await assertFails(freshReview(alice(), validReview({ food: null, ambience: null, service: null })));
   });
 
   it('eixo inválido não passa só porque outro é null (F14)', async () => {
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ food: null, ambience: 6, service: 3 })));
+    await assertFails(freshReview(alice(), validReview({ food: null, ambience: 6, service: 3 })));
   });
 
   it('eixo ausente não vira zero: 0 com os outros null é negado (F14)', async () => {
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ food: 0, ambience: null, service: null })));
+    await assertFails(freshReview(alice(), validReview({ food: 0, ambience: null, service: null })));
   });
 
   it('aceita as fronteiras 1 e 5', async () => {
-    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ food: 1, ambience: 5, service: 1 })));
+    await assertSucceeds(freshReview(alice(), validReview({ food: 1, ambience: 5, service: 1 })));
   });
 
   it('createdAt precisa ser do servidor', async () => {
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ createdAt: Timestamp.fromMillis(0) })));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ createdAt: Timestamp.now() })));
+    await assertFails(freshReview(alice(), validReview({ createdAt: Timestamp.fromMillis(0) })));
+    await assertFails(freshReview(alice(), validReview({ createdAt: Timestamp.now() })));
   });
 
   it('não aceita campo extra (ex.: nota agregada, período, texto fora de comment)', async () => {
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ overall: 5 })));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ dayPeriod: 'noite' })));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ text: 'top' })));
+    await assertFails(freshReview(alice(), validReview({ overall: 5 })));
+    await assertFails(freshReview(alice(), validReview({ dayPeriod: 'noite' })));
+    await assertFails(freshReview(alice(), validReview({ text: 'top' })));
   });
 
   it('companion fora da lista é negado', async () => {
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ companion: 'pet' })));
+    await assertFails(freshReview(alice(), validReview({ companion: 'pet' })));
   });
 
   it('companion é chave obrigatória (null quando não informado)', async () => {
     const data = validReview();
     delete data.companion;
-    await assertFails(addDoc(collection(alice(), 'reviews'), data));
+    await assertFails(freshReview(alice(), data));
   });
 
   it('comment null é aceito (comentário é opcional)', async () => {
-    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ comment: null })));
+    await assertSucceeds(freshReview(alice(), validReview({ comment: null })));
   });
 
   it('comment de 1 a 280 caracteres é aceito', async () => {
-    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'a' })));
-    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'Camarão top, fila grande.' })));
-    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'x'.repeat(280) })));
+    await assertSucceeds(freshReview(alice(), validReview({ comment: 'a' })));
+    await assertSucceeds(freshReview(alice(), validReview({ comment: 'Camarão top, fila grande.' })));
+    await assertSucceeds(freshReview(alice(), validReview({ comment: 'x'.repeat(280) })));
     // size() conta unidades UTF-16 (igual a String.length no Dart): acento = 1.
-    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'ã'.repeat(280) })));
+    await assertSucceeds(freshReview(alice(), validReview({ comment: 'ã'.repeat(280) })));
   });
 
   it('comment vazio, acima de 280 ou não-string é negado', async () => {
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: '' })));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'x'.repeat(281) })));
+    await assertFails(freshReview(alice(), validReview({ comment: '' })));
+    await assertFails(freshReview(alice(), validReview({ comment: 'x'.repeat(281) })));
     // emoji fora do BMP = 2 unidades UTF-16: 141 emojis = 282.
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: '😀'.repeat(141) })));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: 42 })));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: true })));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: ['a'] })));
+    await assertFails(freshReview(alice(), validReview({ comment: '😀'.repeat(141) })));
+    await assertFails(freshReview(alice(), validReview({ comment: 42 })));
+    await assertFails(freshReview(alice(), validReview({ comment: true })));
+    await assertFails(freshReview(alice(), validReview({ comment: ['a'] })));
   });
 
   it('comment é chave obrigatória (null quando não informado): chaves permitidas = 11', async () => {
     const data = validReview();
     delete data.comment;
-    await assertFails(addDoc(collection(alice(), 'reviews'), data));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ comment: 'ok', extra: 1 })));
+    await assertFails(freshReview(alice(), data));
+    await assertFails(freshReview(alice(), validReview({ comment: 'ok', extra: 1 })));
   });
 
   it('janela de transição: review sem a chave hasPhoto continua aceita (= false)', async () => {
     const data = validReview();
     delete data.hasPhoto;
-    await assertSucceeds(addDoc(collection(alice(), 'reviews'), data));
+    await assertSucceeds(freshReview(alice(), data));
     // ...e não leva foto: a foto exige hasPhoto true na review.
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'reviews/semchave'), data);
     batch.set(doc(db, 'reviewPhotos/semchave'), validPhoto());
+    batch.set(doc(db, lockPath('alice', 'camaroes')), validLock('semchave'));
     await assertFails(batch.commit());
   });
 
   it('hasPhoto, quando presente, é booleano', async () => {
-    await assertSucceeds(addDoc(collection(alice(), 'reviews'), validReview({ hasPhoto: false })));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ hasPhoto: null })));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ hasPhoto: 'true' })));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ hasPhoto: 1 })));
+    await assertFails(freshReview(alice(), validReview({ hasPhoto: null })));
+    await assertFails(freshReview(alice(), validReview({ hasPhoto: 'true' })));
+    await assertFails(freshReview(alice(), validReview({ hasPhoto: 1 })));
+    await assertSucceeds(freshReview(alice(), validReview({ hasPhoto: false })));
   });
 
   it('hasPhoto: true sem a foto no mesmo batch é negado', async () => {
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ hasPhoto: true })));
+    await assertFails(freshReview(alice(), validReview({ hasPhoto: true })));
     await assertFails(reviewWithPhotoBatch(alice(), { withPhoto: false }));
+  });
+
+  // ---------- F27: faixa de preço por pessoa (opcional) ----------
+  it('priceBand: 1 a 5 e null são aceitos (F27)', async () => {
+    for (const band of [1, 2, 3, 4, 5, null]) {
+      await assertSucceeds(freshReview(alice(), validReview({ priceBand: band })));
+    }
+  });
+
+  it('priceBand: build antigo sem a chave continua aceito (F27)', async () => {
+    const data = validReview();
+    delete data.priceBand;
+    if ('priceBand' in data) throw new Error('a chave deveria estar ausente');
+    await assertSucceeds(freshReview(alice(), data));
+    let snap;
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      snap = await getDocs(query(collection(ctx.firestore(), 'reviews'), where('authorId', '==', 'alice')));
+    });
+    const gravadas = snap.docs.filter((d) => d.id !== 'existing');
+    if (gravadas.length !== 1 || 'priceBand' in gravadas[0].data()) {
+      throw new Error('esperava 1 review gravada sem priceBand');
+    }
+  });
+
+  it('priceBand com foto: review + foto + faixa no mesmo batch (F27)', async () => {
+    await assertSucceeds(reviewWithPhotoBatch(alice(), { review: { priceBand: 3 } }));
+    await assertFails(reviewWithPhotoBatch(alice(), { id: 'outra', review: { priceBand: 6 } }));
+  });
+
+  it('priceBand: forja 0, 6, "2", 2.5, true, -1 é negada (F27)', async () => {
+    for (const band of [0, 6, '2', 2.5, true, -1, [2]]) {
+      await assertFails(freshReview(alice(), validReview({ priceBand: band })));
+    }
   });
 
   it('comentário é imutável como a avaliação (nem o autor edita)', async () => {
@@ -589,8 +824,8 @@ describe('reviews', () => {
   });
 
   it('local precisa existir e placeName bater com o local', async () => {
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ placeId: 'inexistente' })));
-    await assertFails(addDoc(collection(alice(), 'reviews'), validReview({ placeName: 'Outro nome' })));
+    await assertFails(freshReview(alice(), validReview({ placeId: 'inexistente' })));
+    await assertFails(freshReview(alice(), validReview({ placeName: 'Outro nome' })));
   });
 
   it('logado lê avaliações; anônimo não', async () => {
@@ -635,8 +870,8 @@ describe('reviewPhotos/{reviewId}', () => {
   });
 
   it('aceita exatamente 150.000 bytes; 150.001 é negado', async () => {
-    await assertSucceeds(reviewWithPhotoBatch(alice(), { id: 'limite', photo: { jpeg: jpegBytes(150000) } }));
     await assertFails(reviewWithPhotoBatch(alice(), { id: 'grande', photo: { jpeg: jpegBytes(150001) } }));
+    await assertSucceeds(reviewWithPhotoBatch(alice(), { id: 'limite', photo: { jpeg: jpegBytes(150000) } }));
   });
 
   it('foto sem review no mesmo batch é negada', async () => {
@@ -692,6 +927,7 @@ describe('reviewPhotos/{reviewId}', () => {
     const batch = writeBatch(db);
     batch.set(doc(db, 'reviews/y'), validReview({ hasPhoto: true }));
     batch.set(doc(db, 'reviewPhotos/y'), semAutor);
+    batch.set(doc(db, lockPath('alice', 'camaroes')), validLock('y'));
     await assertFails(batch.commit());
     await assertFails(reviewWithPhotoBatch(alice(), { id: 'z', photo: { createdAt: Timestamp.now() } }));
   });
@@ -724,5 +960,778 @@ describe('reviewPhotos/{reviewId}', () => {
     });
     await assertSucceeds(getDoc(doc(bob(), 'reviewPhotos/existing')));
     await assertFails(getDoc(doc(anon(), 'reviewPhotos/existing')));
+  });
+});
+
+describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', () => {
+  const lockRef = (db, uid = 'alice', placeId = 'camaroes') => doc(db, lockPath(uid, placeId));
+
+  async function seedPlace(id, name) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'places/' + id), { name, category: 'Restaurante' });
+    });
+  }
+
+  /// Avaliação gravada sem Rules (para forjar referências).
+  async function seedReview(id, overrides = {}) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'reviews/' + id), {
+        ...validReview(overrides),
+        createdAt: Timestamp.now(),
+      });
+    });
+  }
+
+  // Cada teste parte sem travas (o beforeEach global já limpa o banco; isto
+  // deixa explícito que nenhum teste depende de outro).
+  beforeEach(unlockAll);
+
+  it('1ª avaliação: review + trava no mesmo batch', async () => {
+    await assertSucceeds(addReview(alice(), validReview(), { id: 'primeira' }));
+    const snap = await assertSucceeds(getDoc(lockRef(alice())));
+    const d = snap.data();
+    if (d.reviewId !== 'primeira' || d.placeId !== 'camaroes' || !(d.lastAt instanceof Timestamp)) {
+      throw new Error('trava inesperada: ' + JSON.stringify(d));
+    }
+  });
+
+  it('avaliação legada (sem trava) não bloqueia a 1ª avaliação nova', async () => {
+    // beforeEach global: reviews/existing de Alice no Camarões, sem trava.
+    await assertSucceeds(addReview(alice(), validReview()));
+  });
+
+  it('mesmo dia: 2ª avaliação negada', async () => {
+    await assertSucceeds(addReview(alice(), validReview(), { id: 'hoje1' }));
+    await assertFails(addReview(alice(), validReview(), { id: 'hoje2' }));
+  });
+
+  it('há 10 dias e há 29,9 dias: negada', async () => {
+    await seedLock('alice', 'camaroes', 10);
+    await assertFails(addReview(alice(), validReview()));
+    await seedLock('alice', 'camaroes', 29.9);
+    await assertFails(addReview(alice(), validReview()));
+  });
+
+  it('após 30 dias: avaliação aceita e trava renovada', async () => {
+    await seedLock('alice', 'camaroes', 31);
+    await assertSucceeds(addReview(alice(), validReview(), { id: 'depois' }));
+    const snap = await getDoc(lockRef(alice()));
+    if (snap.data().reviewId !== 'depois') throw new Error('trava não renovada');
+    const age = Date.now() - snap.data().lastAt.toMillis();
+    if (age > 60 * 1000) throw new Error('lastAt não é a hora do servidor');
+  });
+
+  it('a trava é por local: outro local segue livre', async () => {
+    await seedPlace('mangai', 'Mangai');
+    await seedLock('alice', 'camaroes', 1);
+    await assertSucceeds(addReview(alice(), validReview({ placeId: 'mangai', placeName: 'Mangai' })));
+  });
+
+  it('a trava é por usuário: outra pessoa avalia o mesmo local', async () => {
+    await seedLock('alice', 'camaroes', 1);
+    await assertSucceeds(addReview(bob(), validReview({ authorId: 'bob', authorName: 'Bob' })));
+  });
+
+  it('batch máximo (local novo + foto + trava + review) cabe no limite de acessos', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace());
+    batch.set(doc(db, 'reviews/max'), validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé', hasPhoto: true }));
+    batch.set(doc(db, 'reviewPhotos/max'), validPhoto());
+    batch.set(doc(db, lockPath('alice', 'osm-n123')), validLock('max', { placeId: 'osm-n123' }));
+    await assertSucceeds(batch.commit());
+  });
+
+  it('forja: review sem trava no batch é negada', async () => {
+    await assertFails(addReview(alice(), validReview(), { lock: false }));
+    await assertFails(addDoc(collection(alice(), 'reviews'), validReview()));
+  });
+
+  it('forja: trava sem review (ou apontando para review já existente) é negada', async () => {
+    await assertFails(setDoc(lockRef(alice()), validLock('fantasma')));
+    await assertFails(setDoc(lockRef(alice()), validLock('existing')));
+  });
+
+  it('forja: trava apontando para outra review do batch é negada', async () => {
+    await assertFails(addReview(alice(), validReview(), { id: 'a1', lock: { reviewId: 'outra' } }));
+  });
+
+  it('forja: trava de outro uid é negada', async () => {
+    // Alice avalia, mas grava a trava na conta de Bob.
+    await assertFails(addReview(alice(), validReview(), { lockAt: lockPath('bob', 'camaroes') }));
+    // Bob tenta travar Alice com uma review dele.
+    await assertFails(addReview(bob(), validReview({ authorId: 'bob', authorName: 'Bob' }), { lockAt: lockPath('alice', 'camaroes') }));
+  });
+
+  it('forja: placeId da trava diferente do da review (ou do id da trava) é negado', async () => {
+    await seedPlace('mangai', 'Mangai');
+    await assertFails(addReview(alice(), validReview(), { lock: { placeId: 'mangai' }, lockAt: lockPath('alice', 'mangai') }));
+    await assertFails(addReview(alice(), validReview(), { lock: { placeId: 'mangai' } }));
+  });
+
+  it('forja: review de local inexistente com trava válida é negada', async () => {
+    await assertFails(addReview(alice(), validReview({ placeId: 'inexistente', placeName: 'X' })));
+  });
+
+  it('forja: lastAt do cliente é negado', async () => {
+    await assertFails(addReview(alice(), validReview(), { lock: { lastAt: Timestamp.now() } }));
+    await assertFails(addReview(alice(), validReview(), { lock: { lastAt: Timestamp.fromMillis(0) } }));
+  });
+
+  it('forja: lastAt do cliente sobre trava vencida também é negado', async () => {
+    await seedLock('alice', 'camaroes', 40);
+    await assertFails(addReview(alice(), validReview(), { lock: { lastAt: Timestamp.fromMillis(0) } }));
+  });
+
+  it('forja: chave extra ou faltando é negada', async () => {
+    await assertFails(addReview(alice(), validReview(), { lock: { count: 1 } }));
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'reviews/x'), validReview());
+    batch.set(lockRef(db), { lastAt: serverTimestamp(), reviewId: 'x' });
+    await assertFails(batch.commit());
+  });
+
+  it('forja: renovar a trava sem esperar 30 dias, nem via update parcial', async () => {
+    await seedLock('alice', 'camaroes', 10);
+    await assertFails(updateDoc(lockRef(alice()), { lastAt: Timestamp.fromMillis(0) }));
+    await assertFails(updateDoc(lockRef(alice()), { lastAt: serverTimestamp() }));
+  });
+
+  it('forja: renovar trava vencida apontando para review de outro autor é negado', async () => {
+    await seedLock('alice', 'camaroes', 40);
+    // Review "de Bob" criada por Alice no mesmo batch.
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'reviews/debob'), validReview({ authorId: 'bob', authorName: 'Bob' }));
+    batch.set(lockRef(db), validLock('debob'));
+    await assertFails(batch.commit());
+    // Review de Bob que já existe.
+    await seedReview('bobantiga', { authorId: 'bob', authorName: 'Bob' });
+    await assertFails(setDoc(lockRef(alice()), validLock('bobantiga')));
+  });
+
+  it('ninguém apaga a trava (nem o dono, nem vencida)', async () => {
+    await seedLock('alice', 'camaroes', 10);
+    await assertFails(deleteDoc(lockRef(alice())));
+    await assertFails(deleteDoc(lockRef(bob())));
+    await seedLock('alice', 'camaroes', 40);
+    await assertFails(deleteDoc(lockRef(alice())));
+  });
+
+  it('só o dono lê a trava (inclusive a ausente); terceiro e anônimo não', async () => {
+    await assertSucceeds(getDoc(lockRef(alice()))); // ainda não existe
+    await seedLock('alice', 'camaroes', 10);
+    await assertSucceeds(getDoc(lockRef(alice())));
+    await assertSucceeds(getDocs(collection(alice(), 'users/alice/reviewLocks')));
+    await assertFails(getDoc(lockRef(bob())));
+    await assertFails(getDoc(lockRef(anon())));
+    await assertFails(getDocs(collection(bob(), 'users/alice/reviewLocks')));
+  });
+
+  it('corrida: dois envios simultâneos do mesmo cliente, só um passa', async () => {
+    const db = alice();
+    const results = await Promise.allSettled([
+      addReview(db, validReview(), { id: 'c1' }),
+      addReview(db, validReview(), { id: 'c2' }),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    if (ok !== 1) throw new Error('esperava 1 sucesso, vieram ' + ok);
+  });
+
+  it('corrida: dois aparelhos do MESMO usuário (contextos separados), só um passa', async () => {
+    const phone = env.authenticatedContext('alice').firestore();
+    const tablet = env.authenticatedContext('alice').firestore();
+    if (phone === tablet) throw new Error('os contextos deveriam ser clientes distintos');
+    const results = await Promise.allSettled([
+      addReview(phone, validReview(), { id: 'cel' }),
+      addReview(tablet, validReview(), { id: 'tab' }),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    if (ok !== 1) throw new Error('esperava 1 sucesso, vieram ' + ok);
+    let count = 0;
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDocs(query(collection(ctx.firestore(), 'reviews'), where('placeId', '==', 'camaroes')));
+      count = snap.size;
+    });
+    // reviews/existing (legada) + 1 nova.
+    if (count !== 2) throw new Error('esperava 2 reviews, vieram ' + count);
+  });
+
+  it('a review com foto também exige a trava', async () => {
+    await assertFails(reviewWithPhotoBatch(alice(), { withLock: false }));
+    await assertSucceeds(reviewWithPhotoBatch(alice()));
+  });
+});
+
+// ---------- F15: "Voltei aqui" (visitas) ----------
+
+const visitLockPath = (uid, placeId) => 'users/' + uid + '/visitLocks/' + placeId;
+
+/// Visita como o app grava: sem notas, companhia opcional, createdAt do
+/// servidor.
+function validVisit(overrides = {}) {
+  return {
+    authorId: 'alice',
+    authorName: 'Alice',
+    placeId: 'camaroes',
+    placeName: 'Camarões Potiguar',
+    companion: 'amigos',
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+function validVisitLock(visitId, overrides = {}) {
+  return {
+    lastAt: serverTimestamp(),
+    visitId,
+    placeId: 'camaroes',
+    ...overrides,
+  };
+}
+
+let visitSeq = 0;
+
+/// Visita + trava num único batch. `lock: false` omite a trava; `lock: {...}`
+/// sobrescreve campos; `lockAt` troca o caminho da trava.
+function addVisit(db, data, { id, lock = {}, lockAt } = {}) {
+  const visitId = id || 'v' + (++visitSeq);
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'visits/' + visitId), data);
+  if (lock !== false) {
+    const placeId = typeof data.placeId === 'string' ? data.placeId : 'camaroes';
+    batch.set(
+      doc(db, lockAt || visitLockPath(data.authorId, placeId)),
+      validVisitLock(visitId, { placeId, ...lock }),
+    );
+  }
+  return batch.commit();
+}
+
+/// Trava de visita semeada sem Rules, com a última visita há [hoursAgo] horas.
+async function seedVisitLock(uid, placeId, hoursAgo, visitId = 'antiga') {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), visitLockPath(uid, placeId)), {
+      lastAt: Timestamp.fromMillis(Date.now() - hoursAgo * 60 * 60 * 1000),
+      visitId,
+      placeId,
+    });
+  });
+}
+
+async function seedVisit(id, overrides = {}) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'visits/' + id), {
+      ...validVisit(overrides),
+      createdAt: Timestamp.now(),
+    });
+  });
+}
+
+describe('visits + users/{uid}/visitLocks (F15: "Voltei aqui", 12 h)', () => {
+  const lockRef = (db, uid = 'alice', placeId = 'camaroes') => doc(db, visitLockPath(uid, placeId));
+
+  it('registra visita: visita + trava no mesmo batch', async () => {
+    await assertSucceeds(addVisit(alice(), validVisit(), { id: 'primeira' }));
+    const snap = await assertSucceeds(getDoc(lockRef(alice())));
+    const d = snap.data();
+    if (d.visitId !== 'primeira' || d.placeId !== 'camaroes' || !(d.lastAt instanceof Timestamp)) {
+      throw new Error('trava inesperada: ' + JSON.stringify(d));
+    }
+  });
+
+  it('companhia é opcional (null), mas a chave é obrigatória e do vocabulário', async () => {
+    await assertSucceeds(addVisit(alice(), validVisit({ companion: null })));
+    await seedVisitLock('alice', 'camaroes', 13);
+    await assertFails(addVisit(alice(), validVisit({ companion: 'pet' })));
+    const semChave = validVisit();
+    delete semChave.companion;
+    await assertFails(addVisit(alice(), semChave));
+  });
+
+  it('visita e avaliação têm travas separadas (bloqueio do F03 não impede visitar)', async () => {
+    await seedLock('alice', 'camaroes', 1);
+    await assertSucceeds(addVisit(alice(), validVisit()));
+    await unlockAll();
+    await assertSucceeds(addReview(alice(), validReview()));
+  });
+
+  it('há 3 h e há 11,9 h: negada', async () => {
+    await seedVisitLock('alice', 'camaroes', 3);
+    await assertFails(addVisit(alice(), validVisit()));
+    await seedVisitLock('alice', 'camaroes', 11.9);
+    await assertFails(addVisit(alice(), validVisit()));
+  });
+
+  it('mesma hora: 2ª visita negada', async () => {
+    await assertSucceeds(addVisit(alice(), validVisit(), { id: 'agora1' }));
+    await assertFails(addVisit(alice(), validVisit(), { id: 'agora2' }));
+  });
+
+  it('após 12 h: visita aceita e trava renovada', async () => {
+    await seedVisitLock('alice', 'camaroes', 12.1);
+    await assertSucceeds(addVisit(alice(), validVisit(), { id: 'depois' }));
+    const snap = await getDoc(lockRef(alice()));
+    if (snap.data().visitId !== 'depois') throw new Error('trava não renovada');
+    if (Date.now() - snap.data().lastAt.toMillis() > 60 * 1000) {
+      throw new Error('lastAt não é a hora do servidor');
+    }
+  });
+
+  it('a trava é por local e por usuário', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'places/mangai'), { name: 'Mangai', category: 'Restaurante' });
+    });
+    await seedVisitLock('alice', 'camaroes', 1);
+    await assertSucceeds(addVisit(alice(), validVisit({ placeId: 'mangai', placeName: 'Mangai' })));
+    await assertSucceeds(addVisit(bob(), validVisit({ authorId: 'bob', authorName: 'Bob' })));
+  });
+
+  it('local descoberto (Photon) é criado no batch da visita', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace());
+    batch.set(doc(db, 'visits/nova'), validVisit({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    batch.set(doc(db, visitLockPath('alice', 'osm-n123')), validVisitLock('nova', { placeId: 'osm-n123' }));
+    await assertSucceeds(batch.commit());
+  });
+
+  it('local inexistente, forjado ou placeName divergente: negado', async () => {
+    await assertFails(addVisit(alice(), validVisit({ placeId: 'osm-n999', placeName: 'Bar do Zé' })));
+    await assertFails(addVisit(alice(), validVisit({ placeName: 'Outro nome' })));
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace({ lat: 38.7, lng: -9.1 }));
+    batch.set(doc(db, 'visits/nova'), validVisit({ placeId: 'osm-n123', placeName: 'Bar do Zé' }));
+    batch.set(doc(db, visitLockPath('alice', 'osm-n123')), validVisitLock('nova', { placeId: 'osm-n123' }));
+    await assertFails(batch.commit());
+  });
+
+  it('forja: anônimo, authorId de outro ou sem perfil', async () => {
+    await assertFails(addVisit(anon(), validVisit()));
+    await assertFails(addVisit(bob(), validVisit()));
+    const ghost = env.authenticatedContext('ghost').firestore();
+    await assertFails(addVisit(ghost, validVisit({ authorId: 'ghost', authorName: 'Ghost' })));
+  });
+
+  it('forja: authorName diferente do perfil (nunca anônima)', async () => {
+    await assertFails(addVisit(alice(), validVisit({ authorName: 'Outra Pessoa' })));
+    await assertFails(addVisit(alice(), validVisit({ authorName: '' })));
+    await assertFails(addVisit(alice(), validVisit({ authorName: null })));
+  });
+
+  it('forja: chave extra (notas, comentário) ou faltando', async () => {
+    await assertFails(addVisit(alice(), validVisit({ food: 5 })));
+    await assertFails(addVisit(alice(), validVisit({ comment: 'top' })));
+    await assertFails(addVisit(alice(), validVisit({ dayPeriod: 'noite' })));
+    const semNome = validVisit();
+    delete semNome.placeName;
+    await assertFails(addVisit(alice(), semNome));
+  });
+
+  it('forja: createdAt do cliente', async () => {
+    await assertFails(addVisit(alice(), validVisit({ createdAt: Timestamp.now() })));
+    await assertFails(addVisit(alice(), validVisit({ createdAt: Timestamp.fromMillis(0) })));
+  });
+
+  it('forja: visita sem trava no batch', async () => {
+    await assertFails(addVisit(alice(), validVisit(), { lock: false }));
+    await assertFails(addDoc(collection(alice(), 'visits'), validVisit()));
+  });
+
+  it('forja: trava de outro uid', async () => {
+    await assertFails(addVisit(alice(), validVisit(), { lockAt: visitLockPath('bob', 'camaroes') }));
+    await assertFails(addVisit(bob(), validVisit({ authorId: 'bob', authorName: 'Bob' }), { lockAt: visitLockPath('alice', 'camaroes') }));
+  });
+
+  it('forja: trava sem visita, para visita existente ou para outra visita', async () => {
+    await assertFails(setDoc(lockRef(alice()), validVisitLock('fantasma')));
+    await seedVisit('existente');
+    await assertFails(setDoc(lockRef(alice()), validVisitLock('existente')));
+    await assertFails(addVisit(alice(), validVisit(), { id: 'v-a', lock: { visitId: 'outra' } }));
+  });
+
+  it('forja: trava de avaliação não serve para a visita (nem o contrário)', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'visits/x'), validVisit());
+    batch.set(doc(db, lockPath('alice', 'camaroes')), validLock('x'));
+    await assertFails(batch.commit());
+    const batch2 = writeBatch(db);
+    batch2.set(doc(db, 'reviews/y'), validReview());
+    batch2.set(lockRef(db), validVisitLock('y'));
+    await assertFails(batch2.commit());
+  });
+
+  it('forja: lastAt do cliente, placeId divergente ou chave extra na trava', async () => {
+    await assertFails(addVisit(alice(), validVisit(), { lock: { lastAt: Timestamp.now() } }));
+    await seedVisitLock('alice', 'camaroes', 20);
+    await assertFails(addVisit(alice(), validVisit(), { lock: { lastAt: Timestamp.fromMillis(0) } }));
+    await assertFails(addVisit(alice(), validVisit(), { lock: { placeId: 'mangai' } }));
+    await assertFails(addVisit(alice(), validVisit(), { lock: { count: 1 } }));
+  });
+
+  it('forja: renovar a trava sem esperar 12 h, nem via update parcial', async () => {
+    await seedVisitLock('alice', 'camaroes', 3);
+    await assertFails(updateDoc(lockRef(alice()), { lastAt: Timestamp.fromMillis(0) }));
+    await assertFails(updateDoc(lockRef(alice()), { lastAt: serverTimestamp() }));
+  });
+
+  it('forja: update/delete da visita (nem o autor) e da trava', async () => {
+    await seedVisit('existente');
+    await assertFails(updateDoc(doc(alice(), 'visits/existente'), { companion: 'casal' }));
+    await assertFails(setDoc(doc(alice(), 'visits/existente'), validVisit()));
+    await assertFails(deleteDoc(doc(alice(), 'visits/existente')));
+    await assertFails(deleteDoc(doc(bob(), 'visits/existente')));
+    await seedVisitLock('alice', 'camaroes', 3);
+    await assertFails(deleteDoc(lockRef(alice())));
+    await seedVisitLock('alice', 'camaroes', 20);
+    await assertFails(deleteDoc(lockRef(alice())));
+  });
+
+  it('logado lê visitas (consultas do feed e do detalhe); anônimo não', async () => {
+    await seedVisit('existente');
+    await assertSucceeds(getDoc(doc(bob(), 'visits/existente')));
+    await assertFails(getDoc(doc(anon(), 'visits/existente')));
+    const feed = await assertSucceeds(getDocs(query(
+      collection(bob(), 'visits'),
+      where('authorId', 'in', ['alice']),
+      orderBy('createdAt', 'desc'),
+      limit(100),
+    )));
+    if (feed.size !== 1) throw new Error('esperava 1 visita, veio ' + feed.size);
+    const detail = await assertSucceeds(getDocs(query(
+      collection(bob(), 'visits'),
+      where('placeId', '==', 'camaroes'),
+      where('authorId', 'in', ['alice', 'bob']),
+      orderBy('createdAt', 'desc'),
+    )));
+    if (detail.size !== 1) throw new Error('esperava 1 visita, veio ' + detail.size);
+  });
+
+  it('só o dono lê a trava de visita', async () => {
+    await assertSucceeds(getDoc(lockRef(alice())));
+    await seedVisitLock('alice', 'camaroes', 3);
+    await assertSucceeds(getDoc(lockRef(alice())));
+    await assertFails(getDoc(lockRef(bob())));
+    await assertFails(getDoc(lockRef(anon())));
+    await assertFails(getDocs(collection(bob(), 'users/alice/visitLocks')));
+  });
+
+  it('priceBand: 1 a 5 e null são aceitos (F27)', async () => {
+    for (const band of [1, 2, 3, 4, 5, null]) {
+      // Trava vencida (há 13 h): cada asserção vale sozinha.
+      await seedVisitLock('alice', 'camaroes', 13);
+      await assertSucceeds(addVisit(alice(), validVisit({ priceBand: band })));
+    }
+  });
+
+  it('priceBand: build antigo sem a chave continua aceito (F27)', async () => {
+    const data = validVisit();
+    delete data.priceBand;
+    if ('priceBand' in data) throw new Error('a chave deveria estar ausente');
+    await assertSucceeds(addVisit(alice(), data, { id: 'antigo' }));
+    let snap;
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      snap = await getDoc(doc(ctx.firestore(), 'visits/antigo'));
+    });
+    if ('priceBand' in snap.data()) throw new Error('visita gravada com priceBand');
+  });
+
+  it('priceBand válido não abre espaço para chave extra (F27)', async () => {
+    await assertFails(addVisit(alice(), validVisit({ priceBand: 2, food: 5 })));
+    await assertFails(addVisit(alice(), validVisit({ priceBand: 2, price: 45 })));
+    await assertSucceeds(addVisit(alice(), validVisit({ priceBand: 2 })));
+  });
+
+  it('priceBand: forja 0, 6, "2", 2.5, true, -1 é negada (F27)', async () => {
+    for (const band of [0, 6, '2', 2.5, true, -1, [2]]) {
+      await assertFails(addVisit(alice(), validVisit({ priceBand: band })));
+    }
+  });
+
+  it('corrida: dois aparelhos ao mesmo tempo, só um passa', async () => {
+    const phone = env.authenticatedContext('alice').firestore();
+    const tablet = env.authenticatedContext('alice').firestore();
+    const results = await Promise.allSettled([
+      addVisit(phone, validVisit(), { id: 'cel' }),
+      addVisit(tablet, validVisit(), { id: 'tab' }),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    if (ok !== 1) throw new Error('esperava 1 sucesso, vieram ' + ok);
+  });
+});
+
+// ---------- F20: "Está aberto agora?" (openReports) ----------
+
+const openLockPath = (uid, placeId) => 'users/' + uid + '/openReportLocks/' + placeId;
+
+/// Relato como o app grava: autor do perfil, `open` bool, createdAt do
+/// servidor.
+function validOpenReport(overrides = {}) {
+  return {
+    authorId: 'alice',
+    authorName: 'Alice',
+    placeId: 'camaroes',
+    open: true,
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+function validOpenLock(reportId, overrides = {}) {
+  return {
+    lastAt: serverTimestamp(),
+    reportId,
+    placeId: 'camaroes',
+    ...overrides,
+  };
+}
+
+let openSeq = 0;
+
+/// Relato + trava num único batch. `lock: false` omite a trava; `lock: {...}`
+/// sobrescreve campos; `lockAt` troca o caminho da trava.
+function addOpenReport(db, data, { id, lock = {}, lockAt } = {}) {
+  const reportId = id || 'o' + (++openSeq);
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'openReports/' + reportId), data);
+  if (lock !== false) {
+    const placeId = typeof data.placeId === 'string' ? data.placeId : 'camaroes';
+    batch.set(
+      doc(db, lockAt || openLockPath(data.authorId, placeId)),
+      validOpenLock(reportId, { placeId, ...lock }),
+    );
+  }
+  return batch.commit();
+}
+
+/// Trava de relato semeada sem Rules, com o último relato há [minutesAgo].
+async function seedOpenLock(uid, placeId, minutesAgo, reportId = 'antigo') {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), openLockPath(uid, placeId)), {
+      lastAt: Timestamp.fromMillis(Date.now() - minutesAgo * 60 * 1000),
+      reportId,
+      placeId,
+    });
+  });
+}
+
+async function seedOpenReport(id, minutesAgo = 0, overrides = {}) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'openReports/' + id), {
+      ...validOpenReport(overrides),
+      createdAt: Timestamp.fromMillis(Date.now() - minutesAgo * 60 * 1000),
+    });
+  });
+}
+
+describe('openReports + users/{uid}/openReportLocks (F20: "Está aberto agora?", 30 min)', () => {
+  const lockRef = (db, uid = 'alice', placeId = 'camaroes') => doc(db, openLockPath(uid, placeId));
+
+  it('relata "Sim" e "Não": relato + trava no mesmo batch', async () => {
+    await assertSucceeds(addOpenReport(alice(), validOpenReport(), { id: 'primeiro' }));
+    const snap = await assertSucceeds(getDoc(lockRef(alice())));
+    const d = snap.data();
+    if (d.reportId !== 'primeiro' || d.placeId !== 'camaroes' || !(d.lastAt instanceof Timestamp)) {
+      throw new Error('trava inesperada: ' + JSON.stringify(d));
+    }
+    await assertSucceeds(addOpenReport(bob(), validOpenReport({ authorId: 'bob', authorName: 'Bob', open: false })));
+  });
+
+  it('há 10 min e há 29,9 min: negado', async () => {
+    await seedOpenLock('alice', 'camaroes', 10);
+    await assertFails(addOpenReport(alice(), validOpenReport()));
+    await seedOpenLock('alice', 'camaroes', 29.9);
+    await assertFails(addOpenReport(alice(), validOpenReport({ open: false })));
+  });
+
+  it('mesma hora: 2º relato negado', async () => {
+    await assertSucceeds(addOpenReport(alice(), validOpenReport(), { id: 'a1' }));
+    await assertFails(addOpenReport(alice(), validOpenReport({ open: false }), { id: 'a2' }));
+  });
+
+  it('após 30 min: relato aceito e trava renovada', async () => {
+    await seedOpenLock('alice', 'camaroes', 30.5);
+    await assertSucceeds(addOpenReport(alice(), validOpenReport(), { id: 'depois' }));
+    const snap = await getDoc(lockRef(alice()));
+    if (snap.data().reportId !== 'depois') throw new Error('trava não renovada');
+    if (Date.now() - snap.data().lastAt.toMillis() > 60 * 1000) {
+      throw new Error('lastAt não é a hora do servidor');
+    }
+  });
+
+  it('a trava é por local e por usuário, e separada da visita (F15)', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'places/mangai'), { name: 'Mangai', category: 'Restaurante' });
+    });
+    await seedOpenLock('alice', 'camaroes', 1);
+    await assertSucceeds(addOpenReport(alice(), validOpenReport({ placeId: 'mangai' })));
+    await assertSucceeds(addOpenReport(bob(), validOpenReport({ authorId: 'bob', authorName: 'Bob' })));
+    await seedVisitLock('alice', 'mangai', 1);
+    await seedOpenLock('alice', 'mangai', 31);
+    await assertSucceeds(addOpenReport(alice(), validOpenReport({ placeId: 'mangai' })));
+  });
+
+  it('local descoberto (Photon) é criado no batch do relato', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace());
+    batch.set(doc(db, 'openReports/novo'), validOpenReport({ placeId: 'osm-n123' }));
+    batch.set(doc(db, openLockPath('alice', 'osm-n123')), validOpenLock('novo', { placeId: 'osm-n123' }));
+    await assertSucceeds(batch.commit());
+  });
+
+  it('local inexistente ou forjado: negado', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport({ placeId: 'osm-n999' })));
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'places/osm-n123'), newPlace({ lat: 38.7, lng: -9.1 }));
+    batch.set(doc(db, 'openReports/novo'), validOpenReport({ placeId: 'osm-n123' }));
+    batch.set(doc(db, openLockPath('alice', 'osm-n123')), validOpenLock('novo', { placeId: 'osm-n123' }));
+    await assertFails(batch.commit());
+  });
+
+  it('forja: anônimo, outro autor ou sem perfil', async () => {
+    await assertFails(addOpenReport(anon(), validOpenReport()));
+    await assertFails(addOpenReport(bob(), validOpenReport()));
+    await assertFails(addOpenReport(bob(), validOpenReport(), { lockAt: openLockPath('bob', 'camaroes') }));
+    const ghost = env.authenticatedContext('ghost').firestore();
+    await assertFails(addOpenReport(ghost, validOpenReport({ authorId: 'ghost', authorName: 'Ghost' })));
+  });
+
+  it('forja: authorName diferente do perfil (nunca anônimo)', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport({ authorName: 'Outra Pessoa' })));
+    await assertFails(addOpenReport(alice(), validOpenReport({ authorName: '' })));
+    await assertFails(addOpenReport(alice(), validOpenReport({ authorName: null })));
+  });
+
+  it('forja: open não-bool', async () => {
+    for (const open of ['true', 1, 0, null, 'sim', [true], { v: true }]) {
+      await assertFails(addOpenReport(alice(), validOpenReport({ open })));
+    }
+  });
+
+  it('forja: chave extra ou faltando', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport({ queue: 3 })));
+    await assertFails(addOpenReport(alice(), validOpenReport({ placeName: 'Camarões Potiguar' })));
+    await assertFails(addOpenReport(alice(), validOpenReport({ lat: -5.8 })));
+    for (const key of ['authorId', 'authorName', 'placeId', 'open', 'createdAt']) {
+      const data = validOpenReport();
+      delete data[key];
+      await assertFails(addOpenReport(alice(), data));
+    }
+  });
+
+  it('forja: createdAt do cliente', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport({ createdAt: Timestamp.now() })));
+    await assertFails(addOpenReport(alice(), validOpenReport({ createdAt: Timestamp.fromMillis(0) })));
+  });
+
+  it('forja: relato sem trava no batch', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lock: false }));
+    await assertFails(addDoc(collection(alice(), 'openReports'), validOpenReport()));
+  });
+
+  it('forja: trava de outro uid', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lockAt: openLockPath('bob', 'camaroes') }));
+    await assertFails(addOpenReport(bob(), validOpenReport({ authorId: 'bob', authorName: 'Bob' }), { lockAt: openLockPath('alice', 'camaroes') }));
+  });
+
+  it('forja: trava sem relato, para relato existente ou para outro relato', async () => {
+    await assertFails(setDoc(lockRef(alice()), validOpenLock('fantasma')));
+    await seedOpenReport('existente', 40);
+    await assertFails(setDoc(lockRef(alice()), validOpenLock('existente')));
+    await assertFails(addOpenReport(alice(), validOpenReport(), { id: 'o-a', lock: { reportId: 'outro' } }));
+  });
+
+  it('forja: trava de visita não serve para o relato (nem o contrário)', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'openReports/x'), validOpenReport());
+    batch.set(doc(db, visitLockPath('alice', 'camaroes')), validVisitLock('x'));
+    await assertFails(batch.commit());
+    const batch2 = writeBatch(db);
+    batch2.set(doc(db, 'visits/y'), validVisit());
+    batch2.set(lockRef(db), validOpenLock('y'));
+    await assertFails(batch2.commit());
+  });
+
+  it('forja: lastAt do cliente, placeId divergente ou chave extra na trava', async () => {
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lock: { lastAt: Timestamp.now() } }));
+    await seedOpenLock('alice', 'camaroes', 40);
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lock: { lastAt: Timestamp.fromMillis(0) } }));
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lock: { placeId: 'mangai' } }));
+    await assertFails(addOpenReport(alice(), validOpenReport(), { lock: { count: 1 } }));
+  });
+
+  it('forja: renovar a trava sem esperar 30 min, nem via update parcial', async () => {
+    await seedOpenLock('alice', 'camaroes', 10);
+    await assertFails(updateDoc(lockRef(alice()), { lastAt: Timestamp.fromMillis(0) }));
+    await assertFails(updateDoc(lockRef(alice()), { lastAt: serverTimestamp() }));
+  });
+
+  it('forja: update/delete do relato (nem o autor) e da trava', async () => {
+    await seedOpenReport('existente', 5);
+    await assertFails(updateDoc(doc(alice(), 'openReports/existente'), { open: false }));
+    await assertFails(setDoc(doc(alice(), 'openReports/existente'), validOpenReport({ open: false })));
+    await assertFails(deleteDoc(doc(alice(), 'openReports/existente')));
+    await assertFails(deleteDoc(doc(bob(), 'openReports/existente')));
+    await seedOpenLock('alice', 'camaroes', 10);
+    await assertFails(deleteDoc(lockRef(alice())));
+    await seedOpenLock('alice', 'camaroes', 40);
+    await assertFails(deleteDoc(lockRef(alice())));
+  });
+
+  it('logado lê relatos (consultas do detalhe e do Perto); anônimo não', async () => {
+    await seedOpenReport('recente', 20);
+    await seedOpenReport('velho', 200, { authorId: 'bob', authorName: 'Bob', open: false });
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'places/mangai'), { name: 'Mangai', category: 'Restaurante' });
+    });
+    await seedOpenReport('mangai', 5, { placeId: 'mangai', open: false });
+    await assertSucceeds(getDoc(doc(bob(), 'openReports/recente')));
+    await assertFails(getDoc(doc(anon(), 'openReports/recente')));
+    const since = Timestamp.fromMillis(Date.now() - 3 * 60 * 60 * 1000);
+    const detail = await assertSucceeds(getDocs(query(
+      collection(bob(), 'openReports'),
+      where('placeId', '==', 'camaroes'),
+      where('createdAt', '>=', since),
+      orderBy('createdAt', 'desc'),
+      limit(50),
+    )));
+    if (detail.size !== 1 || detail.docs[0].id !== 'recente') {
+      throw new Error('detalhe: esperava só o relato recente, veio ' + detail.size);
+    }
+    const nearby = await assertSucceeds(getDocs(query(
+      collection(bob(), 'openReports'),
+      where('placeId', 'in', ['camaroes', 'mangai']),
+      where('createdAt', '>=', since),
+      orderBy('createdAt', 'desc'),
+      limit(300),
+    )));
+    const ids = nearby.docs.map((d) => d.id).join(',');
+    if (ids !== 'mangai,recente') throw new Error('Perto: veio ' + ids);
+  });
+
+  it('só o dono lê a trava de relato', async () => {
+    await assertSucceeds(getDoc(lockRef(alice())));
+    await seedOpenLock('alice', 'camaroes', 10);
+    await assertSucceeds(getDoc(lockRef(alice())));
+    await assertFails(getDoc(lockRef(bob())));
+    await assertFails(getDoc(lockRef(anon())));
+    await assertFails(getDocs(collection(bob(), 'users/alice/openReportLocks')));
+  });
+
+  it('corrida: dois aparelhos ao mesmo tempo, só um passa', async () => {
+    const phone = env.authenticatedContext('alice').firestore();
+    const tablet = env.authenticatedContext('alice').firestore();
+    const results = await Promise.allSettled([
+      addOpenReport(phone, validOpenReport(), { id: 'cel' }),
+      addOpenReport(tablet, validOpenReport({ open: false }), { id: 'tab' }),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    if (ok !== 1) throw new Error('esperava 1 sucesso, vieram ' + ok);
   });
 });
