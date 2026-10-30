@@ -1,3 +1,5 @@
+import 'package:provider/provider.dart';
+import '../admin/admin_access.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -82,6 +84,7 @@ class _ProfileViewState extends State<ProfileView> {
       listenable: widget.viewModel,
       builder: (context, _) {
         final vm = widget.viewModel;
+        context.watch<AdminAccess?>();
         return Scaffold(
           appBar: AppBar(
             // Aberto por link direto: sem tela anterior, "voltar" vai ao feed.
@@ -91,7 +94,12 @@ class _ProfileViewState extends State<ProfileView> {
               if (vm.isSelf)
                 PopupMenuButton<String>(
                   onSelected: (route) => context.push(route),
-                  itemBuilder: (_) => const [
+                  itemBuilder: (_) => [
+                    if (context.read<AdminAccess?>()?.enabled == true)
+                      const PopupMenuItem(
+                        value: Routes.admin,
+                        child: Text('Administração'),
+                      ),
                     PopupMenuItem(
                       value: '/meus-estabelecimentos',
                       child: Text('Meus estabelecimentos'),

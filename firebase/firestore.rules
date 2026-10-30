@@ -13,6 +13,40 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function isAdmin() {
+      return signedIn() && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+    }
+
+    match /admins/{uid} {
+      allow get: if isOwner(uid);
+      allow list, write: if false;
+    }
+
+    // O match recursivo permite consultas de collectionGroup.
+    match /{path=**}/ownershipRequests/{placeId} {
+      allow read: if isAdmin();
+    }
+
+    function validDecision(uid, placeId) {
+      let d = request.resource.data;
+      let decision = {'operator': d.operator, 'reason': d.reason, 'decidedAt': d.decidedAt};
+      return isAdmin() && request.auth.uid != uid
+        && resource.data.status == 'pending'
+        && exists(/databases/$(database)/documents/places/$(placeId))
+        && d.createdAt == resource.data.createdAt
+        && d.operator == request.auth.uid && d.decidedAt == request.time
+        && d.reason is string && d.reason == d.reason.trim()
+        && d.reason.size() >= 1 && d.reason.size() <= 500
+        && ((d.status == 'rejected'
+          && d.keys().hasOnly(['status', 'createdAt', 'operator', 'reason', 'decidedAt', 'rejection'])
+          && d.rejection == decision)
+        || (d.status == 'approved'
+          && d.keys().hasOnly(['status', 'createdAt', 'operator', 'reason', 'decidedAt', 'approval'])
+          && d.approval == decision
+          && !exists(/databases/$(database)/documents/placeOwners/$(placeId))
+          && getAfter(/databases/$(database)/documents/placeOwners/$(placeId)).data == {'uid': uid, 'verifiedAt': request.time}));
+    }
+
     function validFoodTags(tags) {
       return tags is list && tags.size() <= 5
         && tags.toSet().size() == tags.size()
@@ -26,7 +60,17 @@ service cloud.firestore {
 
     match /placeOwners/{placeId} {
       allow read: if signedIn();
-      allow write: if false;
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['uid', 'verifiedAt'])
+        && request.resource.data.uid is string
+        && request.resource.data.uid != request.auth.uid
+        && request.resource.data.verifiedAt == request.time
+        && exists(/databases/$(database)/documents/places/$(placeId))
+        && get(/databases/$(database)/documents/users/$(request.resource.data.uid)/ownershipRequests/$(placeId)).data.status == 'pending'
+        && getAfter(/databases/$(database)/documents/users/$(request.resource.data.uid)/ownershipRequests/$(placeId)).data.status == 'approved'
+        && getAfter(/databases/$(database)/documents/users/$(request.resource.data.uid)/ownershipRequests/$(placeId)).data.operator == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.resource.data.uid)/ownershipRequests/$(placeId)).data.decidedAt == request.time;
+      allow update, delete: if false;
     }
 
     // ---------- users ----------
@@ -57,7 +101,8 @@ service cloud.firestore {
           && request.resource.data.keys().hasAll(['status', 'createdAt'])
           && request.resource.data.status == 'pending'
           && request.resource.data.createdAt == request.time;
-        allow update, delete: if false;
+        allow update: if validDecision(uid, placeId);
+        allow delete: if false;
       }
 
       match /preferences/{preferenceId} {

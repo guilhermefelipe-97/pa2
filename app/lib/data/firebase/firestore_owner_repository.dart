@@ -17,7 +17,16 @@ class FirestoreOwnerRepository implements OwnerRepository {
   @override
   Future<List<OwnershipRequest>> requestsOf(String uid) async =>
       (await _requests(uid).get(const GetOptions(source: Source.server))).docs
-          .map((d) => OwnershipRequest(d.id, d.data()['status'] as String))
+          .map(
+            (d) => OwnershipRequest(
+              d.id,
+              d.data()['status'] as String,
+              reason: d.data()['reason'] as String?,
+              revocationReason:
+                  (d.data()['revocation'] as Map<String, dynamic>?)?['reason']
+                      as String?,
+            ),
+          )
           .toList();
   @override
   Future<OwnershipRequest> request(String uid, String placeId) async {

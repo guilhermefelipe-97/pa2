@@ -1,4 +1,10 @@
 abstract final class Routes {
+  static const admin = '/administracao';
+  static const adminRequests = '/administracao/titularidade';
+  static const adminRequestPattern =
+      '/administracao/titularidade/:uid/:placeId';
+  static String adminRequest(String uid, String placeId) =>
+      '/administracao/titularidade/${Uri.encodeComponent(uid)}/${Uri.encodeComponent(placeId)}';
   static const splash = '/splash';
   static const login = '/login';
   static const signUp = '/cadastro';

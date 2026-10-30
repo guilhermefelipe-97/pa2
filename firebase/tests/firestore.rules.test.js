@@ -22,6 +22,8 @@ const {
   limit,
   getDocs,
   collectionGroup,
+  documentId,
+  startAfter,
   arrayUnion,
   arrayRemove,
   writeBatch,
@@ -2273,4 +2275,99 @@ describe('Onda 5 — titularidade e preferências privadas', () => {
     await assertFails(addReview(alice(), validReview({ tags: ['vegano'], tagCounts: { vegano: 3 } })));
     await assertFails(updateDoc(doc(alice(), 'reviews/existing'), { tags: ['vegano'] }));
   });
+});
+
+describe('Administração de titularidade', () => {
+  const requestPath = 'users/alice/ownershipRequests/camaroes';
+  const admin = () => env.authenticatedContext('operator').firestore();
+  async function setup() {
+    await env.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(), 'admins/operator'), { enabled: true });
+      await setDoc(doc(ctx.firestore(), requestPath), { status: 'pending', createdAt: Timestamp.fromMillis(1000) });
+    });
+  }
+  function decision(db, approve = true, overrides = {}, owner = true) {
+    const batch = writeBatch(db);
+    const trio = { operator: 'operator', reason: 'Verificação presencial', decidedAt: serverTimestamp() };
+    batch.update(doc(db, requestPath), { ...trio, status: approve ? 'approved' : 'rejected', [approve ? 'approval' : 'rejection']: trio, ...overrides });
+    if (approve && owner) batch.set(doc(db, 'placeOwners/camaroes'), { uid: 'alice', verifiedAt: serverTimestamp() });
+    return batch.commit();
+  }
+  beforeEach(setup);
+  it('membership própria somente leitura, sem enumeração nem auto concessão', async () => {
+    await assertSucceeds(getDoc(doc(admin(), 'admins/operator')));
+    await assertFails(getDocs(collection(admin(), 'admins')));
+    await assertFails(getDoc(doc(alice(), 'admins/operator')));
+    await assertFails(setDoc(doc(alice(), 'admins/alice'), { enabled: true }));
+    await assertFails(updateDoc(doc(admin(), 'admins/operator'), { enabled: false }));
+  });
+  it('fila collectionGroup exclusiva de administradores enabled', async () => {
+    const q = db => query(collectionGroup(db, 'ownershipRequests'), where('status', '==', 'pending'), orderBy('createdAt'), limit(20));
+    await assertSucceeds(getDocs(q(admin())));
+    await assertFails(getDocs(q(alice())));
+    await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), 'admins/operator'), { enabled: false }));
+    await assertFails(getDocs(q(admin())));
+    await assertFails(decision(admin()));
+  });
+  it('aprovação e titular são inseparáveis e decisão final é imutável', async () => {
+    await assertFails(decision(admin(), true, {}, false));
+    await assertFails(setDoc(doc(admin(), 'placeOwners/camaroes'), { uid: 'alice', verifiedAt: serverTimestamp() }));
+    await assertSucceeds(decision(admin()));
+    await assertFails(decision(admin()));
+    await assertFails(updateDoc(doc(admin(), requestPath), { reason: 'mudado' }));
+    const result = await getDoc(doc(alice(), requestPath));
+    if (result.data().reason !== 'Verificação presencial') throw Error('Motivo ausente');
+  });
+  it('reprovação dispensa titular; motivo é obrigatório, aparado e limitado', async () => {
+    for (const reason of ['', ' espaço ', 'x'.repeat(501)]) {
+      await assertFails(decision(admin(), false, { reason }));
+    }
+    await assertFails(decision(admin(), false, { createdAt: serverTimestamp() }));
+    await assertFails(decision(admin(), false, { operator: 'forjado' }));
+    await assertFails(decision(admin(), false, { rejection: { operator: 'operator', reason: 'outro', decidedAt: serverTimestamp() } }));
+    await assertSucceeds(decision(admin(), false));
+    await assertFails(decision(admin(), false));
+  });
+  it('nega solicitante comum e administrador decidindo próprio pedido', async () => {
+    await assertFails(decision(alice()));
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'admins/alice'), { enabled: true }));
+    await assertFails(decision(alice(), false, { operator: 'alice', rejection: { operator: 'alice', reason: 'Verificação presencial', decidedAt: serverTimestamp() } }));
+  });
+  it('nega substituir qualquer titular inclusive o mesmo UID', async () => {
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'placeOwners/camaroes'), { uid: 'alice', verifiedAt: Timestamp.now() }));
+    await assertFails(decision(admin()));
+  });
+  it('concorrência permite apenas uma decisão final', async () => {
+    const results = await Promise.allSettled([decision(admin()), decision(admin(), false)]);
+    if (results.filter(r => r.status === 'fulfilled').length !== 1) throw Error('Duas decisões ou nenhuma');
+  });
+  it('nega pedido/local inexistente e timestamps forjados', async () => {
+    await assertFails(decision(admin(), false, { decidedAt: Timestamp.fromMillis(1000) }));
+    await env.withSecurityRulesDisabled(ctx => deleteDoc(doc(ctx.firestore(), 'places/camaroes')));
+    await assertFails(decision(admin(), false));
+    await env.withSecurityRulesDisabled(ctx => deleteDoc(doc(ctx.firestore(), requestPath)));
+    await assertFails(decision(admin(), false));
+  });
+});
+
+
+it('fila administrativa pagina 45 caminhos com data e local iguais sem duplicatas', async () => {
+  await env.withSecurityRulesDisabled(async ctx => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'admins/operator'), { enabled: true });
+    for (let i = 0; i < 45; i++) {
+      await setDoc(doc(db, `users/u${String(i).padStart(2, '0')}/ownershipRequests/camaroes`), { status: 'pending', createdAt: Timestamp.fromMillis(1000) });
+    }
+  });
+  const db = env.authenticatedContext('operator').firestore();
+  const paths = []; let cursor; let pages = 0;
+  do {
+    const filters = [where('status', '==', 'pending'), orderBy('createdAt'), orderBy(documentId())];
+    if (cursor) filters.push(startAfter(cursor));
+    const page = await assertSucceeds(getDocs(query(collectionGroup(db, 'ownershipRequests'), ...filters, limit(20))));
+    pages++; paths.push(...page.docs.map(d => d.ref.path));
+    cursor = page.size === 20 ? page.docs.at(-1) : null;
+    if (pages > 3) throw Error('Cursor não termina');
+  } while (cursor);
+  if (paths.length !== 45 || new Set(paths).size !== 45 || pages !== 3) throw Error('Paginação com perda ou duplicação');
 });

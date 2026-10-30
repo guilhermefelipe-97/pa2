@@ -1,9 +1,15 @@
 const ownerLookupTimeout = Duration(seconds: 5);
 
 class OwnershipRequest {
-  const OwnershipRequest(this.placeId, this.status);
+  const OwnershipRequest(
+    this.placeId,
+    this.status, {
+    this.reason,
+    this.revocationReason,
+  });
   final String placeId;
   final String status;
+  final String? reason, revocationReason;
 }
 
 abstract class OwnerRepository {

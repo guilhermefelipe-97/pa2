@@ -108,17 +108,32 @@ class _OwnerViewState extends State<OwnerView> {
               final row = rows[index];
               return ListTile(
                 title: Text(row.name),
-                subtitle: Text(
-                  row.failed
-                      ? 'Não foi possível verificar titularidade'
-                      : row.owned
-                      ? 'Titularidade verificada'
-                      : switch (row.request.status) {
-                          'pending' =>
-                            'Pedido pendente — sem poderes até a aprovação',
-                          'approved' || 'revoked' => 'Titularidade revogada',
-                          _ => 'Pedido rejeitado',
-                        },
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      row.failed
+                          ? 'Não foi possível verificar titularidade'
+                          : row.owned
+                          ? 'Titularidade verificada'
+                          : switch (row.request.status) {
+                              'pending' =>
+                                'Pedido pendente — sem poderes até a aprovação',
+                              'approved' ||
+                              'revoked' => 'Titularidade revogada',
+                              _ => 'Pedido rejeitado',
+                            },
+                    ),
+                    if (row.request.reason != null)
+                      Text(
+                        '${row.request.status == 'revoked' ? 'Motivo da aprovação original' : 'Motivo'}: ${row.request.reason}',
+                      ),
+                    if (row.request.status == 'revoked' &&
+                        row.request.revocationReason != null)
+                      Text(
+                        'Motivo da revogação: ${row.request.revocationReason}',
+                      ),
+                  ],
                 ),
                 onTap: () =>
                     context.push(Routes.placeDetail(row.request.placeId)),

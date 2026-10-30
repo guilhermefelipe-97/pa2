@@ -1,3 +1,7 @@
+import '../ui/admin/admin_access_view.dart';
+import '../ui/admin/admin_ownership_view.dart';
+import '../ui/admin/admin_ownership_view_model.dart';
+import '../ui/admin/admin_access.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -85,6 +89,42 @@ GoRouter buildRouter(AuthRepository auth) {
       location: state.matchedLocation,
     ),
     routes: [
+      GoRoute(
+        path: Routes.admin,
+        builder: (context, state) => ListenableBuilder(
+          listenable: context.read<AdminAccess>(),
+          builder: (context, _) => Scaffold(
+            appBar: AppBar(title: const Text('Administração')),
+            body: context.read<AdminAccess>().enabled
+                ? ListTile(
+                    title: const Text('Solicitações de titularidade'),
+                    onTap: () => context.push(Routes.adminRequests),
+                  )
+                : AdminAccessView(access: context.read<AdminAccess>()),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: Routes.adminRequests,
+        builder: (context, state) => ViewModelHost<AdminOwnershipViewModel>(
+          create: (context) =>
+              AdminOwnershipViewModel(context.read(), context.read()),
+          builder: (context, vm) => AdminOwnershipView(viewModel: vm),
+        ),
+      ),
+      GoRoute(
+        path: Routes.adminRequestPattern,
+        builder: (context, state) => ViewModelHost<AdminOwnershipViewModel>(
+          key: ValueKey(state.uri.path),
+          create: (context) => AdminOwnershipViewModel(
+            context.read(),
+            context.read(),
+            uid: state.pathParameters['uid'],
+            placeId: state.pathParameters['placeId'],
+          ),
+          builder: (context, vm) => AdminOwnershipView(viewModel: vm),
+        ),
+      ),
       GoRoute(
         path: '/perfil-alimentar',
         builder: (context, state) => const DietaryView(),

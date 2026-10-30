@@ -1,3 +1,6 @@
+import 'data/repositories/admin_ownership_repository.dart';
+import 'data/firebase/firestore_admin_ownership_repository.dart';
+import 'ui/admin/admin_access.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -111,6 +114,13 @@ Future<void> main() async {
             persisted: FirestorePlaceRepository(db),
             photon: context.read<PhotonClient>(),
           ),
+        ),
+        Provider<AdminOwnershipRepository>(
+          create: (_) => FirestoreAdminOwnershipRepository(db),
+        ),
+        ChangeNotifierProvider<AdminAccess>(
+          lazy: false,
+          create: (context) => AdminAccess(authRepository, context.read()),
         ),
         Provider<OwnerRepository>(create: (_) => FirestoreOwnerRepository(db)),
         Provider<DietaryRepository>(
