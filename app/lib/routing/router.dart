@@ -37,6 +37,11 @@ import '../ui/saved/saved_places_store.dart';
 import '../ui/saved/saved_view.dart';
 import '../ui/saved/saved_view_model.dart';
 import 'routes.dart';
+import '../data/repositories/owner_repository.dart';
+import '../data/repositories/food_tag_repository.dart';
+import '../ui/dietary/dietary_store.dart';
+import '../ui/dietary/dietary_view.dart';
+import '../ui/owner/owner_view.dart';
 
 /// Decide para onde redirecionar conforme o estado de autenticação.
 /// Função pura para ser testável.
@@ -61,6 +66,7 @@ OpenNowViewModel? _openNowFor(BuildContext context, String placeId) {
   return OpenNowViewModel(
     placeId: placeId,
     openReportRepository: reports,
+    ownerRepository: context.read<OwnerRepository?>(),
     authRepository: context.read(),
     userRepository: context.read(),
     locationService: context.read<LocationService?>(),
@@ -79,6 +85,14 @@ GoRouter buildRouter(AuthRepository auth) {
       location: state.matchedLocation,
     ),
     routes: [
+      GoRoute(
+        path: '/perfil-alimentar',
+        builder: (context, state) => const DietaryView(),
+      ),
+      GoRoute(
+        path: '/meus-estabelecimentos',
+        builder: (context, state) => const OwnerView(),
+      ),
       GoRoute(
         path: Routes.splash,
         builder: (context, state) =>
@@ -118,6 +132,8 @@ GoRouter buildRouter(AuthRepository auth) {
                     userRepository: context.read(),
                     reviewRepository: context.read(),
                     placeRepository: context.read(),
+                    dietary: context.read<DietaryStore?>(),
+                    foodTagRepository: context.read<FoodTagRepository?>(),
                     followEvents: context.read<FollowEvents>(),
                     visitRepository: context.read<VisitRepository>(),
                   ),
@@ -195,6 +211,7 @@ GoRouter buildRouter(AuthRepository auth) {
             create: (context) => PlaceDetailViewModel(
               placeId: placeId,
               initial: state.extra,
+              foodTagRepository: context.read<FoodTagRepository?>(),
               authRepository: context.read(),
               userRepository: context.read(),
               placeRepository: context.read(),
@@ -270,6 +287,7 @@ GoRouter buildRouter(AuthRepository auth) {
             builder: (context, state) => ViewModelHost<ReviewViewModel>(
               create: (context) => ReviewViewModel(
                 place: state.extra! as Place,
+                ownerRepository: context.read<OwnerRepository?>(),
                 authRepository: context.read(),
                 userRepository: context.read(),
                 reviewRepository: context.read(),

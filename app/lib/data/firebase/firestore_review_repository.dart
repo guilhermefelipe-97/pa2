@@ -8,13 +8,17 @@ import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart';
 import '../../domain/photo_compression.dart';
 import '../../domain/price_band.dart';
+import '../../domain/food_tags.dart';
+import '../repositories/food_tag_repository.dart';
+import 'firestore_owner_repository.dart';
 import '../activity_batch.dart';
+import '../chunk.dart';
 import '../repositories/review_repository.dart';
 import 'activity_queries.dart' as queries;
 import 'audit_log.dart';
 import 'place_doc.dart';
 
-class FirestoreReviewRepository implements ReviewRepository {
+class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
   FirestoreReviewRepository(
     this._db, {
     this.perBatchLimit = defaultPerBatchLimit,
@@ -161,7 +165,7 @@ class FirestoreReviewRepository implements ReviewRepository {
         newPlaceData(createPlace, uid: review.authorId),
       );
     }
-    // Schema exato (12 chaves) validado pelas Rules (hasOnly/hasAll). O período
+    // Schema exato (13 chaves) validado pelas Rules (hasOnly/hasAll). O período
     // do dia NÃO é gravado; createdAt é sempre o timestamp do servidor.
     // Eixo não avaliado vai como null (F14): a chave está sempre presente.
     // `comment` já vem normalizado (aparado; null quando não há).
@@ -178,6 +182,7 @@ class FirestoreReviewRepository implements ReviewRepository {
       'comment': review.comment,
       'hasPhoto': photo != null,
       'priceBand': review.priceBand?.value,
+      'tags': review.tags,
       'createdAt': FieldValue.serverTimestamp(),
     });
     // F04: entrada de auditoria no mesmo batch (as Rules exigem o par).
@@ -231,6 +236,32 @@ class FirestoreReviewRepository implements ReviewRepository {
     List<String> authorIds,
   ) => queries.fetchForPlace(_reviews, placeId, authorIds, fromDoc: _fromDoc);
 
+  @override
+  Future<Map<String, Map<String, int>>> confirmedFor(
+    Iterable<String> placeIds,
+  ) async {
+    final ids = placeIds.toSet().toList();
+    final result = <String, Map<String, int>>{};
+    for (final batch in chunked(ids, whereInLimit)) {
+      // Sem corte: todas as reviews globais, inclusive as últimas sem tags.
+      final docs = await _reviews
+          .where('placeId', whereIn: batch)
+          .get(const GetOptions(source: Source.server));
+      final owners = FirestoreOwnerRepository(_db);
+      final ownerUids = await Future.wait(batch.map(owners.ownerOf));
+      for (var i = 0; i < batch.length; i++) {
+        final id = batch[i];
+        final owner = ownerUids[i];
+        final reviews = docs.docs
+            .where((d) => d.data()['placeId'] == id)
+            .map(_fromDoc)
+            .whereType<Review>();
+        result[id] = confirmedFoodTags(reviews, ownerUid: owner);
+      }
+    }
+    return result;
+  }
+
   /// Leitura estrita de um eixo (F14), espelhando as Rules: a chave precisa
   /// existir e valer `null` (não avaliado) ou um `int` de 1 a 5. Chave
   /// ausente, decimal (4.5) ou texto invalida o doc (ignorado em [_fromDoc]).
@@ -241,6 +272,14 @@ class FirestoreReviewRepository implements ReviewRepository {
     if (v == null) return null;
     if (v is int && Scores.isValid(v)) return v;
     throw FormatException('eixo "$key" inválido: $v');
+  }
+
+  // Uma tag inválida retira os votos, sem apagar a avaliação válida.
+  static List<String> _readTags(Object? value) {
+    if (value == null) return const [];
+    if (value is! List || value.any((tag) => tag is! String)) return const [];
+    final tags = List<String>.from(value);
+    return validFoodTags(tags) ? tags : const [];
   }
 
   Review? _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
@@ -269,6 +308,7 @@ class FirestoreReviewRepository implements ReviewRepository {
         // Reviews anteriores ao G1 não têm a chave: sem foto.
         hasPhoto: d['hasPhoto'] == true,
         priceBand: readPriceBand(d),
+        tags: _readTags(d['tags']),
       );
     } on Object {
       // Documento fora do schema: ignora em vez de derrubar o feed.

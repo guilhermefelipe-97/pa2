@@ -1,3 +1,6 @@
+import 'package:naarea/data/repositories/owner_repository.dart';
+import 'package:naarea/data/repositories/food_tag_repository.dart';
+import 'package:naarea/ui/dietary/dietary_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -81,6 +84,9 @@ Future<TestApp> pumpApp(
   FakeLocationService? location,
   FakeVisitRepository? visits,
   FakeOpenReportRepository? openReports,
+  FakeDietaryRepository? dietary,
+  FakeOwnerRepository? owners,
+  FakeFoodTagRepository? foodTags,
   DateTime Function()? clock,
 }) async {
   final loc = location ?? FakeLocationService();
@@ -96,6 +102,8 @@ Future<TestApp> pumpApp(
   final ph = photos ?? FakeReviewPhotoRepository(r.photos);
   final pk = picker ?? FakePhotoPicker();
   final v = visits ?? FakeVisitRepository();
+  final ownerRepo = owners ?? FakeOwnerRepository();
+  final dietaryRepo = dietary ?? FakeDietaryRepository();
   final router = buildRouter(auth);
   await tester.pumpWidget(
     MultiProvider(
@@ -103,6 +111,14 @@ Future<TestApp> pumpApp(
         Provider<AppClock>.value(value: AppClock(clock)),
         ChangeNotifierProvider<AuthRepository>.value(value: auth),
         Provider<UserRepository>.value(value: u),
+        Provider<OwnerRepository>.value(value: ownerRepo),
+        Provider<FoodTagRepository>.value(
+          value: foodTags ?? FakeFoodTagRepository(r, ownerRepo),
+        ),
+        ChangeNotifierProvider<DietaryStore>(
+          create: (_) => DietaryStore(auth, dietaryRepo),
+          lazy: false,
+        ),
         Provider<PlaceRepository>.value(value: p),
         Provider<ReviewRepository>.value(value: r),
         Provider<VisitRepository>.value(value: v),

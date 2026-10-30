@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../domain/feed.dart';
+import '../../dietary/food_tag_chips.dart';
 import '../../../domain/relative_time.dart';
 import '../../core/save_button.dart';
 import 'place_photo.dart';
@@ -29,9 +30,11 @@ class FeedCard extends StatelessWidget {
     this.onTap,
     this.isFollowing,
     this.onOpenPerson,
+    this.confirmedTags = const {},
   });
 
   final FeedItem item;
+  final Map<String, int> confirmedTags;
   final DateTime now;
   final VoidCallback? onTap;
 
@@ -81,6 +84,7 @@ class FeedCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(item.placeName, style: theme.textTheme.titleLarge),
+                        FoodTagChips(tags: confirmedTags),
                         if (subtitle.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Row(

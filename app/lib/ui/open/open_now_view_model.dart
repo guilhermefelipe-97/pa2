@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/owner_repository.dart';
 import '../../data/repositories/open_report_repository.dart';
 import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/user_repository.dart';
@@ -50,6 +51,7 @@ class OpenNowViewModel extends SafeChangeNotifier {
     required UserRepository userRepository,
     LocationService? locationService,
     PlaceRepository? placeRepository,
+    this.ownerRepository,
     DateTime Function()? clock,
   }) : _reports = openReportRepository,
        _auth = authRepository,
@@ -75,6 +77,15 @@ class OpenNowViewModel extends SafeChangeNotifier {
   final String placeId;
   final OpenReportRepository _reports;
   final AuthRepository _auth;
+  final OwnerRepository? ownerRepository;
+  bool isOwnBusiness = false;
+  Future<void> _checkOwner(String uid, String id) async {
+    final owner = ownerRepository == null
+        ? null
+        : await ownerRepository!.ownerOf(id).timeout(ownerLookupTimeout);
+    if (_auth.currentUserId == uid) isOwnBusiness = owner == uid;
+  }
+
   final UserRepository _users;
   final LocationService? _location;
   final PlaceRepository? _places;
@@ -134,6 +145,7 @@ class OpenNowViewModel extends SafeChangeNotifier {
   /// "Você informou às 20h10. De novo a partir das 20h40." enquanto dentro
   /// dos 30 min; `null` = pode relatar.
   String? get blockedLabel {
+    if (isOwnBusiness) return ownerContributionMessage;
     final lastAt = _lockLastAt;
     return isOpenReportBlocked(lastAt, now())
         ? openReportBlockedMessage(lastAt!)
@@ -148,6 +160,7 @@ class OpenNowViewModel extends SafeChangeNotifier {
 
   /// Sim/Não habilitados.
   bool get canReport =>
+      !isOwnBusiness &&
       _proximity == OpenProximity.near &&
       blockedLabel == null &&
       !_isSubmitting &&
@@ -207,6 +220,7 @@ class OpenNowViewModel extends SafeChangeNotifier {
     final seq = ++_lockSeq;
     DateTime? lastAt;
     try {
+      await _checkOwner(uid, placeId);
       lastAt = await _reports
           .openReportLockOf(uid, placeId)
           .timeout(openReportLockTimeout);
@@ -299,6 +313,11 @@ class OpenNowViewModel extends SafeChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
+      await _checkOwner(uid, placeId);
+      if (isOwnBusiness) {
+        _errorMessage = ownerContributionMessage;
+        return false;
+      }
       final profile = await _users.getProfile(uid);
       if (profile == null) throw StateError('perfil ausente');
       // Local só descoberto (Photon, G2): nasce no mesmo batch do relato.

@@ -87,6 +87,22 @@ class _ProfileViewState extends State<ProfileView> {
             // Aberto por link direto: sem tela anterior, "voltar" vai ao feed.
             leading: context.canPop() ? null : BackButton(onPressed: _back),
             title: Text(vm.state == ProfileState.ready ? vm.title : ''),
+            actions: [
+              if (vm.isSelf)
+                PopupMenuButton<String>(
+                  onSelected: (route) => context.push(route),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: '/meus-estabelecimentos',
+                      child: Text('Meus estabelecimentos'),
+                    ),
+                    PopupMenuItem(
+                      value: '/perfil-alimentar',
+                      child: Text('Perfil alimentar'),
+                    ),
+                  ],
+                ),
+            ],
           ),
           body: switch (vm.state) {
             ProfileState.loading => const Center(

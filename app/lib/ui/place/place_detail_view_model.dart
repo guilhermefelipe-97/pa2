@@ -9,6 +9,7 @@ import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/visit_repository.dart';
 import '../../domain/feed.dart';
+import '../../data/repositories/food_tag_repository.dart';
 import '../../domain/models/place.dart';
 import '../../domain/models/place_activity.dart';
 import '../../domain/models/scores.dart' as scores;
@@ -35,6 +36,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     required FollowEvents followEvents,
     required VisitRepository visitRepository,
     this.openNow,
+    this.foodTagRepository,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _users = userRepository,
@@ -60,6 +62,24 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   static const youLabel = 'Você';
 
   final String placeId;
+  final FoodTagRepository? foodTagRepository;
+  Map<String, int> confirmedTags = {};
+  bool tagsFailed = false;
+  int _tagsSeq = 0;
+  Future<void> loadTags() async {
+    final seq = ++_tagsSeq;
+    try {
+      final tags = await foodTagRepository?.confirmedFor([placeId]);
+      if (isDisposed || seq != _tagsSeq) return;
+      confirmedTags = tags?[placeId] ?? {};
+      tagsFailed = false;
+    } on Object {
+      if (isDisposed || seq != _tagsSeq) return;
+      confirmedTags = {};
+      tagsFailed = true;
+    }
+    notifyListeners();
+  }
 
   /// "Está aberto agora?" (F20); `null` sem o repositório de relatos.
   /// Descartado junto com o detalhe.
@@ -337,6 +357,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
 
   Future<void> load() async {
     final seq = ++_seq;
+    unawaited(loadTags());
     _follow.clear();
     _errorMessage = null;
     _notFound = false;
@@ -410,6 +431,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     placeId: r.placeId,
     placeName: r.placeName,
     scores: r.scores,
+    tags: r.tags,
     companion: r.companion,
     comment: r.comment,
     createdAt: r.createdAt,

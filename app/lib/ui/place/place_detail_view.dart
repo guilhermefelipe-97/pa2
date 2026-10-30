@@ -18,6 +18,8 @@ import '../open/open_now_section.dart';
 import '../visit/visit_sheet.dart';
 import '../visit/visit_view_model.dart';
 import 'place_detail_view_model.dart';
+import '../dietary/food_tag_chips.dart';
+import '../owner/owner_view.dart';
 import 'price_section.dart';
 import 'review_photo_strip.dart';
 
@@ -151,6 +153,7 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
             foregroundColor: Colors.white,
             backgroundColor: scheme.primary,
             actions: [
+              OwnershipAction(placeId: place.id),
               if (place.inCatalog)
                 SaveButton(placeId: place.id, style: SaveButtonStyle.onAppBar),
               const SizedBox(width: 4),
@@ -226,6 +229,14 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                       ],
                     ),
                   PlaceFacts(place: place),
+                  FoodTagChips(tags: vm.confirmedTags),
+                  if (vm.tagsFailed)
+                    TextButton(
+                      onPressed: vm.loadTags,
+                      child: const Text(
+                        'Não foi possível carregar tags. Tentar novamente',
+                      ),
+                    ),
                   // F20: "Está aberto agora?" confirmado por quem está lá.
                   if (vm.openNow != null)
                     OpenNowSection(viewModel: vm.openNow!, place: place),

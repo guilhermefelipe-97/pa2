@@ -2206,3 +2206,71 @@ describe('auditLog (F04: auditoria de avaliações, visitas e relatos)', () => {
     await assertFails(addReview(alice(), data, { id: 'retry' }));
   });
 });
+
+describe('Onda 5 — titularidade e preferências privadas', () => {
+  it('pedido privado só nasce pendente para local existente e não é alterável pelo cliente', async () => {
+    const ref = doc(alice(), 'users/alice/ownershipRequests/camaroes');
+    await assertSucceeds(setDoc(ref, { status: 'pending', createdAt: serverTimestamp() }));
+    await assertSucceeds(getDoc(ref));
+    await assertFails(getDoc(doc(bob(), ref.path)));
+    await assertFails(getDoc(doc(anon(), ref.path)));
+    await assertFails(updateDoc(ref, { status: 'approved' }));
+    await assertFails(deleteDoc(ref));
+    await assertFails(setDoc(doc(bob(), 'users/alice/ownershipRequests/other'), { status: 'pending', createdAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(alice(), 'users/alice/ownershipRequests/missing'), { status: 'pending', createdAt: serverTimestamp() }));
+  });
+  it('nega autoaprovação, timestamp forjado, documento pessoal e gravação de titular', async () => {
+    for (const data of [
+      { status: 'approved', createdAt: serverTimestamp() },
+      { status: 'pending', createdAt: Timestamp.fromMillis(1) },
+      { status: 'pending', createdAt: serverTimestamp(), cpf: 'não permitido' },
+    ]) await assertFails(setDoc(doc(alice(), 'users/alice/ownershipRequests/camaroes'), data));
+    await assertFails(setDoc(doc(alice(), 'placeOwners/camaroes'), { uid: 'alice', verifiedAt: serverTimestamp() }));
+  });
+  it('autenticados leem titularidade, mas nunca criam, editam ou apagam', async () => {
+    await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'placeOwners/camaroes'), { uid: 'alice', verifiedAt: Timestamp.now() }));
+    await assertSucceeds(getDoc(doc(bob(), 'placeOwners/camaroes')));
+    await assertFails(getDoc(doc(anon(), 'placeOwners/camaroes')));
+    await assertFails(updateDoc(doc(alice(), 'placeOwners/camaroes'), { uid: 'bob' }));
+    await assertFails(deleteDoc(doc(alice(), 'placeOwners/camaroes')));
+  });
+  it('pedido pendente não bloqueia contribuição; aprovado bloqueia todas as chamadas diretas no próprio local', async () => {
+    await setDoc(doc(alice(), 'users/alice/ownershipRequests/camaroes'), { status: 'pending', createdAt: serverTimestamp() });
+    await assertSucceeds(addReview(alice(), validReview({ tags: ['vegano'] })));
+    await unlockAll();
+    await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'placeOwners/camaroes'), { uid: 'alice', verifiedAt: Timestamp.now() }));
+    await assertFails(addReview(alice(), validReview()));
+    await assertFails(addVisit(alice(), validVisit({ priceBand: 2 })));
+    await assertFails(addOpenReport(alice(), validOpenReport()));
+    // O consumidor continua contribuindo quando outro usuário é titular.
+    await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'placeOwners/camaroes'), { uid: 'bob', verifiedAt: Timestamp.now() }));
+    await assertSucceeds(addVisit(alice(), validVisit()));
+    await assertSucceeds(getDoc(doc(alice(), 'reviews/existing')));
+  });
+  it('preferências persistem no documento privado com vocabulário exato, sem duplicatas nem privilégios', async () => {
+    const ref = doc(alice(), 'users/alice/preferences/food');
+    await assertSucceeds(setDoc(ref, { tags: ['vegano', 'integral'] }));
+    await assertSucceeds(getDoc(ref));
+    await assertFails(getDoc(doc(bob(), ref.path)));
+    await assertFails(getDoc(doc(anon(), ref.path)));
+    await assertFails(setDoc(doc(bob(), ref.path), { tags: [] }));
+    for (const data of [{ tags: ['vegano', 'vegano'] }, { tags: ['sem-gluten'] }, { tags: 'vegano' }, { tags: [], owner: true }, {}]) {
+      await assertFails(setDoc(ref, data));
+    }
+    await assertSucceeds(setDoc(ref, { tags: [] }));
+    await assertFails(setDoc(doc(alice(), 'users/alice/preferences/other'), { tags: [] }));
+  });
+  it('review aceita tags opcionais válidas e nega tags forjadas, duplicatas e contadores', async () => {
+    for (const tags of [[], ['caseiro', 'vegetariano', 'vegano', 'low-carb', 'integral']]) {
+      await unlockAll();
+      await assertSucceeds(addReview(alice(), validReview({ tags })));
+    }
+    for (const tags of [['vegano', 'vegano'], ['sem-gluten'], null, 'vegano', [1]]) {
+      await unlockAll();
+      await assertFails(addReview(alice(), validReview({ tags })));
+    }
+    await unlockAll();
+    await assertFails(addReview(alice(), validReview({ tags: ['vegano'], tagCounts: { vegano: 3 } })));
+    await assertFails(updateDoc(doc(alice(), 'reviews/existing'), { tags: ['vegano'] }));
+  });
+});

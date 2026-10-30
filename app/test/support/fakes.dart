@@ -1,3 +1,7 @@
+import 'package:naarea/data/repositories/dietary_repository.dart';
+import 'package:naarea/data/repositories/owner_repository.dart';
+import 'package:naarea/data/repositories/food_tag_repository.dart';
+import 'package:naarea/domain/food_tags.dart';
 // Fakes escritos à mão (sem mocks gerados) para testar os ViewModels.
 import 'dart:async';
 import 'dart:typed_data';
@@ -436,6 +440,7 @@ class FakeReviewRepository implements ReviewRepository {
         createdAt: clock(),
         hasPhoto: photo != null,
         priceBand: review.priceBand,
+        tags: review.tags,
       ),
     );
     return (placeCreated: placeCreated ?? newPlace != null);
@@ -1091,5 +1096,63 @@ class FakeOpenReportRepository implements OpenReportRepository {
         .where((r) => ids.contains(r.placeId) && !r.createdAt.isBefore(since))
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+}
+
+class FakeDietaryRepository implements DietaryRepository {
+  final stored = <String, Set<String>>{};
+  Future<Set<String>> Function(String uid)? read;
+  bool fail = false;
+  @override
+  Future<Set<String>> load(String uid) async {
+    if (read != null) return read!(uid);
+    if (fail) throw StateError('rede');
+    return {...?stored[uid]};
+  }
+
+  @override
+  Future<void> save(String uid, Set<String> tags) async {
+    if (fail) throw StateError('rede');
+    stored[uid] = {...tags};
+  }
+}
+
+class FakeOwnerRepository implements OwnerRepository {
+  final owners = <String, String>{};
+  final requests = <String, List<OwnershipRequest>>{};
+  @override
+  Future<String?> ownerOf(String placeId) async => owners[placeId];
+  @override
+  Future<List<OwnershipRequest>> requestsOf(String uid) async =>
+      requests[uid] ?? [];
+  @override
+  Future<OwnershipRequest> request(String uid, String placeId) async {
+    final list = requests.putIfAbsent(uid, () => []);
+    for (final r in list) {
+      if (r.placeId == placeId) return r;
+    }
+    final r = OwnershipRequest(placeId, 'pending');
+    list.add(r);
+    return r;
+  }
+}
+
+class FakeFoodTagRepository implements FoodTagRepository {
+  FakeFoodTagRepository(this.reviews, this.owners);
+  final FakeReviewRepository reviews;
+  final FakeOwnerRepository owners;
+  bool fail = false;
+  @override
+  Future<Map<String, Map<String, int>>> confirmedFor(
+    Iterable<String> placeIds,
+  ) async {
+    if (fail) throw StateError('rede');
+    return {
+      for (final id in placeIds)
+        id: confirmedFoodTags(
+          reviews.stored.where((r) => r.placeId == id),
+          ownerUid: owners.owners[id],
+        ),
+    };
   }
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/owner_repository.dart';
 import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/visit_repository.dart';
@@ -24,6 +25,7 @@ class VisitViewModel extends SafeChangeNotifier {
     required UserRepository userRepository,
     required VisitRepository visitRepository,
     PlaceRepository? placeRepository,
+    this.ownerRepository,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _users = userRepository,
@@ -36,6 +38,15 @@ class VisitViewModel extends SafeChangeNotifier {
 
   final Place place;
   final AuthRepository _auth;
+  final OwnerRepository? ownerRepository;
+  bool isOwnBusiness = false;
+  Future<void> _checkOwner(String uid, String id) async {
+    final owner = ownerRepository == null
+        ? null
+        : await ownerRepository!.ownerOf(id).timeout(ownerLookupTimeout);
+    if (_auth.currentUserId == uid) isOwnBusiness = owner == uid;
+  }
+
   final UserRepository _users;
   final VisitRepository _visits;
   final PlaceRepository? _places;
@@ -59,10 +70,11 @@ class VisitViewModel extends SafeChangeNotifier {
   /// Hora da última visita, enquanto dentro do intervalo; `null` = pode.
   DateTime? get blockedSince => _blockedSince;
 
-  bool get isBlocked => _blockedSince != null;
+  bool get isBlocked => isOwnBusiness || _blockedSince != null;
 
   /// "Você registrou uma visita às 13h. De novo a partir das 01h."
   String? get blockedMessage {
+    if (isOwnBusiness) return ownerContributionMessage;
     final since = _blockedSince;
     return since == null ? null : visitBlockedMessage(since);
   }
@@ -119,6 +131,7 @@ class VisitViewModel extends SafeChangeNotifier {
     _isCheckingLock = true;
     notifyListeners();
     try {
+      await _checkOwner(uid, place.id);
       final lastAt = await _visits
           .visitLockOf(uid, place.id)
           .timeout(visitLockTimeout);
@@ -144,6 +157,11 @@ class VisitViewModel extends SafeChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
+      await _checkOwner(uid, place.id);
+      if (isOwnBusiness) {
+        _errorMessage = ownerContributionMessage;
+        return false;
+      }
       final profile = await _users.getProfile(uid);
       if (profile == null) throw StateError('perfil ausente');
       // Local só descoberto (Photon, G2): nasce no mesmo batch da visita.

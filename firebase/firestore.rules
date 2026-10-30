@@ -13,6 +13,22 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function validFoodTags(tags) {
+      return tags is list && tags.size() <= 5
+        && tags.toSet().size() == tags.size()
+        && tags.hasOnly(['caseiro', 'vegetariano', 'vegano', 'low-carb', 'integral']);
+    }
+
+    function notBusinessOwner(placeId) {
+      let path = /databases/$(database)/documents/placeOwners/$(placeId);
+      return !exists(path) || get(path).data.uid != request.auth.uid;
+    }
+
+    match /placeOwners/{placeId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
     // ---------- users ----------
     function validProfile(data) {
       return data.keys().hasOnly(['displayName', 'displayNameLower'])
@@ -32,6 +48,26 @@ service cloud.firestore {
         && validProfile(request.resource.data)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['displayName', 'displayNameLower']);
       allow delete: if false;
+
+      match /ownershipRequests/{placeId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && exists(/databases/$(database)/documents/places/$(placeId))
+          && request.resource.data.keys().hasOnly(['status', 'createdAt'])
+          && request.resource.data.keys().hasAll(['status', 'createdAt'])
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+
+      match /preferences/{preferenceId} {
+        allow read: if isOwner(uid) && preferenceId == 'food';
+        allow create, update: if isOwner(uid) && preferenceId == 'food'
+          && request.resource.data.keys().hasOnly(['tags'])
+          && request.resource.data.keys().hasAll(['tags'])
+          && validFoodTags(request.resource.data.tags);
+        allow delete: if false;
+      }
 
       match /following/{targetUid} {
         allow read: if isOwner(uid);
@@ -369,7 +405,7 @@ service cloud.firestore {
     // transição: clientes antigos ainda gravam sem `hasPhoto` (= false) e
     // sem `priceBand` (= não informado).
     function reviewKeys() {
-      return reviewRequiredKeys().concat(['hasPhoto', 'priceBand']);
+      return reviewRequiredKeys().concat(['hasPhoto', 'priceBand', 'tags']);
     }
 
     // Faixa de preço por pessoa (F27), opcional em avaliações e visitas:
@@ -408,11 +444,13 @@ service cloud.firestore {
       return data.keys().hasOnly(reviewKeys())
         && data.keys().hasAll(reviewRequiredKeys())
         && data.authorId == request.auth.uid
+        && notBusinessOwner(data.placeId)
         && data.authorName == profile.data.displayName
         && data.placeId is string
         // `After`: o local pode nascer no mesmo batch da avaliação (G2).
         && existsAfter(placePath)
         && data.placeName == getAfter(placePath).data.name
+        && (!('tags' in data) || validFoodTags(data.tags))
         && validAxes(data)
         && validCompanion(data.companion)
         && validComment(data.comment)
@@ -462,6 +500,7 @@ service cloud.firestore {
       return data.keys().hasOnly(visitAllowedKeys())
         && data.keys().hasAll(visitKeys())
         && data.authorId == request.auth.uid
+        && notBusinessOwner(data.placeId)
         && data.authorName == profile.data.displayName
         && data.placeId is string
         // `After`: o local pode nascer no mesmo batch da visita (G2).
@@ -504,6 +543,7 @@ service cloud.firestore {
       return data.keys().hasOnly(openReportKeys())
         && data.keys().hasAll(openReportKeys())
         && data.authorId == request.auth.uid
+        && notBusinessOwner(data.placeId)
         && data.authorName == profile.data.displayName
         && data.placeId is string
         // `After`: o local pode nascer no mesmo batch do relato (G2).

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/models/place.dart';
+import '../../data/repositories/owner_repository.dart';
 import 'open_now_view_model.dart';
 import 'open_status_line.dart';
 
@@ -95,6 +96,13 @@ class _OpenNowSectionState extends State<OpenNowSection> {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
+    if (vm.isOwnBusiness) {
+      return Text(
+        ownerContributionMessage,
+        key: const Key('open-owner-blocked'),
+        style: muted,
+      );
+    }
     switch (vm.proximity) {
       case OpenProximity.checking:
       case OpenProximity.far:

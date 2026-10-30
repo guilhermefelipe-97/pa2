@@ -1,12 +1,14 @@
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/owner_repository.dart';
 import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/services/photo_picker.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/price_band.dart';
+import '../../domain/food_tags.dart';
 import '../../domain/models/place.dart';
 import '../../domain/models/review.dart';
 import '../../domain/models/scores.dart';
@@ -32,6 +34,7 @@ class ReviewViewModel extends SafeChangeNotifier {
     required Future<Uint8List> Function(Uint8List original) compress,
     PlaceRepository? placeRepository,
     TargetPlatform? platform,
+    this.ownerRepository,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _clock = clock ?? DateTime.now,
@@ -44,6 +47,15 @@ class ReviewViewModel extends SafeChangeNotifier {
 
   final Place place;
   final AuthRepository _auth;
+  final OwnerRepository? ownerRepository;
+  bool isOwnBusiness = false;
+  Future<void> _checkOwner(String uid, String id) async {
+    final owner = ownerRepository == null
+        ? null
+        : await ownerRepository!.ownerOf(id).timeout(ownerLookupTimeout);
+    if (_auth.currentUserId == uid) isOwnBusiness = owner == uid;
+  }
+
   final UserRepository _users;
   final ReviewRepository _reviews;
   final PhotoPicker _picker;
@@ -93,11 +105,12 @@ class ReviewViewModel extends SafeChangeNotifier {
   DateTime? get blockedSince => _blockedSince;
 
   /// Avaliou o local há menos de [reviewCooldown]: sem formulário.
-  bool get isBlocked => _blockedSince != null;
+  bool get isBlocked => isOwnBusiness || _blockedSince != null;
 
   /// "Você avaliou este lugar em 12/10. Pode avaliar de novo a partir de
   /// 11/11 às 20h."
   String? get blockedMessage {
+    if (isOwnBusiness) return ownerContributionMessage;
     final since = _blockedSince;
     return since == null ? null : reviewBlockedMessage(since);
   }
@@ -112,6 +125,7 @@ class ReviewViewModel extends SafeChangeNotifier {
     _isCheckingLock = showProgress;
     if (showProgress) notifyListeners();
     try {
+      await _checkOwner(uid, place.id);
       final lastAt = await _reviews
           .reviewLockOf(uid, place.id)
           .timeout(reviewLockTimeout);
@@ -122,6 +136,13 @@ class ReviewViewModel extends SafeChangeNotifier {
       _isCheckingLock = false;
       notifyListeners();
     }
+  }
+
+  final Set<String> tags = {};
+  void toggleTag(String tag) {
+    if (_isSubmitting || !foodTags.contains(tag)) return;
+    if (!tags.add(tag)) tags.remove(tag);
+    notifyListeners();
   }
 
   int? _food;
@@ -317,6 +338,11 @@ class ReviewViewModel extends SafeChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
+      await _checkOwner(uid, place.id);
+      if (isOwnBusiness) {
+        _errorMessage = ownerContributionMessage;
+        return false;
+      }
       final profile = await _users.getProfile(uid);
       if (profile == null) throw StateError('perfil ausente');
       // Local só descoberto (Photon, G2): nasce no mesmo batch da avaliação.
@@ -331,6 +357,7 @@ class ReviewViewModel extends SafeChangeNotifier {
           companion: _companion,
           comment: _comment, // NewReview normaliza: trim, vazio → null
           priceBand: _priceBand,
+          tags: tags.toList(),
         ),
         photo: _photo,
         newPlace: newPlace,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/place_repository.dart';
+import '../../data/repositories/owner_repository.dart';
 import '../../data/repositories/visit_repository.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/models/place.dart';
@@ -26,6 +27,7 @@ Future<bool> showVisitSheet(
 }) async {
   final vm = VisitViewModel(
     place: place,
+    ownerRepository: context.read<OwnerRepository?>(),
     authRepository: context.read(),
     userRepository: context.read(),
     visitRepository: context.read<VisitRepository>(),

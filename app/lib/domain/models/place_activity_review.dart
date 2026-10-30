@@ -14,6 +14,7 @@ class Review extends PlaceActivity {
     this.comment,
     this.hasPhoto = false,
     this.priceBand,
+    this.tags = const [],
   });
 
   @override
@@ -27,6 +28,7 @@ class Review extends PlaceActivity {
   @override
   final String placeName;
   final Scores scores;
+  final List<String> tags;
   @override
   final Companion? companion;
 
@@ -72,6 +74,7 @@ class NewReview {
     this.companion,
     String? comment,
     this.priceBand,
+    this.tags = const [],
   }) : comment = Review.normalizeComment(comment);
 
   final String authorId;
@@ -79,6 +82,7 @@ class NewReview {
   final String placeId;
   final String placeName;
   final Scores scores;
+  final List<String> tags;
   final Companion? companion;
 
   /// Normalizado na criação (trim; vazio → `null`).

@@ -18,6 +18,7 @@ Review review({
   Companion? companion,
   String? comment,
   bool hasPhoto = false,
+  List<String> tags = const [],
   PriceBand? priceBand,
 }) {
   _seq++;
@@ -32,6 +33,7 @@ Review review({
     comment: comment,
     createdAt: createdAt ?? DateTime.utc(2026, 9, 1, 15),
     hasPhoto: hasPhoto,
+    tags: tags,
     priceBand: priceBand,
   );
 }

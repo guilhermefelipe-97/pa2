@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/services/photo_picker.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/models/review.dart';
+import '../../domain/food_tags.dart';
 import '../core/price_band_picker.dart';
 import '../feed/widgets/axis_scores.dart' show noScoresLabel;
 import '../visit/visit_sheet.dart';
@@ -68,6 +69,14 @@ class _ReviewViewState extends State<ReviewView> {
             return const Center(
               key: Key('review-lock-checking'),
               child: CircularProgressIndicator(),
+            );
+          }
+          if (vm.isOwnBusiness) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(vm.blockedMessage!),
+              ),
             );
           }
           if (vm.isBlocked) {
@@ -148,6 +157,20 @@ class _ReviewViewState extends State<ReviewView> {
                 ],
               ),
               const SizedBox(height: 16),
+              const Text('Tags comunitárias (opcional)'),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final tag in foodTags)
+                    FilterChip(
+                      label: Text(tag),
+                      selected: vm.tags.contains(tag),
+                      onSelected: vm.isSubmitting
+                          ? null
+                          : (_) => vm.toggleTag(tag),
+                    ),
+                ],
+              ),
               PriceBandPicker(
                 value: vm.priceBand,
                 onChanged: vm.setPriceBand,

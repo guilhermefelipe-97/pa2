@@ -4,6 +4,9 @@ import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/visit_repository.dart';
 import '../../domain/feed.dart';
+import '../../domain/food_tags.dart';
+import '../../data/repositories/food_tag_repository.dart';
+import '../dietary/dietary_store.dart';
 import '../../domain/models/place.dart';
 import '../core/follow_events.dart';
 import '../core/load_visits.dart';
@@ -19,6 +22,8 @@ class FeedViewModel extends SafeChangeNotifier {
     required PlaceRepository placeRepository,
     required FollowEvents followEvents,
     required VisitRepository visitRepository,
+    this.dietary,
+    this.foodTagRepository,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _users = userRepository,
@@ -26,7 +31,46 @@ class FeedViewModel extends SafeChangeNotifier {
        _places = placeRepository,
        _visits = visitRepository,
        _follow = FollowStaleness(followEvents),
-       _clock = clock ?? DateTime.now;
+       _clock = clock ?? DateTime.now {
+    _auth.addListener(_sessionChanged);
+    dietary?.addListener(_preferencesChanged);
+  }
+  final DietaryStore? dietary;
+  final FoodTagRepository? foodTagRepository;
+  int _generation = 0;
+  int _dietaryRevision = -1;
+  Map<String, Map<String, int>> confirmedTags = {};
+  bool get hasFoodFilter => dietary?.tags.isNotEmpty ?? false;
+  void _sessionChanged() {
+    _generation++;
+    _items = const [];
+    confirmedTags = {};
+    _loadedOnce = false;
+    _loadedUid = null;
+    _following = const {};
+    notifyListeners();
+    load();
+  }
+
+  void _preferencesChanged() {
+    final store = dietary!;
+    // Oculta cards antigos enquanto preferências são desconhecidas ou mudam.
+    if (!store.ready || store.loading || store.revision != _dietaryRevision) {
+      _generation++;
+      _items = const [];
+      notifyListeners();
+    }
+    if (store.error != null) {
+      _errorMessage = store.error;
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
+    if (!store.loading && store.revision != _dietaryRevision) {
+      _dietaryRevision = store.revision;
+      load();
+    }
+  }
 
   final AuthRepository _auth;
   final UserRepository _users;
@@ -103,6 +147,7 @@ class FeedViewModel extends SafeChangeNotifier {
 
   Future<void> _loadOnce() async {
     final uid = _auth.currentUserId;
+    final generation = _generation;
     if (uid != _loadedUid) {
       // Outra conta (ou saiu): nada do usuário anterior fica visível.
       _following = const {};
@@ -118,6 +163,15 @@ class FeedViewModel extends SafeChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
+      final preferences = dietary;
+      if (preferences != null &&
+          (!preferences.ready ||
+              preferences.loading ||
+              preferences.error != null)) {
+        _items = const [];
+        throw StateError('preferências indisponíveis');
+      }
+      final selected = {...?preferences?.tags};
       // Cópia: o Set pode ser o do repositório.
       final following = {...await _users.getFollowing(uid)}..remove(uid);
       var items = const <FeedItem>[];
@@ -135,6 +189,18 @@ class FeedViewModel extends SafeChangeNotifier {
         });
         items = groupActivitiesIntoFeed(read.activities, places: places);
       }
+      final tags = foodTagRepository == null
+          ? <String, Map<String, int>>{}
+          : await foodTagRepository!.confirmedFor(items.map((i) => i.placeId));
+      if (generation != _generation ||
+          uid != _auth.currentUserId ||
+          isDisposed) {
+        return;
+      }
+      confirmedTags = tags;
+      items = items
+          .where((i) => matchesFoodTags(selected, tags[i.placeId] ?? {}))
+          .toList();
       // Só depois de tudo dar certo: uma falha no meio mantém o estado
       // anterior inteiro (relação, cards e CTA coerentes entre si).
       _following = following;
@@ -143,6 +209,12 @@ class FeedViewModel extends SafeChangeNotifier {
       _loadedOnce = true;
       _loadedUid = uid;
     } on Object {
+      if (generation != _generation ||
+          uid != _auth.currentUserId ||
+          isDisposed) {
+        return;
+      }
+      if (dietary != null || foodTagRepository != null) _items = const [];
       _errorMessage =
           'Não foi possível carregar o feed. Verifique sua conexão.';
     } finally {
@@ -163,6 +235,11 @@ class FeedViewModel extends SafeChangeNotifier {
     }
   }
 
+  Future<void> retry() async {
+    if (dietary?.error != null) await dietary!.load();
+    await load();
+  }
+
   Future<void> signOut() => _auth.signOut();
 
   /// Uid do usuário logado: o ícone "Você" abre o próprio perfil (as
@@ -171,6 +248,9 @@ class FeedViewModel extends SafeChangeNotifier {
 
   @override
   void dispose() {
+    _auth.removeListener(_sessionChanged);
+    dietary?.removeListener(_preferencesChanged);
+    _generation++;
     _follow.dispose();
     super.dispose();
   }

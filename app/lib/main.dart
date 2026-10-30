@@ -31,6 +31,12 @@ import 'data/services/photo_picker.dart';
 import 'firebase_config.dart';
 import 'firebase_options.dart';
 import 'routing/router.dart';
+import 'data/repositories/owner_repository.dart';
+import 'data/repositories/dietary_repository.dart';
+import 'data/repositories/food_tag_repository.dart';
+import 'data/firebase/firestore_owner_repository.dart';
+import 'data/firebase/firestore_dietary_repository.dart';
+import 'ui/dietary/dietary_store.dart';
 import 'ui/core/app_clock.dart';
 import 'ui/core/follow_events.dart';
 import 'ui/core/theme.dart';
@@ -105,6 +111,17 @@ Future<void> main() async {
             persisted: FirestorePlaceRepository(db),
             photon: context.read<PhotonClient>(),
           ),
+        ),
+        Provider<OwnerRepository>(create: (_) => FirestoreOwnerRepository(db)),
+        Provider<DietaryRepository>(
+          create: (_) => FirestoreDietaryRepository(db),
+        ),
+        Provider<FoodTagRepository>(
+          create: (_) => FirestoreReviewRepository(db),
+        ),
+        ChangeNotifierProvider<DietaryStore>(
+          lazy: false,
+          create: (context) => DietaryStore(authRepository, context.read()),
         ),
         Provider<ReviewRepository>(
           create: (_) => FirestoreReviewRepository(db),

@@ -91,7 +91,7 @@ Future<void> _seedPlace(
 
 void main() {
   group('FirestoreReviewRepository.createReview', () {
-    test('grava exatamente as 12 chaves que as Rules aceitam', () async {
+    test('grava exatamente as 13 chaves que as Rules aceitam', () async {
       final db = FakeFirebaseFirestore();
       await FirestoreReviewRepository(
         db,
@@ -112,9 +112,11 @@ void main() {
         'comment',
         'hasPhoto',
         'priceBand',
+        'tags',
         'createdAt',
       });
       expect(data['hasPhoto'], isFalse);
+      expect(data['tags'], isEmpty);
       // F27: sem faixa escolhida, a chave vai com null.
       expect(data['priceBand'], isNull);
       expect(data['authorId'], 'alice');

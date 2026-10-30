@@ -98,6 +98,14 @@ class _FeedViewState extends State<FeedView> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Perfil alimentar',
+            icon: const Icon(Icons.tune),
+            onPressed: () async {
+              await context.push('/perfil-alimentar');
+              if (mounted) widget.viewModel.load();
+            },
+          ),
           // "Minhas avaliações": o próprio perfil, com título "Você".
           IconButton(
             key: const Key('feed-me'),
@@ -135,18 +143,18 @@ class _FeedViewState extends State<FeedView> {
           }
           if (vm.errorMessage != null && vm.items.isEmpty) {
             return _PullToRefresh(
-              onRefresh: vm.load,
+              onRefresh: vm.retry,
               child: _Message(
                 icon: Icons.wifi_off,
                 text: vm.errorMessage!,
                 actionLabel: 'Tentar de novo',
-                onAction: vm.load,
+                onAction: vm.retry,
               ),
             );
           }
           if (vm.followsNobody) {
             return _PullToRefresh(
-              onRefresh: vm.load,
+              onRefresh: vm.retry,
               child: _Message(
                 icon: Icons.group_add,
                 text: 'Siga pessoas para ver onde elas foram.',
@@ -157,17 +165,25 @@ class _FeedViewState extends State<FeedView> {
           }
           if (vm.items.isEmpty) {
             return _PullToRefresh(
-              onRefresh: vm.load,
-              child: const _Message(
+              onRefresh: vm.retry,
+              child: _Message(
                 icon: Icons.restaurant,
-                text: 'Quem você segue ainda não avaliou nenhum lugar.',
+                actionLabel: vm.hasFoodFilter
+                    ? 'Editar ou limpar filtro'
+                    : null,
+                onAction: vm.hasFoodFilter
+                    ? () => context.push('/perfil-alimentar')
+                    : null,
+                text: vm.hasFoodFilter
+                    ? 'Nenhum local dos amigos tem todas as tags confirmadas do seu filtro alimentar.'
+                    : 'Quem você segue ainda não avaliou nenhum lugar.',
               ),
             );
           }
           final now = vm.now();
           final offset = vm.errorMessage != null ? 1 : 0;
           return RefreshIndicator(
-            onRefresh: vm.load,
+            onRefresh: vm.retry,
             child: ListView.builder(
               // Pull-to-refresh funciona mesmo com poucos cards.
               physics: const AlwaysScrollableScrollPhysics(),
@@ -178,8 +194,16 @@ class _FeedViewState extends State<FeedView> {
                   return MaterialBanner(
                     content: Text(vm.errorMessage!),
                     actions: [
+                      IconButton(
+                        tooltip: 'Perfil alimentar',
+                        icon: const Icon(Icons.tune),
+                        onPressed: () async {
+                          await context.push('/perfil-alimentar');
+                          if (mounted) widget.viewModel.load();
+                        },
+                      ),
                       TextButton(
-                        onPressed: vm.load,
+                        onPressed: vm.retry,
                         child: const Text('Tentar de novo'),
                       ),
                     ],
@@ -188,6 +212,7 @@ class _FeedViewState extends State<FeedView> {
                 final item = vm.items[i - offset];
                 return FeedCard(
                   item: item,
+                  confirmedTags: vm.confirmedTags[item.placeId] ?? const {},
                   now: now,
                   onTap: () => _openPlace(item),
                   isFollowing: vm.isFollowing,
