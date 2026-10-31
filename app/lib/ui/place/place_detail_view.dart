@@ -1,3 +1,4 @@
+import '../core/editorial.dart';
 import '../queue/queue_section.dart';
 import '../owner/reply_line.dart';
 import 'package:flutter/material.dart';
@@ -208,6 +209,7 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  EditorialHeading(eyebrow: place.category, title: place.name),
                   PhotoCredit(place: place),
                   if (subtitle.isNotEmpty)
                     Row(
@@ -355,29 +357,33 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
           if (item != null)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              sliver: SliverList.separated(
-                // Avaliações e visitas (sem nota) na ordem em que aconteceram.
-                itemCount: item.activities.length,
-                itemBuilder: (context, i) => switch (item.activities[i]) {
-                  final Review r => Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ReviewTile(
-                        review: r,
-                        now: at,
-                        onAuthorTap: () => _openPerson(r),
-                      ),
-                      ReplyLine(reviewId: r.id),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    for (final activity in item.activities) ...[
+                      switch (activity) {
+                        final Review r => Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ReviewTile(
+                              review: r,
+                              now: at,
+                              onAuthorTap: () => _openPerson(r),
+                            ),
+                            ReplyLine(reviewId: r.id),
+                          ],
+                        ),
+                        final Visit v => VisitTile(
+                          visit: v,
+                          now: at,
+                          isOwn: vm.isOwn(v),
+                          onAuthorTap: () => _openPerson(v),
+                        ),
+                      },
+                      const Divider(height: 1),
                     ],
-                  ),
-                  final Visit v => VisitTile(
-                    visit: v,
-                    now: at,
-                    isOwn: vm.isOwn(v),
-                    onAuthorTap: () => _openPerson(v),
-                  ),
-                },
-                separatorBuilder: (context, i) => const Divider(height: 1),
+                  ],
+                ),
               ),
             ),
           // F27: preço relatado (faixa típica, distribuição, quem relatou

@@ -1,3 +1,4 @@
+import '../core/editorial.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -123,6 +124,8 @@ class _NearbyViewState extends State<NearbyView> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 64 * MediaQuery.textScalerOf(context).scale(1),
+        actions: const [SettingsButton()],
         titleSpacing: 20,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,123 +527,97 @@ class NearbyTile extends StatelessWidget {
     final open = openStatus;
     final at = now ?? DateTime.now();
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Row(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Semantics(
-              button: true,
-              label: nearbySemanticsLabel(
-                item,
-                saved: saved,
-                openStatus: open == null
-                    ? null
-                    : openStatusSemantics(
-                        open,
-                        at,
-                        currentUserId: currentUserId,
-                      ),
-              ),
-              hint: 'Abre o lugar',
-              excludeSemantics: true,
-              child: InkWell(
-                onTap: onTap,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 80,
-                      height: 80,
-                      child: Hero(
-                        tag: 'place-photo-${place.id}',
-                        child: PlacePhoto(place: place, iconSize: 28),
-                      ),
+          Semantics(
+            button: true,
+            label: nearbySemanticsLabel(
+              item,
+              saved: saved,
+              openStatus: open == null
+                  ? null
+                  : openStatusSemantics(open, at, currentUserId: currentUserId),
+            ),
+            hint: 'Abre o lugar',
+            excludeSemantics: true,
+            child: InkWell(
+              onTap: onTap,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Hero(
+                      tag: 'place-photo-${place.id}',
+                      child: PlacePhoto(place: place),
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              place.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium,
-                            ),
-                            Text(
-                              nearbySubtitle(item),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: scheme.tertiary,
-                              ),
-                            ),
-                            // F20: aberto agora, com quem confirmou.
-                            if (open != null)
-                              Padding(
-                                key: const Key('nearby-open-status'),
-                                padding: const EdgeInsets.only(top: 2),
-                                child: OpenStatusLine(
-                                  status: open,
-                                  now: at,
-                                  currentUserId: currentUserId,
-                                  dense: true,
-                                ),
-                              ),
-                            if (friends != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.people,
-                                      size: 16,
-                                      color: scheme.primary,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        friends,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              color: scheme.primary,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            // F15: recorrência de um amigo ali.
-                            if (recurrence != null)
-                              Padding(
-                                key: const Key('nearby-recurrence'),
-                                padding: const EdgeInsets.only(top: 2),
-                                child: RecurrenceLine(label: recurrence),
-                              ),
-                            // F27: preço relatado pelos amigos.
-                            if (item.price != null)
-                              Padding(
-                                key: const Key('nearby-price'),
-                                padding: const EdgeInsets.only(top: 2),
-                                child: PriceChip(
-                                  summary: item.price!,
-                                  dense: true,
-                                ),
-                              ),
-                          ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(place.name, style: theme.textTheme.titleLarge),
+                        Text(
+                          nearbySubtitle(item),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-          SaveButton(placeId: place.id),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (open != null)
+                  Padding(
+                    key: const Key('nearby-open-status'),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: OpenStatusLine(
+                      status: open,
+                      now: at,
+                      currentUserId: currentUserId,
+                      dense: true,
+                    ),
+                  ),
+                if (friends != null)
+                  Text(friends, style: theme.textTheme.bodySmall),
+                if (recurrence != null)
+                  Padding(
+                    key: const Key('nearby-recurrence'),
+                    padding: const EdgeInsets.only(top: 4),
+                    child: RecurrenceLine(label: recurrence),
+                  ),
+                if (item.price != null)
+                  Padding(
+                    key: const Key('nearby-price'),
+                    padding: const EdgeInsets.only(top: 8),
+                    child: PriceChip(summary: item.price!, dense: true),
+                  ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    SaveButton(placeId: place.id, showLabel: true),
+                    TextButton(
+                      onPressed: onTap,
+                      child: const Text('Ver ficha'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

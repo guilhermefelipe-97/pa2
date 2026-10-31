@@ -13,7 +13,8 @@ import 'package:go_router/go_router.dart';
 import 'package:naarea/data/repositories/auth_repository.dart';
 import 'package:naarea/routing/router.dart';
 import 'package:naarea/routing/routes.dart';
-import 'package:naarea/ui/profile/profile_view.dart';
+import 'package:naarea/ui/settings/settings_view.dart';
+import 'package:naarea/data/repositories/user_repository.dart';
 import 'package:naarea/ui/profile/profile_view_model.dart';
 import 'package:naarea/ui/core/follow_events.dart';
 import 'package:naarea/data/repositories/admin_ownership_repository.dart';
@@ -314,31 +315,31 @@ void main() {
         visitRepository: FakeVisitRepository(),
       );
       await tester.pumpWidget(
-        ChangeNotifierProvider<AdminAccess>.value(
-          value: access,
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AdminAccess>.value(value: access),
+            ChangeNotifierProvider<AuthRepository>.value(value: auth),
+            Provider<UserRepository>.value(value: users),
+          ],
           child: MaterialApp.router(
             routerConfig: GoRouter(
               routes: [
-                GoRoute(
-                  path: '/',
-                  builder: (_, _) => ProfileView(viewModel: vm),
-                ),
+                GoRoute(path: '/', builder: (_, _) => const SettingsView()),
               ],
             ),
           ),
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(PopupMenuButton<String>));
-      await tester.pumpAndSettle();
       expect(find.text('Administração'), findsNothing);
-      await tester.tapAt(const Offset(10, 500));
-      await tester.pumpAndSettle();
       repo.role.add(true);
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.scrollUntilVisible(
+        find.widgetWithText(ListTile, 'Administração'),
+        250,
+      );
       await tester.pumpAndSettle();
-      expect(find.text('Administração'), findsOneWidget);
+      expect(find.text('Administração'), findsWidgets);
       await tester.pumpWidget(const SizedBox());
       vm.dispose();
       events.dispose();

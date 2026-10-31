@@ -126,9 +126,11 @@ void main() {
       },
     );
 
-    testWidgets('"Sair" fica no menu do feed', (tester) async {
+    testWidgets('"Sair" fica na central de configurações', (tester) async {
       final app = await pumpApp(tester);
-      await tester.tap(find.byKey(const Key('feed-menu')));
+      await tester.tap(find.byTooltip('Configurações'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('Sair'), 250);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sair'));
       await tester.pumpAndSettle();
@@ -353,6 +355,8 @@ void main() {
         );
         final listCallsBefore = saved.listCalls;
 
+        await tester.ensureVisible(find.byKey(const Key('save-mangai')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('save-mangai')));
         await tester.pump();
         expect(find.text('Salvo em Quero ir'), findsOneWidget);
@@ -417,6 +421,8 @@ void main() {
       final app1 = await pumpApp(tester, places: [_mangai], saved: saved);
       app1.router.go(Routes.placeDetail('mangai'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('save-mangai')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('save-mangai')));
       await tester.pumpAndSettle();
 
@@ -456,6 +462,8 @@ void main() {
           clock: () => DateTime.utc(2026, 9, 28, 15),
         );
 
+        await tester.ensureVisible(find.byKey(const Key('save-mangai')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('save-mangai')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 750));

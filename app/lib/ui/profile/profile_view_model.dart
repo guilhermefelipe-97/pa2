@@ -85,6 +85,12 @@ class ProfileViewModel extends SafeChangeNotifier {
     return name.isEmpty ? unnamedLabel : name;
   }
 
+  /// Nome público, inclusive no próprio perfil.
+  String get displayName {
+    final name = _profile?.displayName.trim() ?? '';
+    return name.isEmpty ? unnamedLabel : name;
+  }
+
   List<Review> _reviewList = const [];
 
   /// Até [maxReviews] avaliações da pessoa, mais recentes primeiro.

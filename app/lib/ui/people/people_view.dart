@@ -1,3 +1,7 @@
+import 'package:go_router/go_router.dart';
+import '../../routing/routes.dart';
+import '../feed/widgets/author_avatar.dart';
+import '../core/editorial.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -56,11 +60,23 @@ class _PeopleViewState extends State<PeopleView> {
   Widget build(BuildContext context) {
     final vm = widget.viewModel;
     return Scaffold(
-      appBar: AppBar(title: const Text('Pessoas')),
+      appBar: AppBar(
+        title: const Text('Pessoas'),
+        actions: const [SettingsButton()],
+      ),
       body: Column(
         children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: EditorialHeading(
+              eyebrow: 'Comunidade local',
+              title: 'Descobrir Pessoas',
+              description:
+                  'Construa sua rede confiável. Busque pelo nome de quem você conhece.',
+            ),
+          ),
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             child: TextField(
               key: const Key('people-search'),
               decoration: const InputDecoration(
@@ -91,7 +107,10 @@ class _PeopleViewState extends State<PeopleView> {
                       ),
                     if (vm.errorMessage != null)
                       Padding(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
                         child: Text(
                           vm.errorMessage!,
                           style: TextStyle(
@@ -125,20 +144,52 @@ class _PeopleViewState extends State<PeopleView> {
         final p = vm.results[i];
         final following = vm.isFollowing(p.uid);
         final enabled = vm.canToggle(p.uid);
-        return ListTile(
-          leading: CircleAvatar(
-            child: Text(p.displayName.characters.first.toUpperCase()),
-          ),
-          title: Text(p.displayName),
-          trailing: following
-              ? OutlinedButton(
-                  onPressed: enabled ? () => vm.toggleFollow(p.uid) : null,
-                  child: const Text('Seguindo'),
-                )
-              : FilledButton(
-                  onPressed: enabled ? () => vm.toggleFollow(p.uid) : null,
-                  child: const Text('Seguir'),
+        return Card(
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    AuthorAvatar(id: p.uid, name: p.displayName, radius: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        p.displayName,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    following
+                        ? OutlinedButton(
+                            onPressed: enabled
+                                ? () => vm.toggleFollow(p.uid)
+                                : null,
+                            child: const Text('Seguindo'),
+                          )
+                        : FilledButton(
+                            onPressed: enabled
+                                ? () => vm.toggleFollow(p.uid)
+                                : null,
+                            child: const Text('Seguir'),
+                          ),
+                    TextButton(
+                      onPressed: () => context.push(Routes.person(p.uid)),
+                      child: const Text('Ver perfil'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         );
       },
     );

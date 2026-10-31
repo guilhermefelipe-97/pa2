@@ -129,11 +129,10 @@ class _AxisPill extends StatelessWidget {
                 : scheme.secondaryContainer,
             borderRadius: BorderRadius.circular(20),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+          child: Wrap(
             children: [
               Text(
-                empty ? '$emoji $noScoresLabel' : '$emoji $value',
+                empty ? '$label $noScoresLabel' : '$label $value',
                 style: TextStyle(
                   color: empty
                       ? scheme.onSurfaceVariant

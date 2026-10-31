@@ -576,7 +576,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text('Avaliações e visitas'), findsOneWidget);
+      expect(find.text('Visitas'), findsOneWidget);
     });
   });
 

@@ -26,10 +26,12 @@ class SaveButton extends StatelessWidget {
     super.key,
     required this.placeId,
     this.style = SaveButtonStyle.plain,
+    this.showLabel = false,
   });
 
   final String placeId;
   final SaveButtonStyle style;
+  final bool showLabel;
 
   static const savedMessage = 'Salvo em Quero ir';
   static const removedMessage = 'Removido de Quero ir';
@@ -67,18 +69,25 @@ class SaveButton extends StatelessWidget {
       ),
     );
 
-    final button = IconButton(
-      key: Key('save-$placeId'),
-      onPressed: enabled ? () => _onPressed(context) : null,
-      icon: icon,
-      style: style == SaveButtonStyle.onImage
-          ? IconButton.styleFrom(
-              backgroundColor: scheme.surfaceContainerLowest.withValues(
-                alpha: 0.92,
-              ),
-            )
-          : null,
-    );
+    final button = showLabel
+        ? FilledButton.tonalIcon(
+            key: Key('save-$placeId'),
+            onPressed: enabled ? () => _onPressed(context) : null,
+            icon: icon,
+            label: Text(saved ? 'Salvo' : 'Quero ir'),
+          )
+        : IconButton(
+            key: Key('save-$placeId'),
+            onPressed: enabled ? () => _onPressed(context) : null,
+            icon: icon,
+            style: style == SaveButtonStyle.onImage
+                ? IconButton.styleFrom(
+                    backgroundColor: scheme.surfaceContainerLowest.withValues(
+                      alpha: 0.92,
+                    ),
+                  )
+                : null,
+          );
 
     return Semantics(
       button: true,

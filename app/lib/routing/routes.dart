@@ -1,4 +1,5 @@
 abstract final class Routes {
+  static const settings = '/configuracoes';
   static const admin = '/administracao';
   static const adminRequests = '/administracao/titularidade';
   static const adminRequestPattern =

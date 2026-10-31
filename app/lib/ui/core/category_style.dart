@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'stable_hash.dart';
-import 'theme.dart';
 
 final _bar = RegExp(r'\b(bar|bares|pub|pubs)\b');
 
@@ -34,10 +33,10 @@ IconData categoryIcon(String category) {
 }
 
 const _gradientPairs = [
-  [NaAreaColors.coral, NaAreaColors.laranja],
-  [NaAreaColors.laranja, NaAreaColors.sol],
-  [NaAreaColors.azulMar, NaAreaColors.coral],
-  [NaAreaColors.coralEscuro, NaAreaColors.azulMar],
+  [Color(0xFF342F2B), Color(0xFF62554A)],
+  [Color(0xFF663500), Color(0xFF904D00)],
+  [Color(0xFF00201D), Color(0xFF005049)],
+  [Color(0xFF1F1B17), Color(0xFF4D4540)],
 ];
 
 /// Gradiente do fallback da foto, estável por categoria (paleta pôr-do-sol).

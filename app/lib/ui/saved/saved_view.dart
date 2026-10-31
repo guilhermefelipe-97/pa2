@@ -1,3 +1,4 @@
+import '../core/editorial.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -39,6 +40,7 @@ class SavedView extends StatelessWidget {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 64 * MediaQuery.textScalerOf(context).scale(1),
         titleSpacing: 20,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -62,6 +64,7 @@ class SavedView extends StatelessWidget {
           ],
         ),
         actions: [
+          const SettingsButton(),
           ListenableBuilder(
             listenable: viewModel,
             builder: (context, _) {
@@ -158,6 +161,7 @@ class SavedView extends StatelessWidget {
           return MaterialBanner(
             content: Text(vm.errorMessage!),
             actions: [
+              const SettingsButton(),
               TextButton(
                 onPressed: vm.refresh,
                 child: const Text('Tentar de novo'),
@@ -213,8 +217,8 @@ class SavedCard extends StatelessWidget {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 96,
-                      height: 96,
+                      width: 100,
+                      height: 116,
                       child: Hero(
                         tag: 'place-photo-${place.id}',
                         child: PlacePhoto(place: place, iconSize: 32),

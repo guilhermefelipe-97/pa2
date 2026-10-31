@@ -1,3 +1,4 @@
+import '../core/editorial.dart';
 import 'admin_access_view.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -93,6 +94,10 @@ class _AdminOwnershipViewState extends State<AdminOwnershipView> {
             : ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
+                  const EditorialHeading(
+                    eyebrow: 'Administração',
+                    title: 'Moderação de titularidade',
+                  ),
                   if (vm.busy) const LinearProgressIndicator(),
                   if (vm.message != null) Text(vm.message!),
                   if (vm.message != null)
@@ -104,21 +109,25 @@ class _AdminOwnershipViewState extends State<AdminOwnershipView> {
                     if (!vm.busy && vm.requests.isEmpty && vm.message == null)
                       const Text('Nenhuma solicitação pendente'),
                     for (final item in vm.requests)
-                      ListTile(
-                        title: Text(item.place),
-                        subtitle: Text(
-                          item.available
-                              ? '${item.applicant} · ${_date(item.createdAt)}'
-                              : 'Pedido indisponível · Conta: ${item.uid} · Local: ${item.placeId}',
+                      Card(
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(16),
+                          leading: const Icon(Icons.storefront_outlined),
+                          title: Text(item.place),
+                          subtitle: Text(
+                            item.available
+                                ? '${item.applicant} · ${_date(item.createdAt)}'
+                                : 'Pedido indisponível · Conta: ${item.uid} · Local: ${item.placeId}',
+                          ),
+                          onTap: !item.available
+                              ? null
+                              : () async {
+                                  await context.push(
+                                    Routes.adminRequest(item.uid, item.placeId),
+                                  );
+                                  if (mounted) vm.load();
+                                },
                         ),
-                        onTap: !item.available
-                            ? null
-                            : () async {
-                                await context.push(
-                                  Routes.adminRequest(item.uid, item.placeId),
-                                );
-                                if (mounted) vm.load();
-                              },
                       ),
                     if (vm.cursor != null)
                       TextButton(

@@ -1,3 +1,4 @@
+import '../core/editorial.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -61,7 +62,7 @@ class _ReviewViewState extends State<ReviewView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(viewModel.place.name)),
+      appBar: AppBar(title: const Text('Nova experiência')),
       body: ListenableBuilder(
         listenable: viewModel,
         builder: (context, _) {
@@ -89,6 +90,16 @@ class _ReviewViewState extends State<ReviewView> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              EditorialHeading(
+                eyebrow: 'Avaliando visita',
+                title: vm.place.name,
+              ),
+              const EditorialHeading(
+                eyebrow: 'Nova experiência',
+                title: 'Como foi a sua experiência?',
+                description:
+                    'Avalie os aspectos que viveu. Você pode deixar um eixo sem nota.',
+              ),
               Text(
                 '${vm.place.category} · ${vm.place.neighborhood}',
                 style: theme.textTheme.bodyMedium,
@@ -506,96 +517,99 @@ class _AxisPicker extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final current = value;
-    // Azul-mar fechado do tema: contraste AA sobre a areia da superfície.
-    final filled = scheme.tertiary;
+    // Âmbar fechado: contraste AA sobre as superfícies claras.
+    final filled = scheme.secondary;
     final opacity = enabled ? 1.0 : disabledOpacity;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '$emoji $label',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ),
-                Flexible(
-                  child: Text(
-                    current == null ? noScoresLabel : '$current de 5',
-                    textAlign: TextAlign.end,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$emoji $label',
+                      style: theme.textTheme.titleMedium,
                     ),
                   ),
-                ),
-                // Reserva o espaço do Limpar mesmo oculto: o cabeçalho não
-                // pula ao escolher a primeira nota.
-                Visibility(
-                  visible: current != null,
-                  maintainSize: true,
-                  maintainAnimation: true,
-                  maintainState: true,
-                  child: TextButton(
-                    key: Key('axis-$axisKey-clear'),
-                    onPressed: enabled && current != null ? onClear : null,
-                    child: Text('Limpar', semanticsLabel: 'Limpar $label'),
+                  Flexible(
+                    child: Text(
+                      current == null ? noScoresLabel : '$current de 5',
+                      textAlign: TextAlign.end,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                  // Reserva o espaço do Limpar mesmo oculto: o cabeçalho não
+                  // pula ao escolher a primeira nota.
+                  Visibility(
+                    visible: current != null,
+                    maintainSize: true,
+                    maintainAnimation: true,
+                    maintainState: true,
+                    child: TextButton(
+                      key: Key('axis-$axisKey-clear'),
+                      onPressed: enabled && current != null ? onClear : null,
+                      child: Text('Limpar', semanticsLabel: 'Limpar $label'),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final iconSize = math.max(
-                0.0,
-                math.min(
-                  maxStarSize,
-                  constraints.maxWidth / 5 - 2 * starPadding,
-                ),
-              );
-              return Row(
-                children: [
-                  for (var i = 1; i <= 5; i++)
-                    Expanded(
-                      child: Semantics(
-                        button: true,
-                        enabled: enabled,
-                        selected: current == i,
-                        label: '$label $i de 5',
-                        onTap: enabled ? () => onChanged(i) : null,
-                        excludeSemantics: true,
-                        child: Center(
-                          child: IconButton(
-                            key: Key('axis-$axisKey-$i'),
-                            iconSize: iconSize,
-                            padding: const EdgeInsets.all(starPadding),
-                            constraints: const BoxConstraints(),
-                            onPressed: enabled ? () => onChanged(i) : null,
-                            icon: Opacity(
-                              opacity: opacity,
-                              child: Icon(
-                                current != null && i <= current
-                                    ? Icons.star_rounded
-                                    : Icons.star_outline_rounded,
-                                color: current != null && i <= current
-                                    ? filled
-                                    : scheme.outline,
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final iconSize = math.max(
+                  0.0,
+                  math.min(
+                    maxStarSize,
+                    constraints.maxWidth / 5 - 2 * starPadding,
+                  ),
+                );
+                return Row(
+                  children: [
+                    for (var i = 1; i <= 5; i++)
+                      Expanded(
+                        child: Semantics(
+                          button: true,
+                          enabled: enabled,
+                          selected: current == i,
+                          label: '$label $i de 5',
+                          onTap: enabled ? () => onChanged(i) : null,
+                          excludeSemantics: true,
+                          child: Center(
+                            child: IconButton(
+                              key: Key('axis-$axisKey-$i'),
+                              iconSize: iconSize,
+                              padding: const EdgeInsets.all(starPadding),
+                              constraints: const BoxConstraints(),
+                              onPressed: enabled ? () => onChanged(i) : null,
+                              icon: Opacity(
+                                opacity: opacity,
+                                child: Icon(
+                                  current != null && i <= current
+                                      ? Icons.star_rounded
+                                      : Icons.star_outline_rounded,
+                                  color: current != null && i <= current
+                                      ? filled
+                                      : scheme.outline,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                ],
-              );
-            },
-          ),
-        ],
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

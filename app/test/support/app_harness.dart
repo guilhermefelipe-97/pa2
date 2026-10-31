@@ -90,6 +90,9 @@ Future<TestApp> pumpApp(
   SponsorshipRepository? sponsors,
   FakeFoodTagRepository? foodTags,
   DateTime Function()? clock,
+  ThemeData? theme,
+  double textScale = 1,
+  GlobalKey? captureKey,
 }) async {
   final loc = location ?? FakeLocationService();
   final u = users ?? (FakeUserRepository()..addUser('me', 'Eu'));
@@ -155,7 +158,19 @@ Future<TestApp> pumpApp(
           ),
         ),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: RepaintBoundary(
+        key: captureKey,
+        child: MaterialApp.router(
+          theme: theme,
+          routerConfig: router,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
+        ),
+      ),
     ),
   );
   await tester.pumpAndSettle();

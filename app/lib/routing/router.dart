@@ -1,5 +1,6 @@
 import '../data/repositories/privacy_repository.dart';
 import '../ui/privacy/privacy_view.dart';
+import '../ui/settings/settings_view.dart';
 import '../ui/sponsored/sponsored_view.dart';
 import '../ui/owner/owner_reviews_view.dart';
 import '../ui/admin/admin_access_view.dart';
@@ -93,6 +94,10 @@ GoRouter buildRouter(AuthRepository auth) {
       location: state.matchedLocation,
     ),
     routes: [
+      GoRoute(
+        path: Routes.settings,
+        builder: (context, state) => const SettingsView(),
+      ),
       GoRoute(
         path: '/modo-silencioso',
         builder: (context, state) => const PrivacyView(),

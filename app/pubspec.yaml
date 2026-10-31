@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.1+5
+version: 1.3.0+6
 
 environment:
   sdk: ^3.10.1
@@ -76,6 +76,31 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/icon/stitch-source.png
+  fonts:
+    - family: Epilogue
+      fonts:
+        - asset: assets/fonts/Epilogue-400.ttf
+          weight: 400
+        - asset: assets/fonts/Epilogue-500.ttf
+          weight: 500
+        - asset: assets/fonts/Epilogue-600.ttf
+          weight: 600
+        - asset: assets/fonts/Epilogue-700.ttf
+          weight: 700
+    - family: Plus Jakarta Sans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-400.ttf
+          weight: 400
+        - asset: assets/fonts/PlusJakartaSans-500.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-600.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-700.ttf
+          weight: 700
+
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
@@ -110,7 +135,7 @@ flutter:
 # Ícone do app: gerado por tools/gerar_icone.py (Pillow). Para regenerar:
 #   python ../tools/gerar_icone.py && dart run flutter_launcher_icons
 flutter_launcher_icons:
-  image_path: "assets/icon/icon.png"
+  image_path: "assets/icon/stitch-source.png"
   android: true
   adaptive_icon_background: "assets/icon/icon_background.png"
   adaptive_icon_foreground: "assets/icon/icon_foreground.png"
@@ -119,6 +144,7 @@ flutter_launcher_icons:
   remove_alpha_ios: true
   web:
     generate: true
-    image_path: "assets/icon/icon.png"
-    background_color: "#FFF4E6"
-    theme_color: "#D9482B"
+    image_path: "assets/icon/stitch-source.png"
+    background_color: "#FFF8F5"
+    theme_color: "#000000"
+

@@ -1,6 +1,7 @@
 import '../owner/reply_line.dart';
 import 'package:provider/provider.dart';
-import '../admin/admin_access.dart';
+import '../core/editorial.dart';
+import '../lists/lists_store.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -25,6 +26,7 @@ class ProfileView extends StatefulWidget {
 }
 
 class _ProfileViewState extends State<ProfileView> {
+  int selectedTab = 0;
   @override
   void initState() {
     super.initState();
@@ -85,37 +87,13 @@ class _ProfileViewState extends State<ProfileView> {
       listenable: widget.viewModel,
       builder: (context, _) {
         final vm = widget.viewModel;
-        context.watch<AdminAccess?>();
+
         return Scaffold(
           appBar: AppBar(
             // Aberto por link direto: sem tela anterior, "voltar" vai ao feed.
             leading: context.canPop() ? null : BackButton(onPressed: _back),
             title: Text(vm.state == ProfileState.ready ? vm.title : ''),
-            actions: [
-              if (vm.isSelf)
-                PopupMenuButton<String>(
-                  onSelected: (route) => context.push(route),
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                      value: '/modo-silencioso',
-                      child: Text('Modo silencioso'),
-                    ),
-                    if (context.read<AdminAccess?>()?.enabled == true)
-                      const PopupMenuItem(
-                        value: Routes.admin,
-                        child: Text('Administração'),
-                      ),
-                    PopupMenuItem(
-                      value: '/meus-estabelecimentos',
-                      child: Text('Meus estabelecimentos'),
-                    ),
-                    PopupMenuItem(
-                      value: '/perfil-alimentar',
-                      child: Text('Perfil alimentar'),
-                    ),
-                  ],
-                ),
-            ],
+            actions: [if (vm.isSelf) const SettingsButton()],
           ),
           body: switch (vm.state) {
             ProfileState.loading => const Center(
@@ -150,19 +128,70 @@ class _ProfileViewState extends State<ProfileView> {
 
   Widget _ready(BuildContext context, ProfileViewModel vm) {
     final now = vm.now();
-    final reviews = vm.activities;
-    // Item 0: cabeçalho; depois avaliações e visitas (ou o texto de vazio).
+    final ownLists = vm.isSelf ? context.watch<ListsStore?>() : null;
+    final lists = vm.isSelf ? (ownLists?.lists ?? <PlaceList>[]) : vm.lists;
+    final reviews = vm.activities
+        .where((a) => selectedTab == 0 ? a is Review : a is Visit)
+        .toList();
+    if (selectedTab == 2) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        children: [
+          _Header(viewModel: vm),
+          _tabs(vm),
+          if (vm.isSelf && ownLists?.isLoading == true)
+            const Center(child: CircularProgressIndicator())
+          else if (vm.isSelf && ownLists?.hasError == true)
+            TextButton(
+              onPressed: ownLists!.reload,
+              child: const Text(
+                'Não foi possível carregar as listas. Tentar de novo',
+              ),
+            )
+          else if (lists.isEmpty)
+            Text(
+              vm.isSelf
+                  ? 'Suas listas aparecem aqui. Organize seus locais em Quero ir.'
+                  : 'Nenhuma lista visível para você.',
+            ),
+          for (final list in lists)
+            _ProfileListTile(
+              key: ValueKey('profile-list-${list.id}'),
+              list: list,
+              onTap: () {
+                if (vm.isSelf) {
+                  ownLists?.focusList(list.id);
+                  context.go(Routes.saved);
+                } else {
+                  context.push(Routes.personList(vm.uid, list.id), extra: list);
+                }
+              },
+            ),
+        ],
+      );
+    } // Item 0: cabeçalho; depois avaliações e visitas (ou o texto de vazio).
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       itemCount: 1 + (reviews.isEmpty ? 1 : reviews.length),
       itemBuilder: (context, i) {
-        if (i == 0) return _Header(viewModel: vm);
+        if (i == 0)
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _Header(viewModel: vm),
+              _tabs(vm),
+            ],
+          );
         if (reviews.isEmpty) {
           final theme = Theme.of(context);
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Text(
-              vm.emptyText,
+              vm.activities.isEmpty
+                  ? vm.emptyText
+                  : selectedTab == 0
+                  ? 'Nenhuma avaliação recente'
+                  : 'Nenhuma visita recente',
               key: const Key('profile-empty'),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyLarge?.copyWith(
@@ -188,6 +217,46 @@ class _ProfileViewState extends State<ProfileView> {
       },
     );
   }
+
+  Widget _tabs(ProfileViewModel vm) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final (index, label) in [
+                (0, 'Avaliações'),
+                (1, 'Visitas'),
+                (2, 'Listas'),
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    key: Key('profile-tab-$index'),
+                    label: Text(label),
+                    selected: selectedTab == index,
+                    onSelected: (_) => setState(() => selectedTab = index),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (selectedTab != 2)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              selectedTab == 0
+                  ? '${vm.reviews.length} avaliações recentes'
+                  : '${vm.activities.whereType<Visit>().length} visitas recentes',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 class _Header extends StatelessWidget {
@@ -199,69 +268,48 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final vm = viewModel;
     final theme = Theme.of(context);
-    final name = vm.title;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    final name = vm.displayName;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ExcludeSemantics(
-              child: AuthorAvatar(id: vm.uid, name: name, radius: 32),
+            Row(
+              children: [
+                ExcludeSemantics(
+                  child: AuthorAvatar(id: vm.uid, name: name, radius: 32),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(name, style: theme.textTheme.headlineSmall),
+                ),
+              ],
             ),
-            const SizedBox(width: 16),
-            Expanded(child: Text(name, style: theme.textTheme.headlineSmall)),
+            if (!vm.isSelf) ...[
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: vm.isFollowing
+                    ? OutlinedButton(
+                        key: const Key('profile-follow'),
+                        onPressed: vm.isBusy ? null : vm.toggleFollow,
+                        child: Text(
+                          'Seguindo',
+                          semanticsLabel:
+                              'Seguindo $name. Toque para deixar de seguir',
+                        ),
+                      )
+                    : FilledButton(
+                        key: const Key('profile-follow'),
+                        onPressed: vm.isBusy ? null : vm.toggleFollow,
+                        child: Text('Seguir', semanticsLabel: 'Seguir $name'),
+                      ),
+              ),
+            ],
           ],
         ),
-        if (!vm.isSelf) ...[
-          const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: vm.isFollowing
-                ? OutlinedButton(
-                    key: const Key('profile-follow'),
-                    onPressed: vm.isBusy ? null : vm.toggleFollow,
-                    child: Text(
-                      'Seguindo',
-                      semanticsLabel:
-                          'Seguindo $name. Toque para deixar de seguir',
-                    ),
-                  )
-                : FilledButton(
-                    key: const Key('profile-follow'),
-                    onPressed: vm.isBusy ? null : vm.toggleFollow,
-                    child: Text('Seguir', semanticsLabel: 'Seguir $name'),
-                  ),
-          ),
-        ],
-        // F13: listas visíveis, só para quem segue (vazio = seção oculta).
-        if (!vm.isSelf && vm.isFollowing && vm.lists.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          Semantics(
-            header: true,
-            child: Text(
-              'Listas',
-              key: const Key('profile-lists'),
-              style: theme.textTheme.titleMedium,
-            ),
-          ),
-          const SizedBox(height: 4),
-          for (final list in vm.lists)
-            _ProfileListTile(
-              key: ValueKey('profile-list-${list.id}'),
-              list: list,
-              onTap: () =>
-                  context.push(Routes.personList(vm.uid, list.id), extra: list),
-            ),
-        ],
-        const SizedBox(height: 24),
-        Text(
-          vm.activities.any((a) => a is Visit)
-              ? 'Avaliações e visitas'
-              : 'Avaliações',
-          style: theme.textTheme.titleMedium,
-        ),
-        const Divider(height: 20),
-      ],
+      ),
     );
   }
 }
@@ -326,7 +374,7 @@ class _ProfileReviewTile extends StatelessWidget {
           onTap: onTap,
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(color: theme.colorScheme.outlineVariant),
@@ -382,7 +430,7 @@ class _ProfileVisitTile extends StatelessWidget {
           onTap: onTap,
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(color: theme.colorScheme.outlineVariant),

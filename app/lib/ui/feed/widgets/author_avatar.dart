@@ -20,9 +20,9 @@ class AuthorAvatar extends StatelessWidget {
   static const _colors = [
     NaAreaColors.coralEscuro,
     NaAreaColors.azulMar,
-    Color(0xFFB5651D),
-    Color(0xFF7A4EAB),
-    Color(0xFF2E8B57),
+    Color(0xFF663500),
+    Color(0xFF4D4540),
+    Color(0xFF005049),
   ];
 
   static String initial(String name) {

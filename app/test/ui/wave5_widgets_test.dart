@@ -90,7 +90,7 @@ void main() {
       final app = await pumpApp(tester);
       app.router.go(Routes.person('me'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.tap(find.byTooltip('Configurações'));
       await tester.pumpAndSettle();
       expect(find.text('Meus estabelecimentos'), findsOneWidget);
       expect(find.text('Perfil alimentar'), findsOneWidget);

@@ -267,7 +267,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: AxisScores.scores(Scores(food: 4)))),
     );
-    expect(find.text('🍽️ 4'), findsOneWidget);
+    expect(find.text('Comida 4'), findsOneWidget);
     expect(find.textContaining('✨'), findsNothing);
     expect(find.textContaining('🤝'), findsNothing);
     expect(find.textContaining('sem notas'), findsNothing);
@@ -309,11 +309,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: AxisScores.averages(avg))),
     );
-    expect(find.text('🍽️ 4,5'), findsOneWidget);
+    expect(find.text('Comida 4,5'), findsOneWidget);
     // 3 avaliações: comida e atendimento em 2 delas → "(2)" visível.
     expect(find.text(' (2)'), findsNWidgets(2));
-    expect(find.text('✨ sem notas'), findsOneWidget);
-    expect(find.textContaining('✨ 0'), findsNothing);
+    expect(find.text('Ambiente sem notas'), findsOneWidget);
+    expect(find.textContaining('Ambiente 0'), findsNothing);
     expect(
       find.bySemanticsLabel('Comida 4,5 de 5, 2 avaliações'),
       findsOneWidget,
@@ -415,13 +415,13 @@ void main() {
         of: find.byKey(ValueKey('trust-source-$uid')),
         matching: find.text(text),
       );
-      expect(inRow('b', '🍽️ 4'), findsOneWidget);
-      expect(inRow('b', '✨ 3'), findsOneWidget);
-      expect(inRow('b', '🤝 5'), findsOneWidget);
+      expect(inRow('b', 'Comida 4'), findsOneWidget);
+      expect(inRow('b', 'Ambiente 3'), findsOneWidget);
+      expect(inRow('b', 'Atendimento 5'), findsOneWidget);
       expect(inRow('b', 'com amigos de manhã'), findsOneWidget);
-      expect(inRow('a', '🍽️ 5'), findsOneWidget);
-      expect(inRow('a', '✨ 2'), findsOneWidget);
-      expect(inRow('a', '🤝 4'), findsOneWidget);
+      expect(inRow('a', 'Comida 5'), findsOneWidget);
+      expect(inRow('a', 'Ambiente 2'), findsOneWidget);
+      expect(inRow('a', 'Atendimento 4'), findsOneWidget);
       expect(inRow('a', 'no almoço'), findsOneWidget);
       expect(find.text('há 2 h'), findsOneWidget);
       expect(find.text('ontem'), findsOneWidget);
@@ -439,7 +439,7 @@ void main() {
         reason: 'citação traz autor e tempo próprios',
       );
       // avatares com a inicial de quem foi
-      expect(find.text('B'), findsOneWidget);
+      expect(find.text('B'), findsNWidgets(2));
       expect(find.text('A'), findsOneWidget);
     },
   );
@@ -545,18 +545,18 @@ void main() {
       expect(find.byType(PlacePhoto), findsOneWidget);
       expect(find.text('Mangai'), findsWidgets);
       // eixos por avaliação
-      expect(find.text('🍽️ 5'), findsOneWidget);
-      expect(find.text('✨ 2'), findsOneWidget);
-      expect(find.text('🤝 1'), findsOneWidget);
+      expect(find.text('Comida 5'), findsOneWidget);
+      expect(find.text('Ambiente 2'), findsOneWidget);
+      expect(find.text('Atendimento 1'), findsOneWidget);
       expect(find.text('Atendimento demorou'), findsOneWidget);
       expect(find.text('Noite · Família · há 3 dias'), findsOneWidget);
       expect(find.textContaining('há 5 min'), findsOneWidget);
       expect(find.text('Ana'), findsOneWidget);
       expect(find.text('Beto'), findsOneWidget);
       // médias dos amigos: comida (5+3)/2, ambiente (2+4)/2, atendimento (4+1)/2
-      expect(find.text('🍽️ 4'), findsOneWidget);
-      expect(find.text('✨ 3'), findsOneWidget);
-      expect(find.text('🤝 2,5'), findsOneWidget);
+      expect(find.text('Comida 4'), findsOneWidget);
+      expect(find.text('Ambiente 3'), findsOneWidget);
+      expect(find.text('Atendimento 2,5'), findsOneWidget);
       expect(find.text('2 avaliações de amigos'), findsOneWidget);
       expect(find.text('Tirol · Restaurante · Natal'), findsOneWidget);
     },
@@ -580,13 +580,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('🍽️ 4,5'), findsOneWidget);
+    expect(find.text('Comida 4,5'), findsOneWidget);
     expect(
       find.bySemanticsLabel('Comida 4,5 de 5, 2 avaliações'),
       findsOneWidget,
     );
-    expect(find.text('✨ sem notas'), findsOneWidget);
-    expect(find.textContaining('✨ 0'), findsNothing);
+    expect(find.text('Ambiente sem notas'), findsOneWidget);
+    expect(find.textContaining('Ambiente 0'), findsNothing);
     expect(
       find.bySemanticsLabel('Atendimento 3 de 5, 1 avaliação'),
       findsOneWidget,
@@ -623,7 +623,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     // Comida (2+5)/2 nas 2; ambiente e atendimento só da antiga.
-    expect(find.text('🍽️ 3,5'), findsOneWidget);
+    expect(find.text('Comida 3,5'), findsOneWidget);
     expect(
       find.bySemanticsLabel('Comida 3,5 de 5, 2 avaliações'),
       findsOneWidget,
@@ -824,7 +824,7 @@ void main() {
         ]),
       );
       expect(find.text('A'), findsOneWidget);
-      expect(find.text('B'), findsOneWidget);
+      expect(find.text('B'), findsNWidgets(2));
       expect(find.text('C'), findsOneWidget);
       expect(find.text('D'), findsNothing);
       expect(find.text('+1'), findsOneWidget);

@@ -159,12 +159,16 @@ void main() {
         app.router.push(Routes.person('ana'));
         await tester.pumpAndSettle();
 
+        await tester.tap(find.byKey(const Key('profile-tab-2')));
+        await tester.pumpAndSettle();
         // Seção "Listas": só a visível, com emoji, nome e quantos locais.
-        expect(find.byKey(const Key('profile-lists')), findsOneWidget);
+        expect(find.byKey(const Key('profile-tab-2')), findsOneWidget);
         expect(find.text('Sábado'), findsOneWidget);
         expect(find.text('3 locais'), findsOneWidget);
         expect(find.text('Só minha'), findsNothing);
 
+        await tester.tap(find.byKey(const Key('profile-tab-2')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('profile-list-sab')));
         await tester.pumpAndSettle();
         expect(find.byType(PersonListView), findsOneWidget);
@@ -352,6 +356,8 @@ void main() {
         await tester.pumpAndSettle();
 
         app.router.push(Routes.person('ana'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('profile-tab-2')));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('profile-list-sab')));
         await tester.pumpAndSettle();

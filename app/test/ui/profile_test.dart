@@ -240,7 +240,7 @@ void main() {
       expect(find.widgetWithText(OutlinedButton, 'Seguindo'), findsOneWidget);
       expect(find.text('Mangai'), findsOneWidget);
       expect(find.text('Camarões'), findsOneWidget);
-      expect(find.text('🍽️ 5'), findsOneWidget);
+      expect(find.text('Comida 5'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('Mangai')).dy,
         lessThan(tester.getTopLeft(find.text('Camarões')).dy),

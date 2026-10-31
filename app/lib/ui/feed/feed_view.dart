@@ -1,3 +1,4 @@
+import '../core/editorial.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -38,17 +39,6 @@ class _FeedViewState extends State<FeedView> {
 
   void _openPeople() => context.go(Routes.people);
 
-  Future<void> _signOut() async {
-    try {
-      await widget.viewModel.signOut();
-    } on Object {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível sair. Tente de novo.')),
-      );
-    }
-  }
-
   Future<void> _openReview() async {
     final saved = await context.push<bool>(Routes.pickPlace);
     if (!mounted) return;
@@ -82,6 +72,7 @@ class _FeedViewState extends State<FeedView> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 64 * MediaQuery.textScalerOf(context).scale(1),
         titleSpacing: 20,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,34 +87,13 @@ class _FeedViewState extends State<FeedView> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Perfil alimentar',
-            icon: const Icon(Icons.tune),
-            onPressed: () async {
-              await context.push('/perfil-alimentar');
-              if (mounted) widget.viewModel.load();
-            },
-          ),
+          const SettingsButton(),
           // "Minhas avaliações": o próprio perfil, com título "Você".
           IconButton(
             key: const Key('feed-me'),
             tooltip: 'Você',
             icon: const Icon(Icons.account_circle_outlined),
             onPressed: _openMe,
-          ),
-          PopupMenuButton<void>(
-            key: const Key('feed-menu'),
-            tooltip: 'Mais opções',
-            itemBuilder: (context) => [
-              PopupMenuItem<void>(
-                onTap: _signOut,
-                child: const ListTile(
-                  leading: Icon(Icons.logout),
-                  title: Text('Sair'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -137,7 +107,7 @@ class _FeedViewState extends State<FeedView> {
         listenable: vm,
         builder: (context, _) {
           if (vm.isLoading && !vm.loadedOnce) {
-            return const Center(child: CircularProgressIndicator());
+            return const EditorialLoading();
           }
           if (vm.errorMessage != null && vm.items.isEmpty) {
             return _PullToRefresh(
@@ -186,8 +156,15 @@ class _FeedViewState extends State<FeedView> {
               // Pull-to-refresh funciona mesmo com poucos cards.
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-              itemCount: vm.items.length + offset,
-              itemBuilder: (context, i) {
+              itemCount: vm.items.length + offset + 1,
+              itemBuilder: (context, index) {
+                if (index == 0)
+                  return const EditorialHeading(
+                    eyebrow: 'Seu círculo',
+                    title: 'Feed de Amigos',
+                    description: 'Experiências recentes de quem você segue.',
+                  );
+                final i = index - 1;
                 if (offset == 1 && i == 0) {
                   return MaterialBanner(
                     content: Text(vm.errorMessage!),

@@ -124,6 +124,14 @@ void main() {
         find.descendant(of: card, matching: find.text('Ana foi aqui')),
         findsOneWidget,
       );
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('nearby-perto240')),
+        250,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('nearby-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       // Na lista, o item também mostra quem foi.
       expect(
         find.descendant(
@@ -133,6 +141,15 @@ void main() {
         findsOneWidget,
       );
 
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('nearby-suggestion')),
+        -250,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('nearby-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('nearby-suggestion-open')));
       await tester.pumpAndSettle();
       expect(find.byType(PlaceDetailView), findsOneWidget);
@@ -174,6 +191,14 @@ void main() {
       reviews: reviews,
       visits: visits,
       location: FakeLocationService(position: pontaNegra, granted: true),
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('nearby-perto240')),
+      250,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('nearby-list')),
+        matching: find.byType(Scrollable),
+      ),
     );
     final item = find.byKey(const ValueKey('nearby-perto240'));
     expect(
@@ -460,7 +485,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Bar do Zé'), findsWidgets);
       expect(find.text('120 m · Bar · Sé'), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('osm-credit')),
+        250,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('nearby-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       expect(find.byKey(const Key('osm-credit')), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('save-osm-n123')).last);
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('save-osm-n123')).last);
       await tester.pumpAndSettle();

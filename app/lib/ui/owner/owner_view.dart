@@ -1,3 +1,4 @@
+import '../core/editorial.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -103,68 +104,77 @@ class _OwnerViewState extends State<OwnerView> {
             );
           }
           return ListView.builder(
-            itemCount: rows.length,
+            padding: const EdgeInsets.all(20),
+            itemCount: rows.length + 1,
             itemBuilder: (context, index) {
-              final row = rows[index];
-              return ListTile(
-                title: Text(row.name),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      row.failed
-                          ? 'Não foi possível verificar titularidade'
-                          : row.owned
-                          ? 'Titularidade verificada'
-                          : switch (row.request.status) {
-                              'pending' =>
-                                'Pedido pendente — sem poderes até a aprovação',
-                              'approved' ||
-                              'revoked' => 'Titularidade revogada',
-                              _ => 'Pedido rejeitado',
-                            },
-                    ),
-                    if (row.owned)
-                      TextButton.icon(
-                        icon: const Icon(Icons.campaign_outlined),
-                        label: const Text('Divulgação'),
-                        onPressed: () => showDialog<void>(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            title: const Text('Divulgação'),
-                            content: const Text(
-                              'A contratação de divulgação está indisponível no momento.',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: const Text('Fechar'),
+              if (index == 0)
+                return const EditorialHeading(
+                  eyebrow: 'Área do titular',
+                  title: 'Locais vinculados',
+                );
+              final row = rows[index - 1];
+              return Card(
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(16),
+                  title: Text(row.name),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        row.failed
+                            ? 'Não foi possível verificar titularidade'
+                            : row.owned
+                            ? 'Titularidade verificada'
+                            : switch (row.request.status) {
+                                'pending' =>
+                                  'Pedido pendente — sem poderes até a aprovação',
+                                'approved' ||
+                                'revoked' => 'Titularidade revogada',
+                                _ => 'Pedido rejeitado',
+                              },
+                      ),
+                      if (row.owned)
+                        TextButton.icon(
+                          icon: const Icon(Icons.campaign_outlined),
+                          label: const Text('Divulgação'),
+                          onPressed: () => showDialog<void>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Divulgação'),
+                              content: const Text(
+                                'A contratação de divulgação está indisponível no momento.',
                               ),
-                            ],
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: const Text('Fechar'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    if (row.request.reason != null)
-                      Text(
-                        '${row.request.status == 'revoked' ? 'Motivo da aprovação original' : 'Motivo'}: ${row.request.reason}',
-                      ),
-                    if (row.request.status == 'revoked' &&
-                        row.request.revocationReason != null)
-                      Text(
-                        'Motivo da revogação: ${row.request.revocationReason}',
-                      ),
-                  ],
-                ),
-                trailing: row.owned
-                    ? TextButton(
-                        onPressed: () => context.push(
-                          '/meus-estabelecimentos/${Uri.encodeComponent(row.request.placeId)}/avaliacoes',
+                      if (row.request.reason != null)
+                        Text(
+                          '${row.request.status == 'revoked' ? 'Motivo da aprovação original' : 'Motivo'}: ${row.request.reason}',
                         ),
-                        child: const Text('Avaliações e respostas'),
-                      )
-                    : null,
-                onTap: () =>
-                    context.push(Routes.placeDetail(row.request.placeId)),
+                      if (row.request.status == 'revoked' &&
+                          row.request.revocationReason != null)
+                        Text(
+                          'Motivo da revogação: ${row.request.revocationReason}',
+                        ),
+                    ],
+                  ),
+                  trailing: row.owned
+                      ? TextButton(
+                          onPressed: () => context.push(
+                            '/meus-estabelecimentos/${Uri.encodeComponent(row.request.placeId)}/avaliacoes',
+                          ),
+                          child: const Text('Avaliações e respostas'),
+                        )
+                      : null,
+                  onTap: () =>
+                      context.push(Routes.placeDetail(row.request.placeId)),
+                ),
               );
             },
           );
