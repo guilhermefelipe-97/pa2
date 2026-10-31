@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../privacy/silent_field.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
@@ -170,6 +171,17 @@ class _ReviewViewState extends State<ReviewView> {
                           : (_) => vm.toggleTag(tag),
                     ),
                 ],
+              ),
+              if (vm.privacyUnavailable)
+                TextButton(
+                  onPressed: vm.isSubmitting ? null : vm.checkLock,
+                  child: const Text(
+                    'Preferência indisponível. Tentar novamente',
+                  ),
+                ),
+              SilentField(
+                value: vm.silent,
+                onChanged: vm.isSubmitting ? null : vm.setSilent,
               ),
               PriceBandPicker(
                 value: vm.priceBand,

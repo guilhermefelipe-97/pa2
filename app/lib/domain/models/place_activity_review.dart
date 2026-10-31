@@ -13,12 +13,15 @@ class Review extends PlaceActivity {
     required this.createdAt,
     this.comment,
     this.hasPhoto = false,
+    this.silent = false,
     this.priceBand,
     this.tags = const [],
   });
 
   @override
   final String id;
+  @override
+  final bool silent;
   @override
   final String authorId;
   @override
@@ -73,10 +76,12 @@ class NewReview {
     required this.scores,
     this.companion,
     String? comment,
+    this.silent = false,
     this.priceBand,
     this.tags = const [],
   }) : comment = Review.normalizeComment(comment);
 
+  final bool silent;
   final String authorId;
   final String authorName;
   final String placeId;

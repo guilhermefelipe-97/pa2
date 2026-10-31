@@ -53,11 +53,9 @@ class _FeedViewState extends State<FeedView> {
     final saved = await context.push<bool>(Routes.pickPlace);
     if (!mounted) return;
     if (saved == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Avaliação enviada! Quem segue você já pode ver.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Avaliação registrada.')));
     }
     widget.viewModel.load();
   }

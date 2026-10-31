@@ -91,7 +91,7 @@ Future<void> _seedPlace(
 
 void main() {
   group('FirestoreReviewRepository.createReview', () {
-    test('grava exatamente as 13 chaves que as Rules aceitam', () async {
+    test('grava exatamente as 14 chaves que as Rules aceitam', () async {
       final db = FakeFirebaseFirestore();
       await FirestoreReviewRepository(
         db,
@@ -101,6 +101,7 @@ void main() {
       expect(docs, hasLength(1));
       final data = docs.single.data();
       expect(data.keys.toSet(), {
+        'silent',
         'authorId',
         'authorName',
         'placeId',

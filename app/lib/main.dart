@@ -1,3 +1,11 @@
+import 'data/repositories/privacy_repository.dart';
+import 'data/repositories/queue_repository.dart';
+import 'data/repositories/reputation_repository.dart';
+import 'data/repositories/sponsorship_repository.dart';
+import 'data/firebase/firestore_privacy_repository.dart';
+import 'data/firebase/firestore_queue_repository.dart';
+import 'data/firebase/firestore_reputation_repository.dart';
+import 'data/firebase/firestore_sponsorship_repository.dart';
 import 'data/repositories/admin_ownership_repository.dart';
 import 'data/firebase/firestore_admin_ownership_repository.dart';
 import 'ui/admin/admin_access.dart';
@@ -99,6 +107,17 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
+        Provider<PrivacyRepository>(
+          create: (_) => FirestorePrivacyRepository(db),
+        ),
+        Provider<QueueRepository>(create: (_) => FirestoreQueueRepository(db)),
+        Provider<ReputationRepository>(
+          create: (_) => FirestoreReputationRepository(db),
+        ),
+        Provider<SponsorshipRepository>(
+          create: (_) =>
+              FirestoreSponsorshipRepository(db, emulator: useEmulator),
+        ),
         Provider<AppClock>.value(value: const AppClock()),
         ChangeNotifierProvider<AuthRepository>.value(value: authRepository),
         Provider<UserRepository>.value(value: userRepository),

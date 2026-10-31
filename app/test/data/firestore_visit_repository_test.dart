@@ -67,7 +67,7 @@ DateTime _t(int minutes) =>
 
 void main() {
   group('FirestoreVisitRepository.createVisit (F15)', () {
-    test('grava as 7 chaves das Rules e a trava no mesmo batch', () async {
+    test('grava as 8 chaves das Rules e a trava no mesmo batch', () async {
       final db = FakeFirebaseFirestore();
       final result = await FirestoreVisitRepository(
         db,
@@ -75,6 +75,7 @@ void main() {
       expect(result.placeCreated, isFalse);
       final visit = (await db.collection('visits').get()).docs.single;
       expect(visit.data().keys.toSet(), {
+        'silent',
         'authorId',
         'authorName',
         'placeId',

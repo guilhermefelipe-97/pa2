@@ -338,7 +338,7 @@ void main() {
         find.widgetWithText(FilterChip, 'vegano'),
         200,
       );
-      await tester.drag(find.byType(ListView), const Offset(0, -180));
+      await tester.ensureVisible(find.widgetWithText(FilterChip, 'vegano'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilterChip, 'vegano'));
       await tester.pump();

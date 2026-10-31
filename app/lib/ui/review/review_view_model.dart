@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../data/repositories/privacy_repository.dart';
 
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/owner_repository.dart';
@@ -35,8 +36,10 @@ class ReviewViewModel extends SafeChangeNotifier {
     PlaceRepository? placeRepository,
     TargetPlatform? platform,
     this.ownerRepository,
+    this.privacyRepository,
     DateTime Function()? clock,
-  }) : _auth = authRepository,
+  }) : _initialUid = authRepository.currentUserId,
+       _auth = authRepository,
        _clock = clock ?? DateTime.now,
        _places = placeRepository,
        _users = userRepository,
@@ -45,7 +48,32 @@ class ReviewViewModel extends SafeChangeNotifier {
        _compress = compress,
        _platform = platform ?? defaultTargetPlatform;
 
+  final PrivacyRepository? privacyRepository;
+  bool silent = false;
+  bool _privacyLoaded = false;
+  bool get privacyUnavailable => privacyRepository != null && !_privacyLoaded;
+  void setSilent(bool value) {
+    if (!isSubmitting) {
+      silent = value;
+      _privacyLoaded = true;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadPrivacy(String uid) async {
+    if (_privacyLoaded) return;
+    final value =
+        await privacyRepository
+            ?.silentDefault(uid)
+            .timeout(const Duration(seconds: 10)) ??
+        false;
+    if (_auth.currentUserId != uid || isDisposed || _privacyLoaded) return;
+    silent = value;
+    _privacyLoaded = true;
+  }
+
   final Place place;
+  final String? _initialUid;
   final AuthRepository _auth;
   final OwnerRepository? ownerRepository;
   bool isOwnBusiness = false;
@@ -125,10 +153,13 @@ class ReviewViewModel extends SafeChangeNotifier {
     _isCheckingLock = showProgress;
     if (showProgress) notifyListeners();
     try {
+      await _loadPrivacy(uid);
+      if (_auth.currentUserId != uid || isDisposed) return;
       await _checkOwner(uid, place.id);
       final lastAt = await _reviews
           .reviewLockOf(uid, place.id)
           .timeout(reviewLockTimeout);
+      if (_auth.currentUserId != uid || isDisposed) return;
       _blockedSince = isReviewBlocked(lastAt, _clock()) ? lastAt : null;
     } on Object catch (e) {
       debugPrint('Trava de avaliação indisponível: $e');
@@ -200,6 +231,8 @@ class ReviewViewModel extends SafeChangeNotifier {
       Scores.isValidCombination(_food, _ambience, _service);
 
   bool get canSubmit =>
+      _auth.currentUserId == _initialUid &&
+      !privacyUnavailable &&
       !_isCheckingLock &&
       !isBlocked &&
       !_isSubmitting &&
@@ -343,12 +376,17 @@ class ReviewViewModel extends SafeChangeNotifier {
         _errorMessage = ownerContributionMessage;
         return false;
       }
-      final profile = await _users.getProfile(uid);
+      if (_auth.currentUserId != uid || isDisposed) return false;
+      final profile = await _users
+          .getProfile(uid)
+          .timeout(const Duration(seconds: 10));
       if (profile == null) throw StateError('perfil ausente');
+      if (_auth.currentUserId != uid || isDisposed) return false;
       // Local só descoberto (Photon, G2): nasce no mesmo batch da avaliação.
       final newPlace = place.discovered ? place : null;
       final result = await _reviews.createReview(
         NewReview(
+          silent: silent,
           authorId: uid,
           authorName: profile.displayName,
           placeId: place.id,
@@ -371,7 +409,7 @@ class ReviewViewModel extends SafeChangeNotifier {
           _places?.invalidate(newPlace.id);
         }
       }
-      return true;
+      return _auth.currentUserId == uid && !isDisposed;
     } on Object {
       // Inclui permission-denied das Rules. Uma causa comum é a trava do F03
       // ter nascido depois de abrir o formulário (outro aparelho, corrida):

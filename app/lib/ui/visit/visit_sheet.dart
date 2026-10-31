@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../data/repositories/privacy_repository.dart';
+import '../privacy/silent_field.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/place_repository.dart';
@@ -27,6 +29,7 @@ Future<bool> showVisitSheet(
 }) async {
   final vm = VisitViewModel(
     place: place,
+    privacyRepository: context.read<PrivacyRepository?>(),
     ownerRepository: context.read<OwnerRepository?>(),
     authRepository: context.read(),
     userRepository: context.read(),
@@ -120,6 +123,7 @@ class VisitSheet extends StatefulWidget {
 
 class _VisitSheetState extends State<VisitSheet> {
   VisitViewModel get _vm => widget.viewModel;
+  double _handleDrag = 0;
 
   Future<void> _confirm() async {
     final ok = await _vm.submit();
@@ -160,19 +164,38 @@ class _VisitSheetState extends State<VisitSheet> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Alça só visual (o arrastar é o do sheet, desligado durante
-                    // o envio).
-                    Center(
-                      child: Container(
+                    // A alça continua fechando o sheet mesmo quando o conteúdo
+                    // rolável ocupa a tela inteira. Nunca fecha durante envio.
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onVerticalDragStart: vm.canClose
+                          ? (_) => _handleDrag = 0
+                          : null,
+                      onVerticalDragUpdate: vm.canClose
+                          ? (details) => _handleDrag += details.delta.dy
+                          : null,
+                      onVerticalDragEnd: vm.canClose
+                          ? (details) {
+                              if (_handleDrag > 60 ||
+                                  (details.primaryVelocity ?? 0) > 700) {
+                                Navigator.of(context).pop(false);
+                              }
+                            }
+                          : null,
+                      child: SizedBox(
                         key: const Key('visit-handle'),
-                        margin: const EdgeInsets.symmetric(vertical: 16),
-                        width: 32,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.onSurfaceVariant.withValues(
-                            alpha: vm.canClose ? 0.4 : 0.12,
+                        height: 36,
+                        width: double.infinity,
+                        child: Center(
+                          child: Container(
+                            width: 32,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.onSurfaceVariant
+                                  .withValues(alpha: vm.canClose ? 0.4 : 0.12),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
-                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ),
@@ -206,6 +229,17 @@ class _VisitSheetState extends State<VisitSheet> {
                       ],
                     ),
                     const SizedBox(height: 16),
+                    if (vm.privacyUnavailable)
+                      TextButton(
+                        onPressed: vm.isSubmitting ? null : vm.checkLock,
+                        child: const Text(
+                          'Preferência indisponível. Tentar novamente',
+                        ),
+                      ),
+                    SilentField(
+                      value: vm.silent,
+                      onChanged: vm.isSubmitting ? null : vm.setSilent,
+                    ),
                     PriceBandPicker(
                       value: vm.priceBand,
                       onChanged: vm.setPriceBand,

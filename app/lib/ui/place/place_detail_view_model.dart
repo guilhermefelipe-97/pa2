@@ -425,6 +425,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   }
 
   static Review _asYou(Review r) => Review(
+    silent: r.silent,
     id: r.id,
     authorId: r.authorId,
     authorName: youLabel,
@@ -440,6 +441,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   );
 
   static Visit _visitAsYou(Visit v) => Visit(
+    silent: v.silent,
     id: v.id,
     authorId: v.authorId,
     authorName: youLabel,

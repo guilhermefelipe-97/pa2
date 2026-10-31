@@ -12,6 +12,7 @@ part 'place_activity_visit.dart';
 sealed class PlaceActivity {
   const PlaceActivity();
 
+  bool get silent;
   String get id;
   String get authorId;
   String get authorName;

@@ -1,3 +1,4 @@
+import '../owner/reply_line.dart';
 import 'package:provider/provider.dart';
 import '../admin/admin_access.dart';
 import 'package:flutter/material.dart';
@@ -95,6 +96,14 @@ class _ProfileViewState extends State<ProfileView> {
                 PopupMenuButton<String>(
                   onSelected: (route) => context.push(route),
                   itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: '/modo-silencioso',
+                      child: Text('Modo silencioso'),
+                    ),
+                    const PopupMenuItem(
+                      value: '/patrocinado',
+                      child: Text('Patrocinado'),
+                    ),
                     if (context.read<AdminAccess?>()?.enabled == true)
                       const PopupMenuItem(
                         value: Routes.admin,
@@ -339,6 +348,7 @@ class _ProfileReviewTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 AxisScores.scores(review.scores),
+                ReplyLine(reviewId: review.id),
                 if (review.comment?.trim().isNotEmpty ?? false) ...[
                   const SizedBox(height: 8),
                   Text(review.comment!, style: theme.textTheme.bodyMedium),

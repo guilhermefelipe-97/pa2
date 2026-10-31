@@ -12,13 +12,18 @@ import '../../domain/food_tags.dart';
 import '../repositories/food_tag_repository.dart';
 import 'firestore_owner_repository.dart';
 import '../activity_batch.dart';
+import '../repositories/public_activity_repository.dart';
 import '../chunk.dart';
 import '../repositories/review_repository.dart';
 import 'activity_queries.dart' as queries;
 import 'audit_log.dart';
 import 'place_doc.dart';
 
-class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
+class FirestoreReviewRepository
+    implements
+        ReviewRepository,
+        FoodTagRepository,
+        PublicActivityRepository<Review> {
   FirestoreReviewRepository(
     this._db, {
     this.perBatchLimit = defaultPerBatchLimit,
@@ -88,7 +93,9 @@ class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
     var createPlace = false;
     if (placeRef != null) {
       try {
-        final existing = await placeRef.get();
+        final existing = await placeRef.get().timeout(
+          const Duration(seconds: 10),
+        );
         createPlace = !existing.exists;
         // O local já existe (outra pessoa criou; nome do OSM pode ter mudado
         // desde então): as Rules exigem o `name` do doc gravado.
@@ -122,7 +129,9 @@ class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
       // o nome que está gravado.
       final DocumentSnapshot<Map<String, dynamic>> existing;
       try {
-        existing = await placeRef!.get(const GetOptions(source: Source.server));
+        existing = await placeRef!
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 10));
       } on Object {
         // A releitura falhou: o erro que importa é o do commit.
         Error.throwWithStackTrace(error, stack);
@@ -144,7 +153,10 @@ class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
     DocumentReference<Map<String, dynamic>> ref,
   ) async {
     try {
-      return (await ref.get(const GetOptions(source: Source.server))).exists;
+      return (await ref
+              .get(const GetOptions(source: Source.server))
+              .timeout(const Duration(seconds: 10)))
+          .exists;
     } on Object {
       return null;
     }
@@ -165,12 +177,13 @@ class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
         newPlaceData(createPlace, uid: review.authorId),
       );
     }
-    // Schema exato (13 chaves) validado pelas Rules (hasOnly/hasAll). O período
+    // Schema exato (14 chaves) validado pelas Rules (hasOnly/hasAll). O período
     // do dia NÃO é gravado; createdAt é sempre o timestamp do servidor.
     // Eixo não avaliado vai como null (F14): a chave está sempre presente.
     // `comment` já vem normalizado (aparado; null quando não há).
     // `priceBand` (F27): 1–5 ou null quando não informado.
     batch.set(ref, {
+      'silent': review.silent,
       'authorId': review.authorId,
       'authorName': review.authorName,
       'placeId': review.placeId,
@@ -215,8 +228,17 @@ class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
       'reviewId': ref.id,
       'placeId': review.placeId,
     });
-    return batch.commit();
+    return batch.commit().timeout(const Duration(seconds: 15));
   }
+
+  @override
+  Future<ActivityBatch<Review>> fetchPublicByAuthors(List<String> authors) =>
+      queries.fetchPublicByAuthors(
+        _reviews,
+        authors,
+        perBatchLimit: perBatchLimit,
+        fromDoc: fromDoc,
+      );
 
   @override
   Future<ActivityBatch<Review>> fetchReviewsByAuthors(
@@ -226,7 +248,7 @@ class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
     _reviews,
     authorIds,
     perBatchLimit: perBatchLimit,
-    fromDoc: _fromDoc,
+    fromDoc: fromDoc,
     limit: limit,
   );
 
@@ -234,7 +256,7 @@ class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
   Future<List<Review>> fetchReviewsForPlace(
     String placeId,
     List<String> authorIds,
-  ) => queries.fetchForPlace(_reviews, placeId, authorIds, fromDoc: _fromDoc);
+  ) => queries.fetchForPlace(_reviews, placeId, authorIds, fromDoc: fromDoc);
 
   @override
   Future<Map<String, Map<String, int>>> confirmedFor(
@@ -254,7 +276,7 @@ class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
         final owner = ownerUids[i];
         final reviews = docs.docs
             .where((d) => d.data()['placeId'] == id)
-            .map(_fromDoc)
+            .map(fromDoc)
             .whereType<Review>();
         result[id] = confirmedFoodTags(reviews, ownerUid: owner);
       }
@@ -264,7 +286,7 @@ class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
 
   /// Leitura estrita de um eixo (F14), espelhando as Rules: a chave precisa
   /// existir e valer `null` (não avaliado) ou um `int` de 1 a 5. Chave
-  /// ausente, decimal (4.5) ou texto invalida o doc (ignorado em [_fromDoc]).
+  /// ausente, decimal (4.5) ou texto invalida o doc (ignorado em [fromDoc]).
   /// Os 3 null também: `Scores` exige ao menos um eixo.
   static int? _axis(Map<String, dynamic> d, String key) {
     if (!d.containsKey(key)) throw FormatException('eixo "$key" ausente');
@@ -282,12 +304,15 @@ class FirestoreReviewRepository implements ReviewRepository, FoodTagRepository {
     return validFoodTags(tags) ? tags : const [];
   }
 
-  Review? _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+  static Review? fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data();
     final ts = d['createdAt'];
-    if (ts is! Timestamp) return null;
+    if (ts is! Timestamp || (d.containsKey('silent') && d['silent'] is! bool)) {
+      return null;
+    }
     try {
       return Review(
+        silent: d['silent'] == true,
         id: doc.id,
         authorId: d['authorId'] as String,
         authorName: d['authorName'] as String,

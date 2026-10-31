@@ -8,12 +8,14 @@ import '../../domain/models/place.dart';
 import '../../domain/models/visit.dart';
 import '../../domain/price_band.dart';
 import '../activity_batch.dart';
+import '../repositories/public_activity_repository.dart';
 import '../repositories/visit_repository.dart';
 import 'activity_queries.dart' as queries;
 import 'audit_log.dart';
 import 'place_doc.dart';
 
-class FirestoreVisitRepository implements VisitRepository {
+class FirestoreVisitRepository
+    implements VisitRepository, PublicActivityRepository<Visit> {
   FirestoreVisitRepository(
     this._db, {
     this.perBatchLimit = defaultPerBatchLimit,
@@ -83,7 +85,9 @@ class FirestoreVisitRepository implements VisitRepository {
     var createPlace = false;
     if (placeRef != null) {
       try {
-        final existing = await placeRef.get();
+        final existing = await placeRef.get().timeout(
+          const Duration(seconds: 10),
+        );
         createPlace = !existing.exists;
         placeName = _storedName(existing) ?? placeName;
       } on Object {
@@ -105,7 +109,9 @@ class FirestoreVisitRepository implements VisitRepository {
       // grava sem ele, com o nome que está gravado.
       final DocumentSnapshot<Map<String, dynamic>> existing;
       try {
-        existing = await placeRef!.get(const GetOptions(source: Source.server));
+        existing = await placeRef!
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 10));
       } on Object {
         Error.throwWithStackTrace(error, stack);
       }
@@ -151,7 +157,10 @@ class FirestoreVisitRepository implements VisitRepository {
     DocumentReference<Map<String, dynamic>> ref,
   ) async {
     try {
-      return (await ref.get(const GetOptions(source: Source.server))).exists;
+      return (await ref
+              .get(const GetOptions(source: Source.server))
+              .timeout(const Duration(seconds: 10)))
+          .exists;
     } on Object {
       return null;
     }
@@ -171,10 +180,11 @@ class FirestoreVisitRepository implements VisitRepository {
         newPlaceData(createPlace, uid: visit.authorId),
       );
     }
-    // Schema exato (7 chaves) validado pelas Rules. Sem notas; o período do
+    // Schema exato (8 chaves) validado pelas Rules. Sem notas; o período do
     // dia é derivado do createdAt, sempre do servidor. `priceBand` (F27):
     // 1–5 ou null quando não informado.
     batch.set(ref, {
+      'silent': visit.silent,
       'authorId': visit.authorId,
       'authorName': visit.authorName,
       'placeId': visit.placeId,
@@ -203,6 +213,15 @@ class FirestoreVisitRepository implements VisitRepository {
   }
 
   @override
+  Future<ActivityBatch<Visit>> fetchPublicByAuthors(List<String> authors) =>
+      queries.fetchPublicByAuthors(
+        _visits,
+        authors,
+        perBatchLimit: perBatchLimit,
+        fromDoc: _fromDoc,
+      );
+
+  @override
   Future<ActivityBatch<Visit>> fetchVisitsByAuthors(
     List<String> authorIds, {
     int? limit,
@@ -229,7 +248,8 @@ class FirestoreVisitRepository implements VisitRepository {
     final placeId = d['placeId'];
     final placeName = d['placeName'];
     final companion = d['companion'];
-    if (ts is! Timestamp ||
+    if ((d.containsKey('silent') && d['silent'] is! bool) ||
+        ts is! Timestamp ||
         authorId is! String ||
         authorName is! String ||
         placeId is! String ||
@@ -244,6 +264,7 @@ class FirestoreVisitRepository implements VisitRepository {
       return null;
     }
     return Visit(
+      silent: d['silent'] == true,
       id: doc.id,
       authorId: authorId,
       authorName: authorName,

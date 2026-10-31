@@ -235,3 +235,10 @@ PlaceActivity _newest(List<PlaceActivity> list) {
   }
   return best!;
 }
+
+/// Só a apresentação Amigos. Outros consumidores preservam todos os dados.
+List<FeedItem> groupPublicActivitiesIntoFeed(
+  Iterable<PlaceActivity> activities, {
+  Map<String, Place> places = const {},
+}) =>
+    groupActivitiesIntoFeed(activities.where((a) => !a.silent), places: places);

@@ -182,12 +182,13 @@ class FeedViewModel extends SafeChangeNotifier {
           visits: _visits,
           authors: following.toList(),
           where: 'feed',
+          publicOnly: true,
         );
         // Só os locais que aparecem no feed; _loadPlaces nunca lança.
         final places = await _loadPlaces({
           for (final a in read.activities) a.placeId,
         });
-        items = groupActivitiesIntoFeed(read.activities, places: places);
+        items = groupPublicActivitiesIntoFeed(read.activities, places: places);
       }
       final tags = foodTagRepository == null
           ? <String, Map<String, int>>{}

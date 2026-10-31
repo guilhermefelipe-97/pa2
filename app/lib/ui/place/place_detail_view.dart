@@ -1,3 +1,5 @@
+import '../queue/queue_section.dart';
+import '../owner/reply_line.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -57,11 +59,9 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
     );
     if (!mounted) return;
     if (sent == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Avaliação enviada! Quem segue você já pode ver.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Avaliação registrada.')));
     }
     // `true`: avaliação nova; `false`: a tela de bloqueio do F03 registrou
     // uma visita (F15). As duas aparecem no detalhe (como "Você").
@@ -229,6 +229,7 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                       ],
                     ),
                   PlaceFacts(place: place),
+                  QueueSection(place: place),
                   FoodTagChips(tags: vm.confirmedTags),
                   if (vm.tagsFailed)
                     TextButton(
@@ -358,10 +359,16 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                 // Avaliações e visitas (sem nota) na ordem em que aconteceram.
                 itemCount: item.activities.length,
                 itemBuilder: (context, i) => switch (item.activities[i]) {
-                  final Review r => ReviewTile(
-                    review: r,
-                    now: at,
-                    onAuthorTap: () => _openPerson(r),
+                  final Review r => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ReviewTile(
+                        review: r,
+                        now: at,
+                        onAuthorTap: () => _openPerson(r),
+                      ),
+                      ReplyLine(reviewId: r.id),
+                    ],
                   ),
                   final Visit v => VisitTile(
                     visit: v,

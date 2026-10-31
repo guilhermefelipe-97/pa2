@@ -2371,3 +2371,162 @@ it('fila administrativa pagina 45 caminhos com data e local iguais sem duplicata
   } while (cursor);
   if (paths.length !== 45 || new Set(paths).size !== 45 || pages !== 3) throw Error('Paginação com perda ou duplicação');
 });
+
+
+describe('Onda 6 — respostas, privacidade, fila e Destaque', () => {
+  async function seedOwner() {
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'placeOwners/camaroes'), {uid:'bob', verifiedAt:Timestamp.now()}));
+  }
+  function replyBatch(db, overrides = {}, audit = true) {
+    const data = {authorId:'bob',authorName:'Bob',placeId:'camaroes',reviewId:'existing',text:'Obrigado!',createdAt:serverTimestamp(),...overrides};
+    const batch=writeBatch(db);
+    batch.set(doc(db,'ownerReplies/existing'),data);
+    if(audit) setAudit(db,batch,'ownerReplies','existing',data);
+    return batch.commit();
+  }
+  function queueBatch(db, id, overrides = {}, {audit = true, lock = true} = {}) {
+    const data={authorId:'alice',authorName:'Alice',placeId:'camaroes',minutes:10,createdAt:serverTimestamp(),...overrides};
+    const batch=writeBatch(db);
+    batch.set(doc(db,'queueReports/'+id),data);
+    if(audit) setAudit(db,batch,'queueReports',id,data);
+    if(lock) batch.set(doc(db,'users/'+data.authorId+'/queueReportLocks/camaroes'), {lastAt:serverTimestamp(),reportId:id,placeId:'camaroes'});
+    return batch.commit();
+  }
+  it('titular atual responde cliente não seguido; resposta/auditoria imutáveis sobrevivem à revogação', async () => {
+    await seedOwner();
+    await assertSucceeds(replyBatch(bob()));
+    await assertSucceeds(getDoc(doc(alice(),'ownerReplies/existing')));
+    await assertFails(replyBatch(bob()));
+    await assertFails(updateDoc(doc(bob(),'ownerReplies/existing'),{text:'editado'}));
+    await assertFails(deleteDoc(doc(bob(),'ownerReplies/existing')));
+    await env.withSecurityRulesDisabled(ctx => deleteDoc(doc(ctx.firestore(),'placeOwners/camaroes')));
+    await assertSucceeds(getDoc(doc(alice(),'ownerReplies/existing')));
+    await env.withSecurityRulesDisabled(async ctx => {
+      const data=(await getDoc(doc(ctx.firestore(),'reviews/existing'))).data();
+      require('node:assert/strict').equal(data.food,4);
+      require('node:assert/strict').equal((await getDoc(doc(ctx.firestore(),'auditLog/ownerReplies-existing'))).data().actorUid,'bob');
+    });
+  });
+  it('titular falso, identidade/hora forjadas e falta de auditoria são negados', async () => {
+    await assertFails(replyBatch(bob()));
+    await seedOwner();
+    await assertFails(replyBatch(alice(),{authorId:'alice',authorName:'Alice'}));
+    await assertFails(replyBatch(bob(),{authorName:'Forjado'}));
+    await assertFails(replyBatch(bob(),{createdAt:Timestamp.now()}));
+    await assertFails(replyBatch(bob(),{},false));
+    await assertFails(replyBatch(bob(),{extra:true}));
+    for(const text of ['', ' ', ' fora ', 'x'.repeat(1001)]) await assertFails(replyBatch(bob(),{text}));
+    await assertSucceeds(replyBatch(bob(),{text:'x'.repeat(1000)}));
+  });
+  it('preferência privada exata e silent booleano; legado público e histórico imutável', async () => {
+    const ref=doc(alice(),'users/alice/preferences/privacy');
+    await assertSucceeds(setDoc(ref,{silent:true}));
+    await assertFails(getDoc(doc(bob(),'users/alice/preferences/privacy')));
+    await assertFails(setDoc(ref,{silent:true,extra:1}));
+    await assertFails(setDoc(ref,{silent:'true'}));
+    await assertSucceeds(addReview(alice(),validReview({silent:true,tags:['vegano'],priceBand:3}),{id:'silent'}));
+    await assertFails(updateDoc(doc(alice(),'reviews/silent'),{silent:false}));
+    await assertSucceeds(setDoc(ref,{silent:false}));
+    await assertSucceeds(getDoc(doc(bob(),'reviews/silent')));
+    await assertSucceeds(freshReview(alice(),validReview(),{id:'legacy'}));
+    await assertFails(freshReview(alice(),validReview({silent:1}),{id:'bad'}));
+    await assertSucceeds(addVisit(alice(),validVisit({silent:true}),{id:'silent-visit'}));
+  });
+  it('fila valida inteiro 0–180, identidade, schema, horário e par atômico', async () => {
+    for(const minutes of [-1,181,1.5,'10',null]) await assertFails(queueBatch(alice(),'bad'+String(minutes),{minutes}));
+    await assertFails(queueBatch(alice(),'bad-name',{authorName:'Forjado'}));
+    await assertFails(queueBatch(alice(),'bad-time',{createdAt:Timestamp.now()}));
+    await assertFails(queueBatch(alice(),'bad-extra',{lat:0}));
+    await assertFails(queueBatch(alice(),'no-audit',{}, {audit:false}));
+    await assertFails(queueBatch(alice(),'no-lock',{}, {lock:false}));
+    await assertSucceeds(queueBatch(alice(),'zero',{minutes:0}));
+    await assertFails(queueBatch(alice(),'cooldown'));
+    await assertFails(updateDoc(doc(alice(),'queueReports/zero'),{minutes:1}));
+    await assertFails(deleteDoc(doc(alice(),'users/alice/queueReportLocks/camaroes')));
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(),'users/alice/queueReportLocks/camaroes'),{
+      lastAt:Timestamp.fromMillis(Date.now()-31*60000),reportId:'zero',placeId:'camaroes'}));
+    await assertSucceeds(queueBatch(alice(),'max',{minutes:180}));
+  });
+  it('titular não relata própria fila e SDK não pode forjar auditoria/trava isolada', async () => {
+    await seedOwner();
+    await assertFails(queueBatch(bob(),'owner',{authorId:'bob',authorName:'Bob'}));
+    await assertFails(setDoc(doc(alice(),'users/alice/queueReportLocks/camaroes'),{lastAt:serverTimestamp(),reportId:'inventado',placeId:'camaroes'}));
+    await assertFails(setDoc(doc(alice(),'auditLog/queueReports-inventado'),validAudit('queueReports','inventado')));
+  });
+  it('batch máximo descoberto+relato+trava+auditoria respeita limite de acessos', async () => {
+    const db=alice(), id='osm-n123';
+    const batch=writeBatch(db);
+    // Mesmo schema de criação G2 já exercitado pela suíte administrativa.
+    batch.set(doc(db,'places/'+id), {
+      name:'Local',category:'Bar',neighborhood:'',city:'',address:'',lat:-23.5,lng:-46.6,
+      geohash:'6gyf4bf0v',osmId:'node/123',source:'osm',createdBy:'alice',createdAt:serverTimestamp(),
+    });
+    const data={authorId:'alice',authorName:'Alice',placeId:id,minutes:20,createdAt:serverTimestamp()};
+    batch.set(doc(db,'queueReports/discovered'),data);
+    batch.set(doc(db,'users/alice/queueReportLocks/'+id),{lastAt:serverTimestamp(),reportId:'discovered',placeId:id});
+    setAudit(db,batch,'queueReports','discovered',data);
+    await assertSucceeds(batch.commit());
+  });
+  it('slots são negados sem flag/false e cliente nunca grava flag ou slot', async () => {
+    const ref=doc(alice(),'sponsoredSlots/slot');
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(),'sponsoredSlots/slot'),{
+      placeId:'camaroes',startsAt:Timestamp.fromMillis(Date.now()-60000),endsAt:Timestamp.fromMillis(Date.now()+60000)}));
+    await assertFails(getDoc(ref));
+    await assertFails(setDoc(doc(alice(),'config/features'),{sponsorshipEnabled:true}));
+    await assertFails(setDoc(ref,{placeId:'camaroes'}));
+    await seedOwner();
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(),'config/features'),{sponsorshipEnabled:false}));
+    await assertFails(getDoc(ref));
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(),'config/features'),{sponsorshipEnabled:true,sponsoredSlotIds:['slot']}));
+    const flags = await getDoc(doc(alice(),'config/features'));
+    for (const id of flags.data().sponsoredSlotIds) {
+      await assertSucceeds(getDoc(doc(alice(),'sponsoredSlots/'+id)));
+    }
+    await assertFails(updateDoc(ref,{endsAt:Timestamp.now()}));
+    await env.withSecurityRulesDisabled(ctx => deleteDoc(doc(ctx.firestore(),'placeOwners/camaroes')));
+    await assertFails(getDoc(ref));
+  });
+  it('slots vencidos ou futuros não são lidos nem com flag true e titular', async () => {
+    await seedOwner();
+    await env.withSecurityRulesDisabled(async ctx => {
+      const db=ctx.firestore();
+      await setDoc(doc(db,'config/features'),{sponsorshipEnabled:true});
+      for(const [id,start,end] of [['expired',-120000,-60000],['future',60000,120000]]) {
+        await setDoc(doc(db,'sponsoredSlots/'+id),{placeId:'camaroes',startsAt:Timestamp.fromMillis(Date.now()+start),endsAt:Timestamp.fromMillis(Date.now()+end)});
+      }
+    });
+    await assertFails(getDoc(doc(alice(),'sponsoredSlots/expired')));
+    await assertFails(getDoc(doc(alice(),'sponsoredSlots/future')));
+  });
+  it('SDK cliente reconcilia batch tardio por ID, valida auditoria/trava, impede retry duplicado e permite novo envio após cooldown', async () => {
+    const db=alice();
+    let writes=0;
+    // Representa commit já iniciado cujo resultado chega depois do timeout da UI.
+    const operation=new Promise(resolve=>setTimeout(resolve,80)).then(()=>{
+      writes++;return queueBatch(db,'sdk-attempt',{minutes:10});
+    });
+    const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),10));
+    await require('node:assert/strict').rejects(Promise.race([operation,timeout]),/timeout/);
+    // Ausência enquanto operação está em voo não autoriza criar outra tentativa.
+    await operation;
+    const saved=await getDoc(doc(db,'queueReports/sdk-attempt'));
+    require('node:assert/strict').equal(saved.data().minutes,10);
+    const lock=await getDoc(doc(db,'users/alice/queueReportLocks/camaroes'));
+    require('node:assert/strict').equal(lock.data().reportId,'sdk-attempt');
+    require('node:assert/strict').equal(writes,1);
+    await assertFails(queueBatch(db,'sdk-attempt',{minutes:40}));
+    await assertFails(queueBatch(db,'sdk-too-soon',{minutes:40}));
+    await env.withSecurityRulesDisabled(async ctx=>{
+      const admin=ctx.firestore();
+      const audit=await getDoc(doc(admin,'auditLog/queueReports-sdk-attempt'));
+      require('node:assert/strict').equal(audit.data().actorUid,'alice');
+      await setDoc(doc(admin,'users/alice/queueReportLocks/camaroes'),{
+        placeId:'camaroes',reportId:'sdk-attempt',lastAt:Timestamp.fromMillis(Date.now()-31*60000),
+      });
+    });
+    await assertSucceeds(queueBatch(db,'sdk-next',{minutes:40}));
+    require('node:assert/strict').equal((await getDoc(doc(db,'queueReports/sdk-next'))).data().minutes,40);
+    require('node:assert/strict').equal((await getDoc(doc(db,'queueReports/sdk-attempt'))).data().minutes,10);
+  });
+
+});

@@ -135,6 +135,14 @@ class _OwnerViewState extends State<OwnerView> {
                       ),
                   ],
                 ),
+                trailing: row.owned
+                    ? TextButton(
+                        onPressed: () => context.push(
+                          '/meus-estabelecimentos/${Uri.encodeComponent(row.request.placeId)}/avaliacoes',
+                        ),
+                        child: const Text('Avaliações e respostas'),
+                      )
+                    : null,
                 onTap: () =>
                     context.push(Routes.placeDetail(row.request.placeId)),
               );

@@ -11,11 +11,14 @@ class Visit extends PlaceActivity {
     required this.placeName,
     required this.createdAt,
     this.companion,
+    this.silent = false,
     this.priceBand,
   });
 
   @override
   final String id;
+  @override
+  final bool silent;
   @override
   final String authorId;
   @override
@@ -41,9 +44,11 @@ class NewVisit {
     required this.placeId,
     required this.placeName,
     this.companion,
+    this.silent = false,
     this.priceBand,
   });
 
+  final bool silent;
   final String authorId;
   final String authorName;
   final String placeId;

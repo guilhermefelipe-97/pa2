@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import '../../data/repositories/privacy_repository.dart';
 
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/owner_repository.dart';
@@ -26,8 +27,10 @@ class VisitViewModel extends SafeChangeNotifier {
     required VisitRepository visitRepository,
     PlaceRepository? placeRepository,
     this.ownerRepository,
+    this.privacyRepository,
     DateTime Function()? clock,
-  }) : _auth = authRepository,
+  }) : _initialUid = authRepository.currentUserId,
+       _auth = authRepository,
        _users = userRepository,
        _visits = visitRepository,
        _places = placeRepository,
@@ -36,7 +39,32 @@ class VisitViewModel extends SafeChangeNotifier {
   static const String successMessage = 'Visita registrada';
   static const String errorText = 'Não foi possível registrar';
 
+  final PrivacyRepository? privacyRepository;
+  bool silent = false;
+  bool _privacyLoaded = false;
+  bool get privacyUnavailable => privacyRepository != null && !_privacyLoaded;
+  void setSilent(bool value) {
+    if (!isSubmitting) {
+      silent = value;
+      _privacyLoaded = true;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadPrivacy(String uid) async {
+    if (_privacyLoaded) return;
+    final value =
+        await privacyRepository
+            ?.silentDefault(uid)
+            .timeout(const Duration(seconds: 10)) ??
+        false;
+    if (_auth.currentUserId != uid || isDisposed || _privacyLoaded) return;
+    silent = value;
+    _privacyLoaded = true;
+  }
+
   final Place place;
+  final String? _initialUid;
   final AuthRepository _auth;
   final OwnerRepository? ownerRepository;
   bool isOwnBusiness = false;
@@ -85,7 +113,12 @@ class VisitViewModel extends SafeChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  bool get canSubmit => !_isCheckingLock && !isBlocked && !_isSubmitting;
+  bool get canSubmit =>
+      _auth.currentUserId == _initialUid &&
+      !privacyUnavailable &&
+      !_isCheckingLock &&
+      !isBlocked &&
+      !_isSubmitting;
 
   /// O sheet pode fechar (toque fora, arrastar, voltar)? Não durante o
   /// envio.
@@ -131,10 +164,13 @@ class VisitViewModel extends SafeChangeNotifier {
     _isCheckingLock = true;
     notifyListeners();
     try {
+      await _loadPrivacy(uid);
+      if (_auth.currentUserId != uid || isDisposed) return;
       await _checkOwner(uid, place.id);
       final lastAt = await _visits
           .visitLockOf(uid, place.id)
           .timeout(visitLockTimeout);
+      if (_auth.currentUserId != uid || isDisposed) return;
       _setBlocked(lastAt);
     } on Object catch (e) {
       debugPrint('Trava de visita indisponível: $e');
@@ -162,12 +198,17 @@ class VisitViewModel extends SafeChangeNotifier {
         _errorMessage = ownerContributionMessage;
         return false;
       }
-      final profile = await _users.getProfile(uid);
+      if (_auth.currentUserId != uid || isDisposed) return false;
+      final profile = await _users
+          .getProfile(uid)
+          .timeout(const Duration(seconds: 10));
       if (profile == null) throw StateError('perfil ausente');
+      if (_auth.currentUserId != uid || isDisposed) return false;
       // Local só descoberto (Photon, G2): nasce no mesmo batch da visita.
       final newPlace = place.discovered ? place : null;
       final result = await _visits.createVisit(
         NewVisit(
+          silent: silent,
           authorId: uid,
           authorName: profile.displayName,
           placeId: place.id,
@@ -184,7 +225,7 @@ class VisitViewModel extends SafeChangeNotifier {
           _places?.invalidate(newPlace.id);
         }
       }
-      return true;
+      return _auth.currentUserId == uid && !isDisposed;
     } on Object {
       // Inclui permission-denied das Rules (ex.: visita registrada em outro
       // aparelho há menos de 12 h): reconsulta e explica, se for o caso.

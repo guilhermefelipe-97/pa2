@@ -1,3 +1,7 @@
+import '../data/repositories/privacy_repository.dart';
+import '../ui/privacy/privacy_view.dart';
+import '../ui/sponsored/sponsored_view.dart';
+import '../ui/owner/owner_reviews_view.dart';
 import '../ui/admin/admin_access_view.dart';
 import '../ui/admin/admin_ownership_view.dart';
 import '../ui/admin/admin_ownership_view_model.dart';
@@ -89,6 +93,19 @@ GoRouter buildRouter(AuthRepository auth) {
       location: state.matchedLocation,
     ),
     routes: [
+      GoRoute(
+        path: '/modo-silencioso',
+        builder: (context, state) => const PrivacyView(),
+      ),
+      GoRoute(
+        path: '/patrocinado',
+        builder: (context, state) => const SponsoredView(),
+      ),
+      GoRoute(
+        path: '/meus-estabelecimentos/:placeId/avaliacoes',
+        builder: (context, state) =>
+            OwnerReviewsView(placeId: state.pathParameters['placeId']!),
+      ),
       GoRoute(
         path: Routes.admin,
         builder: (context, state) => ListenableBuilder(
@@ -327,6 +344,7 @@ GoRouter buildRouter(AuthRepository auth) {
             builder: (context, state) => ViewModelHost<ReviewViewModel>(
               create: (context) => ReviewViewModel(
                 place: state.extra! as Place,
+                privacyRepository: context.read<PrivacyRepository?>(),
                 ownerRepository: context.read<OwnerRepository?>(),
                 authRepository: context.read(),
                 userRepository: context.read(),

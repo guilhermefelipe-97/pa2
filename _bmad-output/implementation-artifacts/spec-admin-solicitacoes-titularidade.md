@@ -87,7 +87,7 @@ Implementação local nesta etapa; o agente principal executará o provisionamen
 ## Entrega operacional após revisão
 
 - [x] Habilitar apenas a conta indicada pelo usuário (confirmado no servidor).
-- [ ] Publicar Rules/índice e confirmar índice pronto.
+- [x] Publicar Rules/índice e confirmar índice pronto (READY no servidor).
 APK final combinado com a onda 6 aprovada será entregue após a próxima implementação.
 
 
@@ -96,7 +96,7 @@ APK final combinado com a onda 6 aprovada será entregue após a próxima implem
 - Três revisões concluídas; 12 grupos de patches e lacunas tratados.
 - Flutter completo: 1084 testes passaram; Firebase: 324 passaram; dirigidos finais: 25 passaram.
 - Análise final: sem problemas (21,9s). Diff sem erros.
-- Produção: conta indicada habilitada e Rules/índice publicados; aguardar índice READY.
+- Produção: conta indicada habilitada, Rules publicadas e índice confirmado READY.
 
 
 ## Suggested Review Order

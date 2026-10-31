@@ -106,11 +106,20 @@ service cloud.firestore {
       }
 
       match /preferences/{preferenceId} {
-        allow read: if isOwner(uid) && preferenceId == 'food';
+        allow read: if isOwner(uid) && preferenceId in ['food', 'privacy'];
         allow create, update: if isOwner(uid) && preferenceId == 'food'
           && request.resource.data.keys().hasOnly(['tags'])
           && request.resource.data.keys().hasAll(['tags'])
           && validFoodTags(request.resource.data.tags);
+        allow delete: if false;
+      }
+
+      match /preferences/privacy {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['silent'])
+          && request.resource.data.keys().hasAll(['silent'])
+          && request.resource.data.silent is bool;
         allow delete: if false;
       }
 
@@ -172,6 +181,15 @@ service cloud.firestore {
         allow create: if isOwner(uid) && validOpenReportLock(placeId, request.resource.data);
         allow update: if isOwner(uid)
           && validOpenReportLock(placeId, request.resource.data)
+          && request.time >= resource.data.lastAt + duration.value(30, 'm');
+        allow delete: if false;
+      }
+
+      match /queueReportLocks/{placeId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && validQueueReportLock(placeId, request.resource.data);
+        allow update: if isOwner(uid)
+          && validQueueReportLock(placeId, request.resource.data)
           && request.time >= resource.data.lastAt + duration.value(30, 'm');
         allow delete: if false;
       }
@@ -277,6 +295,25 @@ service cloud.firestore {
       let report = getAfter(reportPath);
       return data.keys().hasOnly(openReportLockKeys())
         && data.keys().hasAll(openReportLockKeys())
+        && data.placeId == placeId
+        && data.reportId is string
+        && data.lastAt == request.time
+        && !exists(reportPath)
+        && report != null
+        && report.data.authorId == request.auth.uid
+        && report.data.placeId == placeId;
+    }
+
+    function queueReportLockKeys() {
+      return ['lastAt', 'reportId', 'placeId'];
+    }
+
+    // O relato `reportId` é novo, nasce neste batch, do mesmo autor e local.
+    function validQueueReportLock(placeId, data) {
+      let reportPath = /databases/$(database)/documents/queueReports/$(data.reportId);
+      let report = getAfter(reportPath);
+      return data.keys().hasOnly(queueReportLockKeys())
+        && data.keys().hasAll(queueReportLockKeys())
         && data.placeId == placeId
         && data.reportId is string
         && data.lastAt == request.time
@@ -450,7 +487,7 @@ service cloud.firestore {
     // transição: clientes antigos ainda gravam sem `hasPhoto` (= false) e
     // sem `priceBand` (= não informado).
     function reviewKeys() {
-      return reviewRequiredKeys().concat(['hasPhoto', 'priceBand', 'tags']);
+      return reviewRequiredKeys().concat(['hasPhoto', 'priceBand', 'tags', 'silent']);
     }
 
     // Faixa de preço por pessoa (F27), opcional em avaliações e visitas:
@@ -500,6 +537,7 @@ service cloud.firestore {
         && validCompanion(data.companion)
         && validComment(data.comment)
         && validHasPhoto(data, reviewId)
+        && (!('silent' in data) || data.silent is bool)
         && validPriceBand(data)
         // F03: a trava `users/{uid}/reviewLocks/{placeId}` é criada ou
         // renovada no MESMO batch, apontando para esta avaliação (as Rules da
@@ -531,7 +569,7 @@ service cloud.firestore {
     // Permitidas: as 6 obrigatórias + `priceBand` opcional (F27; builds
     // antigos gravam sem a chave).
     function visitAllowedKeys() {
-      return visitKeys().concat(['priceBand']);
+      return visitKeys().concat(['priceBand', 'silent']);
     }
 
     function visitLockPath(uid, placeId) {
@@ -552,6 +590,7 @@ service cloud.firestore {
         && existsAfter(placePath)
         && data.placeName == getAfter(placePath).data.name
         && validCompanion(data.companion)
+        && (!('silent' in data) || data.silent is bool)
         && validPriceBand(data)
         && lock != null
         && lock.data.lastAt == request.time
@@ -608,6 +647,74 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    function queueReportKeys() {
+      return ['authorId', 'authorName', 'placeId', 'minutes', 'createdAt'];
+    }
+
+    function queueReportLockPath(uid, placeId) {
+      return /databases/$(database)/documents/users/$(uid)/queueReportLocks/$(placeId);
+    }
+
+    function validQueueReport(data, reportId) {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let lock = getAfter(queueReportLockPath(request.auth.uid, data.placeId));
+      return data.keys().hasOnly(queueReportKeys())
+        && data.keys().hasAll(queueReportKeys())
+        && data.authorId == request.auth.uid
+        && notBusinessOwner(data.placeId)
+        && data.authorName == profile.data.displayName
+        && data.placeId is string
+        // `After`: o local pode nascer no mesmo batch do relato (G2).
+        && existsAfter(/databases/$(database)/documents/places/$(data.placeId))
+        && data.minutes is int && data.minutes >= 0 && data.minutes <= 180
+        && lock != null
+        && lock.data.lastAt == request.time
+        && lock.data.reportId == reportId
+        // F04: a entrada de auditoria nasce no mesmo batch.
+        && existsAfter(auditPath('queueReports', reportId))
+        && data.createdAt == request.time;
+    }
+
+    match /queueReports/{reportId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validQueueReport(request.resource.data, reportId);
+      allow update, delete: if false;
+    }
+
+    // F24: resposta única, imutável e identificada; titular conferido no commit.
+    match /ownerReplies/{reviewId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['authorId', 'authorName', 'placeId', 'reviewId', 'text', 'createdAt'])
+        && request.resource.data.keys().hasAll(['authorId', 'authorName', 'placeId', 'reviewId', 'text', 'createdAt'])
+        && request.resource.data.reviewId == reviewId
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.authorName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+        && request.resource.data.placeId == get(/databases/$(database)/documents/reviews/$(reviewId)).data.placeId
+        && get(/databases/$(database)/documents/placeOwners/$(request.resource.data.placeId)).data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text == request.resource.data.text.trim()
+        && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 1000
+        && request.resource.data.createdAt == request.time
+        && existsAfter(auditPath('ownerReplies', reviewId));
+      allow update, delete: if false;
+    }
+
+    // F25: somente ferramentas confiáveis configuram/criam slots, sem ativação pelo cliente.
+    match /config/features {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+    match /sponsoredSlots/{slotId} {
+      allow read: if signedIn()
+        && get(/databases/$(database)/documents/config/features).data.sponsorshipEnabled == true
+        && resource.data.keys().hasOnly(['placeId', 'startsAt', 'endsAt'])
+        && resource.data.startsAt <= request.time && resource.data.endsAt > request.time
+        && exists(/databases/$(database)/documents/placeOwners/$(resource.data.placeId))
+        && exists(/databases/$(database)/documents/places/$(resource.data.placeId));
+      allow write: if false;
+    }
+
     // ---------- auditLog (F04) ----------
     // Quem criou cada avaliação, visita e relato. Uma entrada por doc, id
     // determinístico `{coleção}-{docId}` (o retry de um batch que não foi
@@ -628,7 +735,7 @@ service cloud.firestore {
       let target = getAfter(targetPath);
       return data.keys().hasOnly(auditKeys())
         && data.keys().hasAll(auditKeys())
-        && data.collection in ['reviews', 'visits', 'openReports']
+        && data.collection in ['reviews', 'visits', 'openReports', 'queueReports', 'ownerReplies']
         && data.docId is string
         && auditId == data.collection + '-' + data.docId
         && data.action == 'create'

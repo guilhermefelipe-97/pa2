@@ -7,7 +7,13 @@ const String auditLogCollection = 'auditLog';
 
 /// Coleções auditadas. MESMA lista de `validAudit` em
 /// `firebase/firestore.rules`.
-const List<String> auditedCollections = ['reviews', 'visits', 'openReports'];
+const List<String> auditedCollections = [
+  'reviews',
+  'visits',
+  'openReports',
+  'queueReports',
+  'ownerReplies',
+];
 
 /// Id determinístico da entrada: `{coleção}-{docId}`. O retry de um batch
 /// que não foi gravado reusa o mesmo id do doc, então a entrada também
