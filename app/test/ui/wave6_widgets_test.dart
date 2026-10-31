@@ -23,12 +23,18 @@ import 'package:naarea/data/services/location_service.dart';
 import 'package:naarea/domain/models/place.dart';
 import 'package:naarea/domain/models/review.dart';
 import 'package:naarea/ui/core/app_clock.dart';
+import 'package:naarea/ui/core/app_shell.dart';
 import 'package:naarea/ui/privacy/privacy_view.dart';
 import 'package:naarea/ui/owner/reply_line.dart';
 import 'package:naarea/ui/owner/owner_reviews_view.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:naarea/ui/queue/queue_section.dart';
 import 'package:naarea/ui/sponsored/sponsored_view.dart';
+import 'package:naarea/ui/nearby/nearby_view.dart';
+import 'package:naarea/ui/nearby/nearby_view_model.dart';
+import 'package:naarea/ui/place/place_detail_view.dart';
+import 'package:naarea/ui/owner/owner_view.dart';
+import '../support/geo_helpers.dart';
 import '../support/fakes.dart';
 
 class _QueueRepository implements QueueRepository {
@@ -90,10 +96,34 @@ class _QueueRepository implements QueueRepository {
 }
 
 class _Sponsors implements SponsorshipRepository {
-  _Sponsors(this.slot);
+  _Sponsors(this.slot, {this.count = 1});
   final SponsoredSlot slot;
+  final int count;
   @override
-  Future<List<SponsoredSlot>> current(DateTime now) async => [slot];
+  Future<List<SponsoredSlot>> current(DateTime now) async => List.generate(
+    count,
+    (i) => SponsoredSlot(
+      '${slot.id}-$i',
+      slot.placeId,
+      slot.startsAt,
+      slot.endsAt,
+    ),
+  );
+}
+
+class _ControlledSponsors implements SponsorshipRepository {
+  final reads = <Completer<List<SponsoredSlot>>>[];
+  @override
+  Future<List<SponsoredSlot>> current(DateTime now) {
+    final read = Completer<List<SponsoredSlot>>();
+    reads.add(read);
+    return read.future;
+  }
+}
+
+class _UnavailableOwner extends FakeOwnerRepository {
+  @override
+  Future<String?> ownerOf(String placeId) async => throw StateError('rede');
 }
 
 class _ReplyRepository implements ReputationRepository {
@@ -141,6 +171,435 @@ void main() {
     city: '',
     lat: -23.5,
     lng: -46.6,
+  );
+  SponsoredSlot validSlot(String id) => SponsoredSlot(
+    id,
+    'p',
+    at.subtract(const Duration(hours: 1)),
+    at.add(const Duration(hours: 1)),
+  );
+
+  testWidgets('Perto mantém sugestão e ordem orgânica separadas do destaque', (
+    tester,
+  ) async {
+    final organic = [
+      placeNear('near', 80),
+      placeNear('middle', 150),
+      placeNear('far', 240),
+    ];
+    final app = await pumpApp(
+      tester,
+      places: [place, ...organic],
+      sponsors: _Sponsors(validSlot('s')),
+      clock: () => at,
+      location: FakeLocationService(position: pontaNegra, granted: true),
+    );
+    app.router.go(Routes.nearby);
+    await tester.pumpAndSettle();
+    final view = tester.widget<NearbyView>(find.byType(NearbyView));
+    expect(view.viewModel.visibleItems.map((item) => item.place.id), [
+      'near',
+      'middle',
+      'far',
+    ]);
+    expect(view.viewModel.suggestion?.item.place.id, 'near');
+    expect(find.byType(SponsoredCard), findsOneWidget);
+    expect(find.byKey(const Key('nearby-suggestion')), findsOneWidget);
+    expect(
+      find.text(
+        'Os destaques não seguem o raio escolhido nem o filtro Aberto agora.',
+      ),
+      findsOneWidget,
+    );
+    final scroll = find.descendant(
+      of: find.byKey(const Key('nearby-list')),
+      matching: find.byType(Scrollable),
+    );
+    for (final id in ['near', 'middle', 'far']) {
+      await tester.scrollUntilVisible(
+        find.byKey(ValueKey('nearby-$id')),
+        100,
+        scrollable: scroll,
+      );
+    }
+    final tiles = tester
+        .widgetList<NearbyTile>(find.byType(NearbyTile))
+        .map((tile) => tile.item.place.id)
+        .toList();
+    expect(tiles, ['near', 'middle', 'far']);
+    expect(find.byKey(const ValueKey('nearby-p')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'Troca de conta descarta leitura antiga antes do timeout com nova leitura pendente',
+    (tester) async {
+      final auth = FakeAuthRepository(uid: 'a');
+      final repo = _ControlledSponsors();
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthRepository>.value(value: auth),
+            Provider<SponsorshipRepository>.value(value: repo),
+            Provider<PlaceRepository>(
+              create: (_) => FakePlaceRepository([place]),
+            ),
+            Provider<AppClock>.value(value: AppClock(() => at)),
+          ],
+          child: const MaterialApp(home: Scaffold(body: SponsoredSection())),
+        ),
+      );
+      await tester.pump();
+      expect(repo.reads, hasLength(1));
+      await tester.pump(const Duration(seconds: 2));
+      auth.restoreSession('b');
+      await tester.pump();
+      expect(repo.reads, hasLength(2));
+      repo.reads.first.complete([validSlot('old')]);
+      await tester.pumpAndSettle();
+      expect(find.byType(SponsoredCard), findsNothing);
+      expect(tester.getSize(find.byType(SponsoredSection)).height, 0);
+      repo.reads.last.complete([validSlot('new')]);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<SponsoredCard>(find.byType(SponsoredCard)).slot.id,
+        'new',
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'Erro real oculta seção e polling recupera sem leituras concorrentes',
+    (tester) async {
+      final auth = FakeAuthRepository(uid: 'a');
+      final repo = _ControlledSponsors();
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthRepository>.value(value: auth),
+            Provider<SponsorshipRepository>.value(value: repo),
+            Provider<PlaceRepository>(
+              create: (_) => FakePlaceRepository([place]),
+            ),
+            Provider<AppClock>.value(value: AppClock(() => at)),
+          ],
+          child: const MaterialApp(home: Scaffold(body: SponsoredSection())),
+        ),
+      );
+      await tester.pump();
+      repo.reads.single.completeError(StateError('rede'));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(find.byType(SponsoredSection)).height, 0);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await tester.pump(const Duration(seconds: 15));
+      expect(repo.reads, hasLength(2));
+      await tester.pump(const Duration(seconds: 18));
+      expect(repo.reads, hasLength(2));
+      repo.reads.last.complete([validSlot('recovered')]);
+      await tester.pumpAndSettle();
+      expect(find.byType(SponsoredCard), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('Seção pausa polling na aba inativa e relê ao voltar', (
+    tester,
+  ) async {
+    final auth = FakeAuthRepository(uid: 'a');
+    final repo = _ControlledSponsors();
+    final active = ValueNotifier(true);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthRepository>.value(value: auth),
+          Provider<SponsorshipRepository>.value(value: repo),
+          Provider<PlaceRepository>(
+            create: (_) => FakePlaceRepository([place]),
+          ),
+          Provider<AppClock>.value(value: AppClock(() => at)),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: ValueListenableBuilder<bool>(
+              valueListenable: active,
+              builder: (_, value, child) =>
+                  ActiveTab(isActive: value, child: child!),
+              child: const SponsoredSection(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    repo.reads.single.complete([validSlot('initial')]);
+    await tester.pumpAndSettle();
+    active.value = false;
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 45));
+    expect(repo.reads, hasLength(1));
+    active.value = true;
+    await tester.pump();
+    expect(repo.reads, hasLength(2));
+    active.value = false;
+    await tester.pump();
+    repo.reads.last.complete([]);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 45));
+    expect(repo.reads, hasLength(2));
+    await tester.pumpWidget(const SizedBox());
+    active.dispose();
+  });
+
+  testWidgets(
+    'Falha ao consultar titularidade mantém aviso e oculta Divulgação',
+    (tester) async {
+      final owners = _UnavailableOwner()
+        ..requests['me'] = [const OwnershipRequest('p', 'approved')];
+      final app = await pumpApp(tester, places: [place], owners: owners);
+      app.router.go('/meus-estabelecimentos');
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Não foi possível verificar titularidade'),
+        findsOneWidget,
+      );
+      expect(find.text('Divulgação'), findsNothing);
+      expect(find.text('Avaliações e respostas'), findsNothing);
+    },
+  );
+  testWidgets(
+    'Descoberta limita destaques e abre catálogo completo em tela pequena',
+    (tester) async {
+      tester.view.physicalSize = const Size(400, 400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final app = await pumpApp(
+        tester,
+        places: [place],
+        sponsors: _Sponsors(
+          SponsoredSlot(
+            's',
+            'p',
+            at.subtract(const Duration(hours: 1)),
+            at.add(const Duration(hours: 1)),
+          ),
+          count: 12,
+        ),
+        clock: () => at,
+        location: FakeLocationService(position: pontaNegra, granted: true),
+      );
+      app.router.go(Routes.nearby);
+      await tester.pumpAndSettle();
+      expect(find.byType(SponsoredCard), findsNWidgets(3));
+      expect(tester.takeException(), isNull);
+      final all = find.text('Ver todos os destaques');
+      await tester.ensureVisible(all);
+      await tester.tap(all);
+      await tester.pumpAndSettle();
+      expect(find.byType(SponsoredView), findsOneWidget);
+      final catalogScroll = find.descendant(
+        of: find.byType(SponsoredView),
+        matching: find.byType(Scrollable),
+      );
+      await tester.drag(catalogScroll, const Offset(0, -1300));
+      await tester.pumpAndSettle();
+      final visibleIds = tester
+          .widgetList<SponsoredCard>(find.byType(SponsoredCard))
+          .map((card) => card.slot.id)
+          .toSet();
+      expect(visibleIds, contains('s-11'));
+      app.router.pop();
+      await tester.pumpAndSettle();
+      final action = find.text('Ampliar para 1 km');
+      await tester.scrollUntilVisible(
+        action,
+        250,
+        scrollable: find
+            .descendant(
+              of: find.byType(NearbyView),
+              matching: find.byType(Scrollable),
+            )
+            .last,
+      );
+      await tester.ensureVisible(action);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      expect(find.text('Nada a 1 km'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'Perto mostra destaque mesmo sem orgânicos, abre ficha e não anuncia em Amigos ou perfil',
+    (tester) async {
+      final slot = SponsoredSlot(
+        's',
+        'p',
+        at.subtract(const Duration(hours: 1)),
+        at.add(const Duration(hours: 1)),
+      );
+      final app = await pumpApp(
+        tester,
+        places: [place],
+        sponsors: _Sponsors(slot),
+        clock: () => at,
+        location: FakeLocationService(position: pontaNegra, granted: true),
+      );
+      expect(find.byType(SponsoredCard), findsNothing);
+      app.router.go(Routes.nearby);
+      await tester.pumpAndSettle();
+      expect(find.byType(SponsoredCard), findsOneWidget);
+      expect(
+        find.text(NearbyView.emptyMessage(NearbyRadius.m300)),
+        findsOneWidget,
+      );
+      await tester.tap(find.byType(SponsoredCard));
+      await tester.pumpAndSettle();
+      expect(find.byType(PlaceDetailView), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(PlaceDetailView),
+          matching: find.text('Local'),
+        ),
+        findsWidgets,
+      );
+      app.router.go(Routes.person('me'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+      expect(find.text('Patrocinado'), findsNothing);
+      expect(find.text('Meus estabelecimentos'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'Seção embutida oculta carregamento, timeout e resposta de sessão anterior',
+    (tester) async {
+      final auth = FakeAuthRepository(uid: 'a');
+      final repo = _SlowSponsors();
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthRepository>.value(value: auth),
+            Provider<SponsorshipRepository>.value(value: repo),
+            Provider<PlaceRepository>(
+              create: (_) => FakePlaceRepository([place]),
+            ),
+            Provider<AppClock>.value(value: AppClock(() => at)),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Column(
+                children: [SponsoredSection(), Text('Descoberta disponível')],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.getSize(find.byType(SponsoredSection)).height, 0);
+      await tester.pump(const Duration(seconds: 18));
+      expect(repo.calls, 1);
+      await tester.pump(const Duration(seconds: 3));
+      expect(tester.getSize(find.byType(SponsoredSection)).height, 0);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Descoberta disponível'), findsOneWidget);
+      auth.restoreSession(null);
+      await tester.pump();
+      repo.gate.complete([
+        SponsoredSlot(
+          's',
+          'p',
+          at.subtract(const Duration(hours: 1)),
+          at.add(const Duration(hours: 1)),
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      expect(find.byType(SponsoredCard), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('Seção embutida expira sem espaço reservado', (tester) async {
+    var clock = at;
+    final auth = FakeAuthRepository(uid: 'a');
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthRepository>.value(value: auth),
+          Provider<SponsorshipRepository>(
+            create: (_) => _Sponsors(
+              SponsoredSlot(
+                's',
+                'p',
+                at.subtract(const Duration(hours: 1)),
+                at.add(const Duration(seconds: 10)),
+              ),
+            ),
+          ),
+          Provider<PlaceRepository>(
+            create: (_) => FakePlaceRepository([place]),
+          ),
+          Provider<AppClock>.value(value: AppClock(() => clock)),
+        ],
+        child: const MaterialApp(home: Scaffold(body: SponsoredSection())),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(SponsoredCard), findsOneWidget);
+    clock = at.add(const Duration(seconds: 15));
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pump();
+    expect(tester.getSize(find.byType(SponsoredSection)).height, 0);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'Divulgação é exclusiva do titular atual e informa indisponibilidade',
+    (tester) async {
+      final owners = FakeOwnerRepository()
+        ..owners['p'] = 'me'
+        ..requests['me'] = [const OwnershipRequest('p', 'approved')];
+      final app = await pumpApp(tester, places: [place], owners: owners);
+      app.router.go('/meus-estabelecimentos');
+      await tester.pumpAndSettle();
+      expect(find.byType(OwnerView), findsOneWidget);
+      expect(find.text('Avaliações e respostas'), findsOneWidget);
+      await tester.tap(find.text('Divulgação'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('A contratação de divulgação está indisponível no momento.'),
+        findsOneWidget,
+      );
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextButton),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Fechar'));
+      await tester.pumpAndSettle();
+      owners.owners.clear();
+      await tester.tap(find.byTooltip('Atualizar titularidade'));
+      await tester.pumpAndSettle();
+      expect(find.text('Divulgação'), findsNothing);
+      expect(find.text('Avaliações e respostas'), findsNothing);
+      owners.requests['me'] = [const OwnershipRequest('p', 'pending')];
+      await tester.tap(find.byTooltip('Atualizar titularidade'));
+      await tester.pumpAndSettle();
+      expect(find.text('Divulgação'), findsNothing);
+      expect(
+        find.text('Pedido pendente — sem poderes até a aprovação'),
+        findsOneWidget,
+      );
+    },
   );
   testWidgets(
     'Avaliação silenciosa retorna à ficha com confirmação neutra, sem promessa de feed',

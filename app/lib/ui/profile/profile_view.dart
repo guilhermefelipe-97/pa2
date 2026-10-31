@@ -100,10 +100,6 @@ class _ProfileViewState extends State<ProfileView> {
                       value: '/modo-silencioso',
                       child: Text('Modo silencioso'),
                     ),
-                    const PopupMenuItem(
-                      value: '/patrocinado',
-                      child: Text('Patrocinado'),
-                    ),
                     if (context.read<AdminAccess?>()?.enabled == true)
                       const PopupMenuItem(
                         value: Routes.admin,

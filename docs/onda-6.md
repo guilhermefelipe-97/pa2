@@ -1,6 +1,6 @@
 # Onda 6 — respostas, modo silencioso, fila e Destaque
 
-Versão: **1.2.0+4**. Inclui a administração de titularidade. O Patrocinado permanece desligado em produção até F23/F26.
+Versão: **1.2.1+5**. Inclui a administração de titularidade. O Patrocinado permanece desligado em produção até F23/F26.
 
 ## Fluxos para teste
 
@@ -17,7 +17,11 @@ Executar o app com `USE_EMULATOR=true`. Usar exclusivamente o Admin SDK conectad
 - `config/features`: `{sponsorshipEnabled: true, sponsoredSlotIds: ['teste']}`;
 - `sponsoredSlots/teste`: `{placeId: 'id-do-local', startsAt: Timestamp, endsAt: Timestamp}`, com início passado e fim futuro.
 
-Em Você → **Patrocinado**, o componente é rotulado e separado do feed Amigos. O cliente lê o catálogo confiável de IDs e faz `get` individual: as Rules verificam flag, vigência, schema e titularidade para cada slot. Slots sem titular, futuros ou vencidos são negados e não renderizam; a tela atualiza e remove os expirados. Flag ausente/false nega inclusive leitura direta pelo SDK. Cliente não grava slots nem configuração. A implementação de produção retorna vazio mesmo se a flag existir. Não há pagamentos ou ativação comercial. F23/F26 e nova autorização humana são dependências para anúncios reais.
+Em **Perto**, a seção reutilizável **Patrocinado** mostra destaques separados da lista orgânica, sem alterar seu ranking ou o feed Amigos. O antigo atalho no perfil foi removido; a rota permanece compatível. Sem cards vigentes, durante carregamento ou em falha, a seção não ocupa espaço nem bloqueia a descoberta. O cliente lê o catálogo confiável de IDs e faz `get` individual: as Rules verificam flag, vigência, schema e titularidade para cada slot. Slots sem titular, futuros ou vencidos são negados e não renderizam; a tela atualiza e remove os expirados. Flag ausente/false nega inclusive leitura direta pelo SDK. Cliente não grava slots nem configuração. A implementação de produção retorna vazio mesmo se a flag existir. Não há pagamentos ou ativação comercial. F23/F26 e nova autorização humana são dependências para anúncios reais.
+
+Em Você → **Meus estabelecimentos**, somente o titular atual encontra **Divulgação** no seu local. A entrada informa que a contratação está indisponível no momento, sem compra ou promessa de contratação. Pedidos pendentes, titulares revogados e falhas na verificação não oferecem essa ação; **Avaliações e respostas** mantém as permissões existentes.
+
+A seção de Perto exibe até três cards e oferece **Ver todos os destaques** quando há mais, abrindo `/patrocinado`. O cabeçalho explica que os destaques não seguem o raio escolhido nem o filtro **Aberto agora**. As atualizações periódicas param quando Perto fica inativo e a seção relê ao voltar; fora do shell, o componente mantém as atualizações normalmente.
 
 ## Verificação automatizada
 

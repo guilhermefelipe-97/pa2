@@ -1,4 +1,5 @@
 import 'package:naarea/data/repositories/owner_repository.dart';
+import 'package:naarea/data/repositories/sponsorship_repository.dart';
 import 'package:naarea/data/repositories/food_tag_repository.dart';
 import 'package:naarea/ui/dietary/dietary_store.dart';
 import 'package:flutter/material.dart';
@@ -86,6 +87,7 @@ Future<TestApp> pumpApp(
   FakeOpenReportRepository? openReports,
   FakeDietaryRepository? dietary,
   FakeOwnerRepository? owners,
+  SponsorshipRepository? sponsors,
   FakeFoodTagRepository? foodTags,
   DateTime Function()? clock,
 }) async {
@@ -112,6 +114,8 @@ Future<TestApp> pumpApp(
         ChangeNotifierProvider<AuthRepository>.value(value: auth),
         Provider<UserRepository>.value(value: u),
         Provider<OwnerRepository>.value(value: ownerRepo),
+        if (sponsors != null)
+          Provider<SponsorshipRepository>.value(value: sponsors),
         Provider<FoodTagRepository>.value(
           value: foodTags ?? FakeFoodTagRepository(r, ownerRepo),
         ),

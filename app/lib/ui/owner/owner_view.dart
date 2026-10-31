@@ -124,6 +124,26 @@ class _OwnerViewState extends State<OwnerView> {
                               _ => 'Pedido rejeitado',
                             },
                     ),
+                    if (row.owned)
+                      TextButton.icon(
+                        icon: const Icon(Icons.campaign_outlined),
+                        label: const Text('Divulgação'),
+                        onPressed: () => showDialog<void>(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: const Text('Divulgação'),
+                            content: const Text(
+                              'A contratação de divulgação está indisponível no momento.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                child: const Text('Fechar'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     if (row.request.reason != null)
                       Text(
                         '${row.request.status == 'revoked' ? 'Motivo da aprovação original' : 'Motivo'}: ${row.request.reason}',

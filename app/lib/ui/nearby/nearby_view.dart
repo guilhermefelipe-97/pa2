@@ -14,6 +14,7 @@ import '../feed/widgets/place_photo.dart';
 import '../feed/widgets/price_chip.dart';
 import '../feed/widgets/trust_sources.dart' show RecurrenceLine;
 import '../open/open_status_line.dart';
+import '../sponsored/sponsored_view.dart';
 import 'nearby_view_model.dart';
 
 /// Categoria e bairro do local (o que houver).
@@ -256,6 +257,7 @@ class _NearbyViewState extends State<NearbyView> {
     if (items.isEmpty && vm.openOnly && vm.items.isNotEmpty) {
       return _Message(
         key: const Key('nearby-open-empty'),
+        leading: const SponsoredSection(),
         icon: Icons.storefront,
         title: NearbyView.openEmptyMessage(vm.radius),
         actionLabel: NearbyView.showAllLabel,
@@ -267,6 +269,7 @@ class _NearbyViewState extends State<NearbyView> {
       // dizer "nada a 300 m".
       return _Message(
         key: const Key('nearby-partial-empty'),
+        leading: const SponsoredSection(),
         icon: Icons.cloud_off,
         title: NearbyView.partialMessage,
         actionLabel: NearbyView.retryLabel,
@@ -277,12 +280,14 @@ class _NearbyViewState extends State<NearbyView> {
       if (vm.outOfArea) {
         return const _Message(
           icon: Icons.travel_explore,
+          leading: SponsoredSection(),
           title: NearbyView.outOfAreaMessage,
         );
       }
       final wider = vm.radius.wider;
       return _Message(
         key: const Key('nearby-empty'),
+        leading: const SponsoredSection(),
         icon: Icons.search_off,
         title: NearbyView.emptyMessage(vm.radius),
         actionLabel: wider == null ? null : NearbyView.widenLabel(wider),
@@ -291,6 +296,7 @@ class _NearbyViewState extends State<NearbyView> {
     }
     final suggestion = vm.suggestion;
     final header = <Widget>[
+      const SponsoredSection(),
       if (vm.partial) PartialNotice(onRetry: vm.retry),
       if (suggestion != null)
         SuggestionCard(
@@ -651,6 +657,7 @@ class _Message extends StatelessWidget {
     this.onAction,
     this.secondaryLabel,
     this.onSecondary,
+    this.leading,
   });
 
   final IconData icon;
@@ -660,6 +667,7 @@ class _Message extends StatelessWidget {
   final VoidCallback? onAction;
   final String? secondaryLabel;
   final VoidCallback? onSecondary;
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -677,6 +685,7 @@ class _Message extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
+              ?leading,
               CircleAvatar(
                 radius: 44,
                 backgroundColor: scheme.primaryContainer,

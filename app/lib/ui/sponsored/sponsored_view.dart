@@ -7,6 +7,7 @@ import '../../data/repositories/place_repository.dart';
 import '../../data/repositories/sponsorship_repository.dart';
 import '../../routing/routes.dart';
 import '../core/app_clock.dart';
+import '../core/app_shell.dart';
 
 class SponsoredView extends StatelessWidget {
   const SponsoredView({super.key});
@@ -20,8 +21,22 @@ class SponsoredView extends StatelessWidget {
   }
 }
 
+/// Destaques separados da descoberta orgânica, sem reservar espaço vazio.
+class SponsoredSection extends StatelessWidget {
+  const SponsoredSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = context.watch<AuthRepository?>()?.currentUserId;
+    final repository = context.watch<SponsorshipRepository?>();
+    if (uid == null || repository == null) return const SizedBox.shrink();
+    return _Slots(key: ValueKey(uid), embedded: true);
+  }
+}
+
 class _Slots extends StatefulWidget {
-  const _Slots({super.key});
+  const _Slots({super.key, this.embedded = false});
+  final bool embedded;
   @override
   State<_Slots> createState() => _SlotsState();
 }
@@ -32,10 +47,31 @@ class _SlotsState extends State<_Slots> {
   bool failed = false;
   Timer? timer, refreshTimer;
   Future<void>? _read;
+  bool _active = false;
   DateTime now() => context.read<AppClock?>()?.now() ?? DateTime.now();
   @override
   void initState() {
     super.initState();
+    if (!widget.embedded) _resume();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!widget.embedded) return;
+    final active = ActiveTab.maybeOf(context) ?? true;
+    if (active == _active) return;
+    if (active) {
+      _resume();
+    } else {
+      _active = false;
+      timer?.cancel();
+      refreshTimer?.cancel();
+    }
+  }
+
+  void _resume() {
+    _active = true;
     load();
     timer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) {
@@ -58,7 +94,9 @@ class _SlotsState extends State<_Slots> {
     _read = run;
     return run.whenComplete(() {
       _read = null;
-      if (mounted) refreshTimer = Timer(const Duration(seconds: 15), load);
+      if (mounted && _active) {
+        refreshTimer = Timer(const Duration(seconds: 15), load);
+      }
     });
   }
 
@@ -97,6 +135,37 @@ class _SlotsState extends State<_Slots> {
   @override
   Widget build(BuildContext context) {
     final active = slots?.where((s) => s.active(now())).toList();
+    if (widget.embedded) {
+      if (active == null || active.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              header: true,
+              child: Text(
+                'Patrocinado',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            const Text(
+              'Os destaques não seguem o raio escolhido nem o filtro Aberto agora.',
+            ),
+            for (final slot in active.take(3))
+              SponsoredCard(
+                slot: slot,
+                name: names[slot.placeId] ?? 'Estabelecimento',
+              ),
+            if (active.length > 3)
+              TextButton(
+                onPressed: () => context.push('/patrocinado'),
+                child: const Text('Ver todos os destaques'),
+              ),
+          ],
+        ),
+      );
+    }
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
