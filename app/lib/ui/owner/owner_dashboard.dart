@@ -11,6 +11,10 @@ import '../core/editorial.dart';
 import '../feed/widgets/place_photo.dart';
 import '../place/place_gallery.dart';
 import 'place_presentation_view.dart';
+import '../../data/sponsorship_floor_reader.dart';
+import '../../domain/models/scores.dart';
+import '../../domain/sponsorship_floor.dart';
+import '../core/app_clock.dart';
 
 class OwnerView extends StatefulWidget {
   const OwnerView({super.key});
@@ -142,12 +146,35 @@ class _OwnerViewState extends State<OwnerView> {
       ),
     ),
   );
-  void promotion() => showDialog<void>(
+  void promotion(List<_OwnerRow> active) => showDialog<void>(
     context: context,
     builder: (_) => AlertDialog(
       title: const Text('Divulgação'),
-      content: const Text(
-        'A contratação de divulgação está indisponível no momento.',
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'A contratação de divulgação está indisponível no momento.',
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Regra do Destaque: ele só aparece com pelo menos '
+              '${SponsorshipFloor.minReviews} avaliações nos últimos 90 dias '
+              'e média de ${formatAverage(SponsorshipFloor.floor)} ou mais. '
+              'Abaixo disso é suspenso automaticamente e volta sozinho quando '
+              'as avaliações melhorarem.',
+            ),
+            if (context.read<SponsorshipFloorReader?>() != null)
+              for (final row in active)
+                _FloorLine(
+                  key: ValueKey('floor-${row.request.placeId}'),
+                  name: row.name,
+                  placeId: row.request.placeId,
+                ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -324,7 +351,7 @@ class _OwnerViewState extends State<OwnerView> {
                             'Divulgação patrocinada. A contratação ainda está indisponível.',
                           ),
                           TextButton.icon(
-                            onPressed: promotion,
+                            onPressed: () => promotion(active),
                             icon: const Icon(Icons.campaign_outlined, size: 18),
                             label: const Text('Divulgação'),
                           ),
@@ -498,6 +525,23 @@ class _OwnerViewState extends State<OwnerView> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  key: ValueKey('timeline-${place.id}'),
+                  tooltip: 'Painel do local',
+                  onPressed: () => context.push(
+                    Routes.ownerTimeline(place.id),
+                    extra: place.name,
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: theme.colorScheme.surfaceContainer,
+                    foregroundColor: theme.colorScheme.onSurface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                  ),
+                  icon: const Icon(Icons.insights_outlined, size: 18),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   flex: 1,
                   child: FilledButton.tonalIcon(
@@ -608,4 +652,37 @@ class _OwnerViewState extends State<OwnerView> {
       ),
     );
   }
+}
+
+class _FloorLine extends StatefulWidget {
+  const _FloorLine({super.key, required this.name, required this.placeId});
+  final String name, placeId;
+  @override
+  State<_FloorLine> createState() => _FloorLineState();
+}
+
+class _FloorLineState extends State<_FloorLine> {
+  late final Future<FloorCheck> read;
+  @override
+  void initState() {
+    super.initState();
+    final now = context.read<AppClock?>()?.now() ?? DateTime.now();
+    read = context.read<SponsorshipFloorReader>().check(widget.placeId, now);
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 12),
+    child: FutureBuilder<FloorCheck>(
+      future: read,
+      builder: (context, snap) {
+        final text = snap.hasError
+            ? 'Não foi possível consultar as avaliações agora.'
+            : snap.hasData
+            ? SponsorshipFloor.describe(snap.data!)
+            : 'Consultando avaliações…';
+        return Text('${widget.name}: $text');
+      },
+    ),
+  );
 }

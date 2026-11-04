@@ -9,6 +9,9 @@ import 'package:naarea/data/repositories/place_photo_repository.dart';
 import 'package:naarea/data/repositories/queue_repository.dart';
 import 'package:naarea/data/services/place_photo_picker.dart';
 import 'package:naarea/data/repositories/sponsorship_repository.dart';
+import 'package:naarea/data/repositories/place_history_repository.dart';
+import 'package:naarea/data/sponsorship_floor_reader.dart';
+import 'package:naarea/ui/share/share_service.dart';
 import 'package:naarea/data/repositories/food_tag_repository.dart';
 import 'package:naarea/ui/dietary/dietary_store.dart';
 import 'package:flutter/material.dart';
@@ -104,6 +107,8 @@ Future<TestApp> pumpApp(
   PlacePhotoPicker? galleryPicker,
   QueueRepository? queue,
   SponsorshipRepository? sponsors,
+  PlaceHistoryRepository? history,
+  ShareService? share,
   FakeFoodTagRepository? foodTags,
   DateTime Function()? clock,
   ThemeData? theme,
@@ -153,6 +158,13 @@ Future<TestApp> pumpApp(
         if (queue != null) Provider<QueueRepository>.value(value: queue),
         if (sponsors != null)
           Provider<SponsorshipRepository>.value(value: sponsors),
+        if (history != null) ...[
+          Provider<PlaceHistoryRepository>.value(value: history),
+          Provider<SponsorshipFloorReader>.value(
+            value: SponsorshipFloorReader(history, clock: clock),
+          ),
+        ],
+        if (share != null) Provider<ShareService>.value(value: share),
         Provider<FoodTagRepository>.value(
           value: foodTags ?? FakeFoodTagRepository(r, ownerRepo),
         ),

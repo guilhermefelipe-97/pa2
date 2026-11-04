@@ -11,6 +11,8 @@ import 'package:naarea/data/firebase/firestore_queue_repository.dart';
 import 'package:naarea/data/firebase/firestore_reputation_repository.dart';
 import 'package:naarea/data/firebase/firestore_privacy_repository.dart';
 import 'package:naarea/data/firebase/firestore_sponsorship_repository.dart';
+import 'package:naarea/data/firebase/firestore_place_history_repository.dart';
+import 'package:naarea/data/sponsorship_floor_reader.dart';
 import 'package:naarea/data/repositories/queue_repository.dart';
 import 'package:naarea/domain/models/review.dart';
 import 'package:naarea/domain/models/scores.dart';
@@ -380,8 +382,26 @@ void main() {
     'Destaque exige emulador, flag, vigência e titular mesmo com documentos existentes',
     () async {
       final db = FakeFirebaseFirestore();
-      final repo = FirestoreSponsorshipRepository(db, emulator: true);
+      final floor = SponsorshipFloorReader(FirestorePlaceHistoryRepository(db));
+      final repo = FirestoreSponsorshipRepository(
+        db,
+        floor: floor,
+        emulator: true,
+      );
       expect(await repo.current(now), isEmpty);
+      for (var i = 0; i < 5; i++) {
+        await db.doc('reviews/floor$i').set({
+          'authorId': 'a$i',
+          'authorName': 'A$i',
+          'placeId': 'p',
+          'placeName': 'P',
+          'food': 4,
+          'ambience': 4,
+          'service': null,
+          'companion': null,
+          'createdAt': Timestamp.fromDate(now.subtract(Duration(days: i))),
+        });
+      }
       await db.doc('config/features').set({
         'sponsorshipEnabled': true,
         'sponsoredSlotIds': ['bad', 'ok', 'expired', 'unowned'],
@@ -401,7 +421,10 @@ void main() {
         });
       }
       expect((await repo.current(now)).single.id, 'ok');
-      expect(await FirestoreSponsorshipRepository(db).current(now), isEmpty);
+      expect(
+        await FirestoreSponsorshipRepository(db, floor: floor).current(now),
+        isEmpty,
+      );
     },
   );
 }

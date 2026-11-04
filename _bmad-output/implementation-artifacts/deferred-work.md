@@ -110,3 +110,15 @@
   evidence: As Rules só checam seguir a dona e a lista visível; amarrar exigiria guardar o id da cópia no doc de `copies` (mudança no formato congelado do spec).
 
   status: Resolvido no código local em 02/11/2026, após autorização explícita da usuária para mudar o contrato. Recibo com copiedListId validado pelas Rules, migração verificável sem apagar legado e testes de segurança. Publicação e migração em produção continuam pendentes.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-onda-7-painel-compartilhar-freio.md`
+  summary: Funil do Destaque no painel do titular (impressões → visitas → salvamentos).
+  evidence: Decidido em 04/11/2026 deixar para quando o Destaque for ativado; exige gravar impressões com Rules novas.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-onda-7-painel-compartilhar-freio.md`
+  summary: Publicar `/.well-known/assetlinks.json` para App Links verificados do link compartilhado.
+  evidence: Precisa do SHA-256 do certificado de assinatura do APK; sem ele o link https abre a página e o app abre pelo esquema naarea://.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-onda-7-painel-compartilhar-freio.md`
+  summary: Piso do F26 é aplicado no cliente (sem Cloud Functions); um cliente modificado poderia ignorá-lo.
+  evidence: Rules não calculam médias. Com Blaze/Functions, gravar o status do piso no slot e exigir nas Rules.

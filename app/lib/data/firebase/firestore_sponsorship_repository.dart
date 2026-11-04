@@ -1,10 +1,19 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../repositories/sponsorship_repository.dart';
+import '../sponsorship_floor_reader.dart';
 
 class FirestoreSponsorshipRepository implements SponsorshipRepository {
-  FirestoreSponsorshipRepository(this.db, {this.emulator = false});
+  FirestoreSponsorshipRepository(
+    this.db, {
+    required this.floor,
+    this.emulator = false,
+  });
   final FirebaseFirestore db;
   final bool emulator;
+
+  /// Freio do F26: slot de local abaixo do piso (ou sem amostra) não sai.
+  /// Falha na leitura também esconde o slot.
+  final SponsorshipFloorReader floor;
   @override
   Future<List<SponsoredSlot>> current(DateTime now) async {
     if (!emulator) return [];
@@ -58,7 +67,15 @@ class FirestoreSponsorshipRepository implements SponsorshipRepository {
         (d['startsAt'] as Timestamp).toDate(),
         (d['endsAt'] as Timestamp).toDate(),
       );
-      if (slot.active(now)) result.add(slot);
+      if (!slot.active(now)) continue;
+      try {
+        final check = await floor
+            .check(placeId, now)
+            .timeout(const Duration(seconds: 15));
+        if (check.eligible) result.add(slot);
+      } on Object {
+        continue;
+      }
     }
     return result;
   }

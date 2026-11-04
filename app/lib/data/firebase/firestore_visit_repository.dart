@@ -219,6 +219,9 @@ class FirestoreVisitRepository
     List<String> authorIds,
   ) => queries.fetchForPlace(_visits, placeId, authorIds, fromDoc: _fromDoc);
 
+  static Visit? parse(QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+      _fromDoc(doc);
+
   static Visit? _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data();
     final ts = d['createdAt'];

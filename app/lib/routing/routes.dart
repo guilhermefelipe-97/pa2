@@ -18,6 +18,15 @@ abstract final class Routes {
   static const pickPlace = '/avaliar';
 
   static const placeDetailPattern = '/local/:placeId';
+
+  /// Link compartilhado (F21): `https://naarea-natal.web.app/l/<id>` e
+  /// `naarea://app/l/<id>` chegam aqui e abrem a ficha.
+  static const sharedPlacePattern = '/l/:placeId';
+
+  static const ownerTimelinePattern = '/meus-estabelecimentos/:placeId/painel';
+
+  static String ownerTimeline(String placeId) =>
+      '/meus-estabelecimentos/${Uri.encodeComponent(placeId)}/painel';
   static const personPattern = '/pessoa/:uid';
 
   static const personListPattern = '/pessoa/:uid/lista/:listId';

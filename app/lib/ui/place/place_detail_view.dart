@@ -1,6 +1,9 @@
 import '../queue/queue_section.dart';
 import '../owner/reply_line.dart';
 import 'package:flutter/material.dart';
+import '../share/place_share_sheet.dart';
+import '../share/share_service.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/models/place.dart';
@@ -211,6 +214,17 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
             leading: BackButton(onPressed: _back),
             title: const Text('Detalhes do local'),
             actions: [
+              if (context.read<ShareService?>() != null)
+                IconButton(
+                  key: const Key('place-share'),
+                  tooltip: 'Compartilhar',
+                  icon: const Icon(Icons.share_outlined),
+                  onPressed: () => showPlaceShareSheet(
+                    context,
+                    place: place,
+                    averages: item?.averages,
+                  ),
+                ),
               OwnershipAction(placeId: place.id),
               const SizedBox(width: 4),
             ],
