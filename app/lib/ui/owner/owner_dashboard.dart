@@ -68,9 +68,7 @@ class _OwnerViewState extends State<OwnerView> {
         if (owned && workspace != null) {
           try {
             summary = await workspace.summary(request.placeId);
-          } on Object {
-            /* Keep owner controls usable when counts fail. */
-          }
+          } on Object {}
         }
         return _OwnerRow(
           request,
@@ -596,10 +594,7 @@ class _OwnerViewState extends State<OwnerView> {
                     ],
                   ),
                 ),
-                if (compact) ...[
-                  const SizedBox(width: 8),
-                  followButton,
-                ],
+                if (compact) ...[const SizedBox(width: 8), followButton],
               ],
             ),
             if (!compact) ...[

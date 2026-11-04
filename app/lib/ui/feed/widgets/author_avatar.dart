@@ -4,8 +4,6 @@ import '../../core/stable_hash.dart';
 import '../../core/theme.dart';
 import '../../profile/profile_media_image.dart';
 
-/// Avatar com a inicial do nome (sem foto de perfil ainda). A cor é estável
-/// por pessoa.
 class AuthorAvatar extends StatelessWidget {
   const AuthorAvatar({
     super.key,
@@ -57,9 +55,6 @@ class AuthorAvatar extends StatelessWidget {
   }
 }
 
-/// Até 3 avatares sobrepostos e "+N" (no máximo "+99") para o resto. É só
-/// decorativo para leitores de tela: a frase "A e B foram aqui" já nomeia
-/// as pessoas.
 class AuthorAvatarStack extends StatelessWidget {
   const AuthorAvatarStack({
     super.key,
@@ -68,10 +63,8 @@ class AuthorAvatarStack extends StatelessWidget {
     this.radius = 14,
   });
 
-  /// (id, nome), do mais recente para o mais antigo, sem repetição.
   final List<({String id, String name})> authors;
 
-  /// Cor do anel entre avatares: a do fundo onde a pilha está desenhada.
   final Color ringColor;
   final double radius;
 

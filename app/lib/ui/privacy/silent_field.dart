@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/repositories/privacy_repository.dart';
 
-/// Controle compacto; alcance completo fica disponível ao lado da escolha.
 class SilentField extends StatelessWidget {
   const SilentField({
     super.key,

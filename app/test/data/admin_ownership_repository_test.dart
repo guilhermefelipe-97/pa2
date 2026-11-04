@@ -38,7 +38,6 @@ class LostResponseFirestore extends FakeFirebaseFirestore {
   }
 }
 
-// Duplo restrito ao teste para simular falha de rede após o commit.
 // ignore: subtype_of_sealed_class
 class RequestReference implements DocumentReference<Map<String, dynamic>> {
   RequestReference(this.delegate, this.db);
@@ -73,7 +72,6 @@ class Metadata implements SnapshotMetadata {
   final bool hasPendingWrites;
 }
 
-// Duplo restrito ao teste para exercitar metadados que o fake não emite.
 // ignore: subtype_of_sealed_class
 class AccessSnapshot implements DocumentSnapshot<Map<String, dynamic>> {
   AccessSnapshot(this.metadata, this.enabled);

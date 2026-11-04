@@ -9,9 +9,6 @@ import '../repositories/queue_repository.dart';
 import 'audit_log.dart';
 import 'place_doc.dart';
 
-/// Relatos identificados de espera (F29) no Firestore. Mesmo padrão de batch do
-/// F15 (`FirestoreVisitRepository`): local descoberto + relato + trava,
-/// timeout de 15 s, ack perdido verificado e corrida na criação do local.
 class FirestoreQueueRepository implements QueueRepository {
   FirestoreQueueRepository(
     this._db, {
@@ -27,13 +24,11 @@ class FirestoreQueueRepository implements QueueRepository {
 
   static const Duration defaultCommitTimeout = Duration(seconds: 15);
 
-  /// Sem resposta do commit neste prazo: trata como ack perdido.
   final Duration commitTimeout;
 
   static const String reportsCollection = 'queueReports';
   final _pending = <String, _QueueAttempt>{};
 
-  /// Subcoleção das travas do F29: `users/{uid}/queueReportLocks/{placeId}`.
   static const String locksCollection = 'queueReportLocks';
 
   CollectionReference<Map<String, dynamic>> get _reports =>
@@ -71,8 +66,7 @@ class FirestoreQueueRepository implements QueueRepository {
       );
     }
     _pending.remove(key);
-    // Ausência confirmada e operação encerrada: permite corrigir o valor.
-    // O mesmo ID é guardado somente para um retry real com o mesmo conteúdo.
+
     return null;
   }
 
@@ -91,7 +85,6 @@ class FirestoreQueueRepository implements QueueRepository {
         recovered: true,
       );
     } on Object {
-      // A trava pode confirmar esta tentativa mesmo se a leitura do relato falhar.
       try {
         final d =
             (await _lockRef(attempt.report.authorId, attempt.report.placeId)
@@ -107,9 +100,7 @@ class FirestoreQueueRepository implements QueueRepository {
             recovered: true,
           );
         }
-      } on Object {
-        /* Leitura desconhecida nunca autoriza duplicar. */
-      }
+      } on Object {}
       throw const QueueRecoveryRequired(
         'Não foi possível conferir o envio anterior. Atualize antes de repetir.',
       );
@@ -137,8 +128,7 @@ class FirestoreQueueRepository implements QueueRepository {
         'Envio anterior confirmado: ${recovered.minutes} min. O novo valor não foi enviado.',
       );
     }
-    // Depois de 30 min, uma tentativa legítima usa outro documento, ainda que
-    // a confirmação do envio antigo só tenha chegado agora.
+
     final reuse =
         recovered == null &&
         old != null &&
@@ -204,7 +194,7 @@ class FirestoreQueueRepository implements QueueRepository {
   Future<void> _send(_QueueAttempt attempt, Place? place) async {
     attempt.inFlight = true;
     final operation = _commit(attempt.ref, attempt.report, place);
-    // timeout não cancela o SDK. Mantém a identidade até a operação real encerrar.
+
     final settled = operation.then<void>(
       (_) {
         attempt.inFlight = false;
@@ -224,13 +214,12 @@ class FirestoreQueueRepository implements QueueRepository {
   ) {
     final batch = _db.batch();
     if (createPlace != null) {
-      // Mesmo batch: as Rules do relato exigem o local ao fim dele.
       batch.set(
         _db.collection(placesCollection).doc(createPlace.id),
         newPlaceData(createPlace, uid: report.authorId),
       );
     }
-    // Schema exato (5 chaves) validado pelas Rules; hora do servidor.
+
     batch.set(ref, {
       'authorId': report.authorId,
       'authorName': report.authorName,
@@ -238,7 +227,7 @@ class FirestoreQueueRepository implements QueueRepository {
       'minutes': report.minutes,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    // F04: entrada de auditoria no mesmo batch (as Rules exigem o par).
+
     addAuditEntry(
       batch,
       _db,
@@ -278,7 +267,6 @@ class FirestoreQueueRepository implements QueueRepository {
     }
   }
 
-  /// Documento fora do schema: `null` (ignorado em vez de derrubar a tela).
   static QueueReport? _fromDoc(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
   ) {

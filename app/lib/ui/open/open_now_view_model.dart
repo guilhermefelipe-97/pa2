@@ -12,37 +12,22 @@ import '../../domain/models/place.dart';
 import '../../domain/open_status.dart';
 import '../core/safe_change_notifier.dart';
 
-/// Onde o aparelho está em relação ao local (só em memória).
 enum OpenProximity {
-  /// Ainda não se sabe (lendo a permissão ou a posição).
   checking,
 
-  /// Permissão ainda não concedida: convite "Está aí agora?" que explica e
-  /// só então pede a permissão (nunca ao abrir o detalhe).
   needsPermission,
 
-  /// A até [openReportRadiusMeters] do local: botões Sim/Não.
   near,
 
-  /// Longe do local: sem relato (o status continua visível).
   far,
 
-  /// Permissão negada ou GPS desligado: "Ative a localização para
-  /// confirmar".
   locationOff,
 
-  /// Não foi possível obter a posição (sem sinal, tempo esgotado).
   unavailable,
 
-  /// Local sem coordenadas ou sem sessão: não há como relatar.
   none,
 }
 
-/// "Está aberto agora?" (F20) num local: o status a partir dos relatos das
-/// últimas 3 h e o relato em 1 toque de quem está a até 150 m.
-///
-/// A posição do aparelho fica só em memória: serve para decidir se o botão
-/// aparece e nunca é gravada nem enviada.
 class OpenNowViewModel extends SafeChangeNotifier {
   OpenNowViewModel({
     required this.placeId,
@@ -100,17 +85,13 @@ class OpenNowViewModel extends SafeChangeNotifier {
 
   List<OpenReport>? _loaded;
 
-  /// Relato enviado daqui (aparece já, sem esperar a releitura).
   OpenReport? _own;
 
-  /// Status atual; `null` sem relato recente ou com a leitura falhando
-  /// (nunca derruba a tela).
   OpenStatus? get status {
     final loaded = _loaded;
     var own = _own;
     if (loaded == null && own == null) return null;
-    // A releitura já trouxe o relato feito daqui (1 por autor a cada 30
-    // min): não conta duas vezes.
+
     if (own != null &&
         (loaded ?? const []).any(
           (r) =>
@@ -142,8 +123,6 @@ class OpenNowViewModel extends SafeChangeNotifier {
   DateTime? _lockLastAt;
   Timer? _unlockTimer;
 
-  /// "Você informou às 20h10. De novo a partir das 20h40." enquanto dentro
-  /// dos 30 min; `null` = pode relatar.
   String? get blockedLabel {
     if (isOwnBusiness) return ownerContributionMessage;
     final lastAt = _lockLastAt;
@@ -158,7 +137,6 @@ class OpenNowViewModel extends SafeChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  /// Sim/Não habilitados.
   bool get canReport =>
       !isOwnBusiness &&
       _proximity == OpenProximity.near &&
@@ -166,8 +144,6 @@ class OpenNowViewModel extends SafeChangeNotifier {
       !_isSubmitting &&
       _auth.currentUserId != null;
 
-  /// O detalhe mostra o local [place] (pode chegar depois, com
-  /// coordenadas). A 1ª chamada carrega relatos, trava e proximidade.
   void attach(Place place) {
     if (place.id != placeId) return;
     final hadCoordinates = _place?.hasCoordinates ?? false;
@@ -182,8 +158,6 @@ class OpenNowViewModel extends SafeChangeNotifier {
 
   int _seq = 0;
 
-  /// Relatos, trava e proximidade em paralelo; nenhuma falha derruba a
-  /// tela.
   Future<void> load() async {
     final seq = ++_seq;
     await Future.wait([
@@ -205,7 +179,7 @@ class OpenNowViewModel extends SafeChangeNotifier {
     } on Object catch (e) {
       debugPrint('Relatos de aberto indisponíveis: $e');
       if (seq != _seq) return;
-      // Status some (mas o relato feito daqui continua).
+
       _loaded = null;
     }
     notifyListeners();
@@ -213,7 +187,6 @@ class OpenNowViewModel extends SafeChangeNotifier {
 
   int _lockSeq = 0;
 
-  /// Erro ou mais de [openReportLockTimeout]: sem trava (as Rules decidem).
   Future<void> _loadLock() async {
     final uid = _auth.currentUserId;
     if (uid == null) return;
@@ -249,8 +222,6 @@ class OpenNowViewModel extends SafeChangeNotifier {
 
   int _locSeq = 0;
 
-  /// Sem [request], nunca mostra pedido do sistema: sem permissão, fica no
-  /// convite [OpenProximity.needsPermission].
   Future<void> _checkProximity({required bool request}) async {
     final place = _place;
     final location = _location;
@@ -300,11 +271,8 @@ class OpenNowViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// Depois da explicação, no toque: pede a permissão (se preciso) e vê se
-  /// o aparelho está perto.
   Future<void> useMyLocation() => _checkProximity(request: true);
 
-  /// Relata "Sim" ([open] `true`) ou "Não". `true` quando foi gravado.
   Future<bool> submit({required bool open}) async {
     final place = _place;
     final uid = _auth.currentUserId;
@@ -320,7 +288,7 @@ class OpenNowViewModel extends SafeChangeNotifier {
       }
       final profile = await _users.getProfile(uid);
       if (profile == null) throw StateError('perfil ausente');
-      // Local só descoberto (Photon, G2): nasce no mesmo batch do relato.
+
       final newPlace = place.discovered ? place : null;
       final result = await _reports.createReport(
         NewOpenReport(
@@ -352,8 +320,7 @@ class OpenNowViewModel extends SafeChangeNotifier {
       return true;
     } on Object catch (e) {
       debugPrint('Relato de aberto não enviado: $e');
-      // Ex.: relato feito em outro aparelho há menos de 30 min: reconsulta
-      // a trava e explica, se for o caso.
+
       _isSubmitting = false;
       await _loadLock();
       if (blockedLabel == null) _errorMessage = errorText;

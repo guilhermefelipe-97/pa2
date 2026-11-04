@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../../domain/models/place_list.dart';
 import 'list_category.dart';
 
-/// Nome (1–40, aparado, único sem caixa/acento) + emoji opcional de uma
-/// lista. Usado no "Nova lista" do sheet e no diálogo de renomear.
 class ListNameForm extends StatefulWidget {
   const ListNameForm({
     super.key,
@@ -20,7 +18,6 @@ class ListNameForm extends StatefulWidget {
   final String initialName;
   final String? initialEmoji;
 
-  /// Nome já usado por outra lista do usuário?
   final bool Function(String name) isTaken;
   final void Function(String name, String? emoji) onSubmit;
   final VoidCallback? onCancel;
@@ -53,7 +50,7 @@ class _ListNameFormState extends State<ListNameForm> {
 
   bool get _taken {
     if (_trimmed.isEmpty) return false;
-    // Renomear para o mesmo nome (ou só mudar a caixa) não é repetição.
+
     if (PlaceList.nameKey(_trimmed) == PlaceList.nameKey(widget.initialName)) {
       return false;
     }

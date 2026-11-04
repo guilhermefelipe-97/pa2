@@ -21,10 +21,6 @@ import '../core/load_visits.dart';
 import '../core/safe_change_notifier.dart';
 import '../open/open_now_view_model.dart';
 
-/// Detalhe do local, autônomo por `placeId` (F11): carrega o local e as
-/// avaliações e visitas ("Voltei aqui", F15) de quem o usuário segue ali (e
-/// as dele, como "Você"). Quando a navegação traz dados prontos (`FeedItem` do feed ou `Place` da aba
-/// "Quero ir"/seletor), eles aparecem já e a carga só atualiza.
 class PlaceDetailViewModel extends SafeChangeNotifier {
   PlaceDetailViewModel({
     required this.placeId,
@@ -58,7 +54,6 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   static const errorText =
       'Não foi possível carregar o local. Verifique sua conexão.';
 
-  /// Nome mostrado nas avaliações do próprio usuário.
   static const youLabel = 'Você';
 
   final String placeId;
@@ -81,8 +76,6 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// "Está aberto agora?" (F20); `null` sem o repositório de relatos.
-  /// Descartado junto com o detalhe.
   final OpenNowViewModel? openNow;
 
   final AuthRepository _auth;
@@ -94,19 +87,14 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   final FollowStaleness _follow;
   final DateTime Function() _clock;
 
-  /// Alguém foi seguido/deixado de seguir em outra tela desde a última carga
-  /// (muda quais avaliações aparecem aqui).
   bool get isStale => _follow.isStale;
 
-  /// Ao voltar a ficar visível (ex.: do perfil de quem avaliou).
   Future<void> reloadIfStale() => _follow.isStale ? load() : Future.value();
 
   DateTime now() => _clock();
 
-  /// Usuário logado (para marcar a própria foto como "Sua foto").
   String? get currentUserId => _auth.currentUserId;
 
-  /// A ida (avaliação ou visita) é do usuário logado.
   bool isOwn(PlaceActivity r) {
     final uid = _auth.currentUserId;
     return uid != null && r.authorId == uid;
@@ -115,22 +103,16 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   Place? _place;
   Place? get place => _place;
 
-  /// `null` enquanto não se sabe (carregando sem dados prontos).
   List<Review>? _visibleReviews;
 
-  /// Avaliações dos amigos e do próprio usuário (como "Você"), mais
-  /// recentes primeiro. Vazia = ninguém avaliou.
   List<Review> get reviews => _visibleReviews ?? const [];
 
   bool get reviewsKnown => _visibleReviews != null;
 
   List<Visit> _visibleVisits = const [];
 
-  /// Visitas ("Voltei aqui") dos amigos e do usuário, mais recentes primeiro.
   List<Visit> get visits => _visibleVisits;
 
-  /// "5 idas de 3 amigos" (o selo acrescenta o 🔁) acima das médias,
-  /// quando alguém voltou (2 idas ou mais); `null` caso contrário.
   String? get recurrenceLabel {
     final i = item;
     if (i == null) return null;
@@ -149,7 +131,6 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     return uid != null && visits.any((v) => v.authorId == uid);
   }
 
-  /// O usuário já avaliou o local (o CTA vira "Avaliar de novo").
   bool get hasOwnReview {
     final uid = _auth.currentUserId;
     return uid != null && reviews.any((r) => r.authorId == uid);
@@ -159,12 +140,9 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   Timer? _unlockTimer;
   int _lockSeq = 0;
 
-  /// Hora da última avaliação do usuário aqui, enquanto ainda dentro do
-  /// período mínimo (F03); `null` = pode avaliar.
   DateTime? get reviewBlockedSince =>
       isReviewBlocked(_lockLastAt, now()) ? _lockLastAt : null;
 
-  /// "Pode avaliar de novo a partir de 11/11 às 20h" no lugar do CTA (F03).
   String? get reviewAgainLabel {
     final since = reviewBlockedSince;
     return since == null ? null : reviewAgainFromLabel(since);
@@ -175,16 +153,13 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     _unlockTimer?.cancel();
     _unlockTimer = null;
     if (lastAt == null || !isReviewBlocked(lastAt, now())) return;
-    // Na hora da liberação, o CTA volta sem precisar recarregar.
+
     _unlockTimer = Timer(
       reviewAllowedAt(lastAt).difference(now()),
       notifyListeners,
     );
   }
 
-  /// Trava do F03 em paralelo com o resto (os dados não esperam por ela).
-  /// Erro ou mais de [reviewLockTimeout]: sem trava (não mostra uma trava
-  /// velha; o formulário confere de novo e as Rules decidem).
   Future<void> _loadLock(String uid) async {
     final seq = ++_lockSeq;
     DateTime? lastAt;
@@ -201,10 +176,6 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// "2 avaliações de amigos"; com a do próprio usuário, só "3 avaliações".
-  /// Visitas (F15) do mesmo jeito: "2 avaliações de amigos · 3 visitas de
-  /// amigos", ou "3 visitas" quando há visita do próprio usuário. Nunca
-  /// vazio: sem idas, "0 avaliações de amigos".
   String get reviewCountLabel {
     final n = reviews.length;
     final v = visits.length;
@@ -223,8 +194,6 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   List<Visit>? _itemVisits;
   FeedItem? _item;
 
-  /// Card com as avaliações e visitas (cabeçalho, médias, autores, lista).
-  /// O mesmo objeto enquanto o local e as idas não mudam (snapshot).
   FeedItem? get item {
     final p = _place;
     final r = _visibleReviews;
@@ -246,10 +215,6 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   FeedItem? _priceItem;
   PriceSummary? _price;
 
-  /// Preço relatado (F27) pelos amigos e pelo próprio usuário (inclusive
-  /// quando só há a ida dele): o relato mais recente de cada um, nos
-  /// últimos 12 meses. `null` = ninguém informou. Calculado uma vez por
-  /// snapshot ([item]): o chip do topo e a seção usam o mesmo resumo.
   PriceSummary? get price {
     final i = item;
     if (!identical(i, _priceItem)) {
@@ -259,8 +224,6 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     return _price;
   }
 
-  /// "3 relatos de amigos"; com o do próprio usuário, "3 relatos (seu e de
-  /// amigos)" ou "1 relato seu". `null` sem relatos.
   String? get priceCountLabel {
     final p = price;
     if (p == null) return null;
@@ -277,20 +240,13 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
   Timer? _visitUnlockTimer;
   int _visitLockSeq = 0;
 
-  /// Visita registrada neste aparelho ([markVisited]): vale até a trava
-  /// lida do servidor confirmar (uma leitura que falha não a apaga).
   DateTime? _localVisitAt;
 
-  /// "Você registrou uma visita em 12/10 às 20h. De novo a partir de 13/10
-  /// às 8h." quando a última visita do usuário aqui tem menos de 12 h (o
-  /// "Voltei aqui" fica desabilitado); `null` = pode registrar.
   String? get visitBlockedLabel {
     final lastAt = _visitLockLastAt;
     return isVisitBlocked(lastAt, now()) ? visitBlockedMessage(lastAt!) : null;
   }
 
-  /// A visita acabou de ser registrada (sheet ou tela de bloqueio do F03):
-  /// o "Voltei aqui" trava já, sem esperar a releitura da trava.
   void markVisited() {
     _visitLockSeq++;
     _localVisitAt = now();
@@ -313,8 +269,6 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     );
   }
 
-  /// Trava de visita em paralelo, como a de avaliação: erro ou timeout =
-  /// sem trava (o sheet confere de novo e as Rules decidem).
   Future<void> _loadVisitLock(String uid) async {
     final seq = ++_visitLockSeq;
     DateTime? lastAt;
@@ -331,8 +285,6 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// Visitas do local; a falha não derruba o detalhe (`ok: false`: fica
-  /// com as que já havia).
   Future<VisitsRead> _fetchVisits(List<String> authors) => loadVisitsOrEmpty(
     'detalhe',
     () async =>
@@ -344,13 +296,10 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
 
   bool _notFound = false;
 
-  /// O id não existe no catálogo (e não veio local pronto da navegação).
   bool get notFound => _notFound;
 
   String? _errorMessage;
 
-  /// Falha sem algo para mostrar no lugar (o local ou as avaliações). Com o
-  /// FeedItem pronto a falha é silenciosa (continua o que veio do feed).
   String? get errorMessage => _errorMessage;
 
   int _seq = 0;
@@ -363,13 +312,12 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     _notFound = false;
     final uid = _auth.currentUserId;
     if (uid == null) {
-      // Sem sessão: nenhuma trava (de outra conta) fica na tela.
       _lockSeq++;
       _setLock(null);
       _visitLockSeq++;
       _localVisitAt = null;
       _setVisitLock(null);
-      // Sem sessão não há como ler: erro em vez de spinner eterno.
+
       _isLoading = false;
       if (_place == null || _visibleReviews == null) _errorMessage = errorText;
       notifyListeners();
@@ -386,7 +334,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
       ]);
       if (seq != _seq) return;
       final found = (results[0] as Map<String, Place>)[placeId];
-      // Cópia: o Set pode ser o do repositório.
+
       final authors = {...results[1] as Set<String>, uid};
       final fetchedVisits = _fetchVisits(authors.toList());
       final fetched = await _reviews.fetchReviewsForPlace(
@@ -398,7 +346,6 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
       if (found != null) {
         _place = found;
       } else if (_place == null) {
-        // Sem local no catálogo nem dado pronto: nada para mostrar.
         _notFound = true;
       }
       _visibleReviews = [
@@ -419,7 +366,7 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
         notifyListeners();
       }
     }
-    // O Future de load() inclui a trava; a tela não espera por ela.
+
     await lock;
     await visitLock;
   }

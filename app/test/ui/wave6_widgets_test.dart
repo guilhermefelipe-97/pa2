@@ -614,10 +614,7 @@ void main() {
       await tester.tap(find.byTooltip('Atualizar titularidade'));
       await tester.pumpAndSettle();
       expect(find.text('Divulgação'), findsNothing);
-      expect(
-        find.text('Em análise'),
-        findsOneWidget,
-      );
+      expect(find.text('Em análise'), findsOneWidget);
     },
   );
   testWidgets(
@@ -711,7 +708,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Obrigado'), findsOneWidget);
       expect(repo.writes, 1);
-      // Outra ficha já aberta recebe resposta externa sem reconstruir sua rota.
+
       await tester.pumpWidget(const SizedBox());
       repo.written = null;
       repo.hold = false;

@@ -196,7 +196,7 @@ class FirestoreAdminOwnershipRepository
       }, timeout: const Duration(seconds: 15));
     } on FirebaseException catch (error) {
       if (error.code == 'permission-denied') rethrow;
-      // Reconcilia uma resposta de commit perdida com o servidor antes de repetir.
+
       try {
         final d = (await ref.get(server).timeout(reconciliationTimeout)).data();
         if (d?['status'] == (approve ? 'approved' : 'rejected') &&

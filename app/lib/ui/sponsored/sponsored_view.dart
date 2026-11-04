@@ -26,7 +26,6 @@ class SponsoredView extends StatelessWidget {
   }
 }
 
-/// Destaques separados da descoberta orgânica, sem reservar espaço vazio.
 class SponsoredSection extends StatelessWidget {
   const SponsoredSection({super.key, this.position});
   final LatLng? position;

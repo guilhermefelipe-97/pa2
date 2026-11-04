@@ -18,19 +18,8 @@ import '../core/safe_change_notifier.dart';
 
 enum ProfileState { loading, ready, notFound, error, signedOut }
 
-/// Aviso de uma ação de seguir, mostrado uma vez pela tela.
-enum ProfileNotice {
-  /// Falhou; o botão já voltou ao estado anterior.
-  followFailed,
+enum ProfileNotice { followFailed, unfollowed }
 
-  /// Deixou de seguir com sucesso (SnackBar com "Desfazer").
-  unfollowed,
-}
-
-/// Perfil simples de uma pessoa (F06): nome, Seguir/Deixar de seguir e as
-/// avaliações e visitas ("Voltei aqui", F15) dela, mais recentes primeiro.
-/// Identidade pública, atividades e listas compartilhadas (F13). Fotos e
-/// edição usam repositórios próprios; e-mail e senha ficam no Firebase Auth.
 class ProfileViewModel extends SafeChangeNotifier {
   ProfileViewModel({
     required this.uid,
@@ -59,11 +48,8 @@ class ProfileViewModel extends SafeChangeNotifier {
   static const youLabel = 'Você';
   static const unnamedLabel = 'Usuário';
 
-  /// O perfil mostra só as avaliações mais recentes...
   static const int maxReviews = 50;
 
-  /// ...e só as visitas ("Voltei aqui", F15) mais recentes, com limite
-  /// próprio (visitas frequentes não empurram as avaliações para fora).
   static const int maxVisits = 50;
 
   final String uid;
@@ -81,7 +67,6 @@ class ProfileViewModel extends SafeChangeNotifier {
 
   DateTime now() => _clock();
 
-  /// O perfil é do próprio usuário: título "Você" e sem botão Seguir.
   bool get isSelf => _auth.currentUserId == uid;
 
   ProfileState _state = ProfileState.loading;
@@ -106,19 +91,15 @@ class ProfileViewModel extends SafeChangeNotifier {
       places = results[0] as Map<String, Place>? ?? const {};
       totals = results[1] as ProfileTotals? ?? const ProfileTotals();
       notifyListeners();
-    } on Object {
-      /* O perfil continua disponível sem os dados opcionais. */
-    }
+    } on Object {}
   }
 
-  /// Nome no título ("Você" no próprio perfil; "Usuário" sem nome).
   String get title {
     if (isSelf) return youLabel;
     final name = _profile?.displayName.trim() ?? '';
     return name.isEmpty ? unnamedLabel : name;
   }
 
-  /// Nome público, inclusive no próprio perfil.
   String get displayName {
     final name = _profile?.displayName.trim() ?? '';
     return name.isEmpty ? unnamedLabel : name;
@@ -126,17 +107,12 @@ class ProfileViewModel extends SafeChangeNotifier {
 
   List<Review> _reviewList = const [];
 
-  /// Até [maxReviews] avaliações da pessoa, mais recentes primeiro.
   List<Review> get reviews => _reviewList;
 
   List<PlaceActivity> _activities = const [];
 
-  /// Até [maxReviews] avaliações e até [maxVisits] visitas da pessoa,
-  /// juntas, mais recentes primeiro.
   List<PlaceActivity> get activities => _activities;
 
-  /// Sem avaliações nem visitas: "Ana ainda não avaliou nem registrou
-  /// visita em nenhum lugar".
   String get emptyText => isSelf
       ? 'Você ainda não avaliou nem registrou visita em nenhum lugar'
       : '$title ainda não avaliou nem registrou visita em nenhum lugar';
@@ -146,13 +122,10 @@ class ProfileViewModel extends SafeChangeNotifier {
 
   List<PlaceList> _visibleLists = const [];
 
-  /// Listas visíveis da pessoa (F13): só para quem a segue; vazio (seção
-  /// oculta) sem seguir, no próprio perfil ou se a leitura falhou.
   List<PlaceList> get lists => _visibleLists;
 
   int _listsSeq = 0;
 
-  /// Lê as listas visíveis (sem bloquear o perfil). Falha = seção oculta.
   Future<void> _loadLists() async {
     final seq = ++_listsSeq;
     final repo = _lists;
@@ -177,18 +150,14 @@ class ProfileViewModel extends SafeChangeNotifier {
 
   ProfileNotice? _notice;
 
-  /// Devolve o aviso pendente (uma vez só).
   ProfileNotice? takeNotice() {
     final n = _notice;
     _notice = null;
     return n;
   }
 
-  /// Alguém foi seguido/deixado de seguir em outra tela (ex.: este mesmo
-  /// perfil aberto de novo mais acima na pilha).
   bool get isStale => _follow.isStale;
 
-  /// Ao voltar a ficar visível.
   Future<void> reloadIfStale() => _follow.isStale ? load() : Future.value();
 
   int _seq = 0;
@@ -209,7 +178,7 @@ class ProfileViewModel extends SafeChangeNotifier {
       final results = await Future.wait<Object?>([
         _users.getProfile(uid),
         _reviews.fetchReviewsByAuthors([uid], limit: maxReviews),
-        // Falha só das visitas: perfil com as avaliações.
+
         loadVisitsOrEmpty(
           'perfil',
           () => _visits.fetchVisitsByAuthors([uid], limit: maxVisits),
@@ -235,7 +204,7 @@ class ProfileViewModel extends SafeChangeNotifier {
         }
         _state = ProfileState.ready;
         _loadExtra(seq);
-        // As listas chegam depois, sem atrasar o perfil.
+
         _loadLists();
       }
     } on Object {
@@ -245,9 +214,6 @@ class ProfileViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// Seguir/Deixar de seguir, otimista: o botão muda já; a falha reverte e
-  /// avisa ([ProfileNotice.followFailed]); deixar de seguir com sucesso
-  /// avisa [ProfileNotice.unfollowed] (para o "Desfazer").
   Future<void> toggleFollow() async {
     final me = _auth.currentUserId;
     if (me == null || isSelf || _busy || _state != ProfileState.ready) return;
@@ -264,7 +230,7 @@ class ProfileViewModel extends SafeChangeNotifier {
       }
       _follow.announce();
       if (wasFollowing) _notice = ProfileNotice.unfollowed;
-      // Passou a seguir: as listas visíveis aparecem; deixou: somem.
+
       _loadLists();
     } on Object {
       _following = wasFollowing;
@@ -275,7 +241,6 @@ class ProfileViewModel extends SafeChangeNotifier {
     }
   }
 
-  /// "Desfazer" do deixar de seguir.
   Future<void> undoUnfollow() async {
     if (!_following) await toggleFollow();
   }

@@ -30,9 +30,7 @@ class _PlaceLocationChipState extends State<PlaceLocationChip> {
               .toList()
             ..sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
       if (named.isNotEmpty) return 'Perto de ${named.first.place.neighborhood}';
-    } on Object {
-      // O GPS pode funcionar quando a consulta de lugares está indisponível.
-    }
+    } on Object {}
     return 'GPS ativo';
   }
 

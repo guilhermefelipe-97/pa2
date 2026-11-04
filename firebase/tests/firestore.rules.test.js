@@ -1,4 +1,4 @@
-// Testes das Security Rules do NaÁrea. Como rodar: ver app/README.md (seção "Testes das Rules").
+
 const fs = require('node:fs');
 const path = require('node:path');
 const {
@@ -267,7 +267,7 @@ function validReview(overrides = {}) {
   };
 }
 
-/// JPEG falso de [n] bytes (as Rules só olham tipo e tamanho).
+
 function jpegBytes(n) {
   const arr = new Uint8Array(n);
   if (n > 0) arr[0] = 0xff;
@@ -285,8 +285,8 @@ function validPhoto(overrides = {}) {
   };
 }
 
-/// Trava do F03 como o app grava em `users/{uid}/reviewLocks/{placeId}`,
-/// com lastAt do servidor.
+
+
 function validLock(reviewId, overrides = {}) {
   return {
     lastAt: serverTimestamp(),
@@ -298,10 +298,10 @@ function validLock(reviewId, overrides = {}) {
 
 const lockPath = (uid, placeId) => 'users/' + uid + '/reviewLocks/' + placeId;
 
-/// Entrada de auditoria (F04): `auditLog/{coleção}-{docId}`.
+
 const auditPath = (collectionName, docId) => 'auditLog/' + collectionName + '-' + docId;
 
-/// Entrada de auditoria como o app grava, com `at` do servidor.
+
 function validAudit(collectionName, docId, overrides = {}) {
   return {
     actorUid: 'alice',
@@ -314,8 +314,8 @@ function validAudit(collectionName, docId, overrides = {}) {
   };
 }
 
-/// Põe no [batch] a auditoria de `{collectionName}/{docId}` criado por
-/// [data] (mesmo autor e local), com [overrides] aplicados.
+
+
 function setAudit(db, batch, collectionName, docId, data, overrides = {}) {
   batch.set(
     doc(db, auditPath(collectionName, docId)),
@@ -329,11 +329,11 @@ function setAudit(db, batch, collectionName, docId, data, overrides = {}) {
 
 let reviewSeq = 0;
 
-/// Avaliação como o app grava (F03 + F04): review + trava + auditoria num
-/// único batch, SEM limpar travas (os testes do F03 controlam o estado).
-/// `lock: false` omite a trava; `lock: {...}` sobrescreve campos; `lockAt`
-/// troca o caminho da trava. `audit: false` omite a auditoria; `audit: {...}`
-/// sobrescreve campos.
+
+
+
+
+
 function addReview(db, data, { id, lock = {}, lockAt, audit = {} } = {}) {
   const reviewId = id || 'r' + (++reviewSeq);
   const batch = writeBatch(db);
@@ -349,7 +349,7 @@ function addReview(db, data, { id, lock = {}, lockAt, audit = {} } = {}) {
   return batch.commit();
 }
 
-/// Remove todas as travas (estado limpo, sem depender da ordem das asserções).
+
 async function unlockAll() {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const snap = await getDocs(collectionGroup(ctx.firestore(), 'reviewLocks'));
@@ -357,14 +357,14 @@ async function unlockAll() {
   });
 }
 
-/// [addReview] partindo de nenhuma trava: para os testes que não são do F03,
-/// cada asserção vale sozinha, em qualquer ordem.
+
+
 async function freshReview(db, data, opts) {
   await unlockAll();
   return addReview(db, data, opts);
 }
 
-/// Trava semeada sem Rules, com a última avaliação há [daysAgo] dias.
+
 async function seedLock(uid, placeId, daysAgo, reviewId = 'existing') {
   await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), lockPath(uid, placeId)), {
@@ -375,8 +375,8 @@ async function seedLock(uid, placeId, daysAgo, reviewId = 'existing') {
   });
 }
 
-/// Avaliação com foto: review + reviewPhotos/{mesmo id} (+ trava + auditoria)
-/// num único batch, partindo de nenhuma trava.
+
+
 async function reviewWithPhotoBatch(db, { id = 'nova', review = {}, photo = {}, withReview = true, withPhoto = true, withLock = true, withAudit = true } = {}) {
   await unlockAll();
   const batch = writeBatch(db);
@@ -673,7 +673,7 @@ describe('users/{uid}/lists/{listId} (listas nomeadas)', () => {
     await assertSucceeds(batch.commit());
   });
 
-  // ---------- F13: visível para quem me segue + cópia com crédito ----------
+
 
   async function follow(follower, target) {
     await env.withSecurityRulesDisabled(async (ctx) => {
@@ -688,7 +688,7 @@ describe('users/{uid}/lists/{listId} (listas nomeadas)', () => {
     ...overrides,
   });
 
-  /// Lista de origem de Bob (a que Alice copia).
+
   async function seedSource({ visible = true, id = 'sabado-do-bob', owner = 'bob' } = {}) {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'users/' + owner + '/lists/' + id), {
@@ -702,7 +702,7 @@ describe('users/{uid}/lists/{listId} (listas nomeadas)', () => {
     });
   }
 
-  /// Alice segue Bob e a lista dele está visível: a cópia é legítima.
+
   async function canCopy() {
     await seedSource();
     await follow('alice', 'bob');
@@ -743,21 +743,21 @@ describe('users/{uid}/lists/{listId} (listas nomeadas)', () => {
   });
 
   it('forja: crédito de lista inventada, não visível, de quem não sigo ou a mim mesma', async () => {
-    // Lista inventada (Bob existe e Alice o segue, mas a lista não).
+
     await follow('alice', 'bob');
     await assertFails(setDoc(doc(alice(), LIST), newList(credit({ copiedFromListId: 'inventada' }))));
-    // Lista de Bob privada.
+
     await seedSource({ visible: false });
     await assertFails(setDoc(doc(alice(), LIST), newList(credit())));
     await seedSource({ id: 'sem-chave', visible: null });
     await assertFails(setDoc(doc(alice(), LIST), newList(credit({ copiedFromListId: 'sem-chave' }))));
-    // Visível, mas Alice não segue Bob.
+
     await seedSource();
     await env.withSecurityRulesDisabled(async (ctx) => {
       await deleteDoc(doc(ctx.firestore(), 'users/alice/following/bob'));
     });
     await assertFails(setDoc(doc(alice(), LIST), newList(credit())));
-    // Crédito a si mesma (mesmo com lista visível e um "seguir" forjado).
+
     await seedSource({ owner: 'alice', id: 'minha' });
     await follow('alice', 'alice');
     await assertFails(setDoc(doc(alice(), LIST), newList(credit({
@@ -765,7 +765,7 @@ describe('users/{uid}/lists/{listId} (listas nomeadas)', () => {
       copiedFromName: 'Alice',
       copiedFromListId: 'minha',
     }))));
-    // Controle: com tudo certo, passa.
+
     await follow('alice', 'bob');
     await assertSucceeds(setDoc(doc(alice(), LIST), newList(credit())));
   });
@@ -937,7 +937,7 @@ describe('users/{uid}/lists/{listId}/copies/{copierUid} (F13: contador de cópia
     await seedList();
     await follow('bob', 'alice');
     await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
-    await actualCopy('carol'); // a cópia precisa pertencer ao próprio solicitante
+    await actualCopy('carol');
     await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
     await actualCopy('bob', 'copy', { copiedFromListId: 'outra' });
     await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
@@ -1022,7 +1022,7 @@ describe('places', () => {
   });
 });
 
-/// Local descoberto pelo Photon (G2), como o app grava na 1ª interação.
+
 function newPlace(overrides = {}) {
   return {
     name: 'Bar do Zé',
@@ -1073,8 +1073,8 @@ describe('places: criação pelo app (G2)', () => {
   });
 
   it('coordenadas fora do Brasil ou não numéricas são negadas', async () => {
-    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: 38.7223, lng: -9.1393 }))); // Lisboa
-    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: -34.9, lng: -56.16 }))); // Montevidéu
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: 38.7223, lng: -9.1393 })));
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: -34.9, lng: -56.16 })));
     await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: 6, lng: -60 })));
     await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: -10, lng: -75 })));
     await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ lat: '-23.5', lng: -46.6 })));
@@ -1084,7 +1084,7 @@ describe('places: criação pelo app (G2)', () => {
   it('chave extra ou faltando é negada', async () => {
     await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ photoUrl: 'https://x/y.jpg' })));
     await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ updatedAt: serverTimestamp() })));
-    // Campos de busca não são do cliente.
+
     await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ searchTokens: ['ba', 'bar'] })));
     await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ nameLower: 'bar do ze' })));
     const { address: _a, ...missing } = newPlace();
@@ -1108,7 +1108,7 @@ describe('places: criação pelo app (G2)', () => {
   it('geohash: 9 caracteres base32', async () => {
     await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: '6gyf4bf8' })));
     await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: '6gyf4bf8ma' })));
-    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: '6gyf4bf8a' }))); // "a" não é base32
+    await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: '6gyf4bf8a' })));
     await assertFails(setDoc(doc(alice(), 'places/osm-n123'), newPlace({ geohash: 123456789 })));
   });
 
@@ -1278,14 +1278,14 @@ describe('reviews', () => {
     await assertSucceeds(freshReview(alice(), validReview({ comment: 'a' })));
     await assertSucceeds(freshReview(alice(), validReview({ comment: 'Camarão top, fila grande.' })));
     await assertSucceeds(freshReview(alice(), validReview({ comment: 'x'.repeat(280) })));
-    // size() conta unidades UTF-16 (igual a String.length no Dart): acento = 1.
+
     await assertSucceeds(freshReview(alice(), validReview({ comment: 'ã'.repeat(280) })));
   });
 
   it('comment vazio, acima de 280 ou não-string é negado', async () => {
     await assertFails(freshReview(alice(), validReview({ comment: '' })));
     await assertFails(freshReview(alice(), validReview({ comment: 'x'.repeat(281) })));
-    // emoji fora do BMP = 2 unidades UTF-16: 141 emojis = 282.
+
     await assertFails(freshReview(alice(), validReview({ comment: '😀'.repeat(141) })));
     await assertFails(freshReview(alice(), validReview({ comment: 42 })));
     await assertFails(freshReview(alice(), validReview({ comment: true })));
@@ -1303,7 +1303,7 @@ describe('reviews', () => {
     const data = validReview();
     delete data.hasPhoto;
     await assertSucceeds(freshReview(alice(), data));
-    // ...e não leva foto: a foto exige hasPhoto true na review.
+
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'reviews/semchave'), data);
@@ -1325,7 +1325,7 @@ describe('reviews', () => {
     await assertFails(reviewWithPhotoBatch(alice(), { withPhoto: false }));
   });
 
-  // ---------- F27: faixa de preço por pessoa (opcional) ----------
+
   it('priceBand: 1 a 5 e null são aceitos (F27)', async () => {
     for (const band of [1, 2, 3, 4, 5, null]) {
       await assertSucceeds(freshReview(alice(), validReview({ priceBand: band })));
@@ -1424,13 +1424,13 @@ describe('reviewPhotos/{reviewId}', () => {
   });
 
   it('foto ligada a review de outro autor é negada', async () => {
-    // Bob cria a própria review com foto, mas o doc da foto diz ser de Alice.
+
     await assertFails(reviewWithPhotoBatch(bob(), {
       review: { authorId: 'bob', authorName: 'Bob' },
       photo: { authorId: 'alice' },
     }));
-    // Alice tenta anexar foto à review que Bob cria no mesmo batch: só o
-    // autor da review grava a foto (e a review de Bob nem passa com Alice).
+
+
     await assertFails(reviewWithPhotoBatch(alice(), {
       review: { authorId: 'bob', authorName: 'Bob' },
     }));
@@ -1451,7 +1451,7 @@ describe('reviewPhotos/{reviewId}', () => {
     const png = new Uint8Array(1000);
     png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     await assertFails(reviewWithPhotoBatch(alice(), { id: 'png', photo: { jpeg: Bytes.fromUint8Array(png) } }));
-    // Só FF D8 sem o FF seguinte também não passa.
+
     const quase = new Uint8Array(1000);
     quase.set([0xff, 0xd8, 0x00]);
     await assertFails(reviewWithPhotoBatch(alice(), { id: 'quase', photo: { jpeg: Bytes.fromUint8Array(quase) } }));
@@ -1512,7 +1512,7 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
     });
   }
 
-  /// Avaliação gravada sem Rules (para forjar referências).
+
   async function seedReview(id, overrides = {}) {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'reviews/' + id), {
@@ -1522,8 +1522,8 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
     });
   }
 
-  // Cada teste parte sem travas (o beforeEach global já limpa o banco; isto
-  // deixa explícito que nenhum teste depende de outro).
+
+
   beforeEach(unlockAll);
 
   it('1ª avaliação: review + trava no mesmo batch', async () => {
@@ -1536,7 +1536,7 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
   });
 
   it('avaliação legada (sem trava) não bloqueia a 1ª avaliação nova', async () => {
-    // beforeEach global: reviews/existing de Alice no Camarões, sem trava.
+
     await assertSucceeds(addReview(alice(), validReview()));
   });
 
@@ -1598,9 +1598,9 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
   });
 
   it('forja: trava de outro uid é negada', async () => {
-    // Alice avalia, mas grava a trava na conta de Bob.
+
     await assertFails(addReview(alice(), validReview(), { lockAt: lockPath('bob', 'camaroes') }));
-    // Bob tenta travar Alice com uma review dele.
+
     await assertFails(addReview(bob(), validReview({ authorId: 'bob', authorName: 'Bob' }), { lockAt: lockPath('alice', 'camaroes') }));
   });
 
@@ -1642,14 +1642,14 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
 
   it('forja: renovar trava vencida apontando para review de outro autor é negado', async () => {
     await seedLock('alice', 'camaroes', 40);
-    // Review "de Bob" criada por Alice no mesmo batch.
+
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'reviews/debob'), validReview({ authorId: 'bob', authorName: 'Bob' }));
     setAudit(db, batch, 'reviews', 'debob', validReview({ authorId: 'bob', authorName: 'Bob' }));
     batch.set(lockRef(db), validLock('debob'));
     await assertFails(batch.commit());
-    // Review de Bob que já existe.
+
     await seedReview('bobantiga', { authorId: 'bob', authorName: 'Bob' });
     await assertFails(setDoc(lockRef(alice()), validLock('bobantiga')));
   });
@@ -1663,7 +1663,7 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
   });
 
   it('só o dono lê a trava (inclusive a ausente); terceiro e anônimo não', async () => {
-    await assertSucceeds(getDoc(lockRef(alice()))); // ainda não existe
+    await assertSucceeds(getDoc(lockRef(alice())));
     await seedLock('alice', 'camaroes', 10);
     await assertSucceeds(getDoc(lockRef(alice())));
     await assertSucceeds(getDocs(collection(alice(), 'users/alice/reviewLocks')));
@@ -1697,7 +1697,7 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
       const snap = await getDocs(query(collection(ctx.firestore(), 'reviews'), where('placeId', '==', 'camaroes')));
       count = snap.size;
     });
-    // reviews/existing (legada) + 1 nova.
+
     if (count !== 2) throw new Error('esperava 2 reviews, vieram ' + count);
   });
 
@@ -1707,12 +1707,12 @@ describe('users/{uid}/reviewLocks/{placeId} (F03: 30 dias entre avaliações)', 
   });
 });
 
-// ---------- F15: "Voltei aqui" (visitas) ----------
+
 
 const visitLockPath = (uid, placeId) => 'users/' + uid + '/visitLocks/' + placeId;
 
-/// Visita como o app grava: sem notas, companhia opcional, createdAt do
-/// servidor.
+
+
 function validVisit(overrides = {}) {
   return {
     authorId: 'alice',
@@ -1736,9 +1736,9 @@ function validVisitLock(visitId, overrides = {}) {
 
 let visitSeq = 0;
 
-/// Visita + trava + auditoria num único batch. `lock: false` omite a trava;
-/// `lock: {...}` sobrescreve campos; `lockAt` troca o caminho da trava.
-/// `audit: false` omite a auditoria; `audit: {...}` sobrescreve campos.
+
+
+
 function addVisit(db, data, { id, lock = {}, lockAt, audit = {} } = {}) {
   const visitId = id || 'v' + (++visitSeq);
   const batch = writeBatch(db);
@@ -1754,7 +1754,7 @@ function addVisit(db, data, { id, lock = {}, lockAt, audit = {} } = {}) {
   return batch.commit();
 }
 
-/// Trava de visita semeada sem Rules, com a última visita há [hoursAgo] horas.
+
 async function seedVisitLock(uid, placeId, hoursAgo, visitId = 'antiga') {
   await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), visitLockPath(uid, placeId)), {
@@ -1970,7 +1970,7 @@ describe('visits + users/{uid}/visitLocks (F15: "Voltei aqui", 12 h)', () => {
 
   it('priceBand: 1 a 5 e null são aceitos (F27)', async () => {
     for (const band of [1, 2, 3, 4, 5, null]) {
-      // Trava vencida (há 13 h): cada asserção vale sozinha.
+
       await seedVisitLock('alice', 'camaroes', 13);
       await assertSucceeds(addVisit(alice(), validVisit({ priceBand: band })));
     }
@@ -2012,12 +2012,12 @@ describe('visits + users/{uid}/visitLocks (F15: "Voltei aqui", 12 h)', () => {
   });
 });
 
-// ---------- F20: "Está aberto agora?" (openReports) ----------
+
 
 const openLockPath = (uid, placeId) => 'users/' + uid + '/openReportLocks/' + placeId;
 
-/// Relato como o app grava: autor do perfil, `open` bool, createdAt do
-/// servidor.
+
+
 function validOpenReport(overrides = {}) {
   return {
     authorId: 'alice',
@@ -2040,9 +2040,9 @@ function validOpenLock(reportId, overrides = {}) {
 
 let openSeq = 0;
 
-/// Relato + trava + auditoria num único batch. `lock: false` omite a trava;
-/// `lock: {...}` sobrescreve campos; `lockAt` troca o caminho da trava.
-/// `audit: false` omite a auditoria; `audit: {...}` sobrescreve campos.
+
+
+
 function addOpenReport(db, data, { id, lock = {}, lockAt, audit = {} } = {}) {
   const reportId = id || 'o' + (++openSeq);
   const batch = writeBatch(db);
@@ -2058,7 +2058,7 @@ function addOpenReport(db, data, { id, lock = {}, lockAt, audit = {} } = {}) {
   return batch.commit();
 }
 
-/// Trava de relato semeada sem Rules, com o último relato há [minutesAgo].
+
 async function seedOpenLock(uid, placeId, minutesAgo, reportId = 'antigo') {
   await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), openLockPath(uid, placeId)), {
@@ -2291,10 +2291,10 @@ describe('openReports + users/{uid}/openReportLocks (F20: "Está aberto agora?",
   });
 });
 
-// ---------- F04: log de auditoria ----------
+
 
 describe('auditLog (F04: auditoria de avaliações, visitas e relatos)', () => {
-  /// Lê a entrada sem Rules (o app nunca lê).
+
   async function readAudit(collectionName, docId) {
     let snap;
     await env.withSecurityRulesDisabled(async (ctx) => {
@@ -2371,7 +2371,7 @@ describe('auditLog (F04: auditoria de avaliações, visitas e relatos)', () => {
     await assertFails(addReview(alice(), validReview(), { audit: { actorUid: 'bob' } }));
     await assertFails(addVisit(alice(), validVisit(), { audit: { actorUid: 'bob' } }));
     await assertFails(addOpenReport(alice(), validOpenReport(), { audit: { actorUid: 'bob' } }));
-    // Bob avalia; Alice tenta gravar a auditoria da review de Bob.
+
     await assertFails(setDoc(doc(alice(), auditPath('reviews', 'dobob')), validAudit('reviews', 'dobob')));
     const db = bob();
     const data = validReview({ authorId: 'bob', authorName: 'Bob' });
@@ -2392,17 +2392,17 @@ describe('auditLog (F04: auditoria de avaliações, visitas e relatos)', () => {
   });
 
   it('forja: id fora de {coleção}-{docId}, coleção trocada ou fora da lista', async () => {
-    // Entrada no id certo, mas apontando para outro doc.
+
     await assertFails(addReview(alice(), validReview(), { id: 'a1', audit: { docId: 'a2' } }));
-    // Entrada de "visita" no lugar da de review.
+
     await assertFails(addReview(alice(), validReview(), { id: 'a3', audit: { collection: 'visits' } }));
-    // Coleção fora das auditadas.
+
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'users/alice/saved/camaroes'), { createdAt: serverTimestamp() });
     batch.set(doc(db, 'auditLog/saved-camaroes'), validAudit('saved', 'camaroes'));
     await assertFails(batch.commit());
-    // Review de verdade com a entrada num id sem o prefixo da coleção.
+
     const b2 = writeBatch(db);
     b2.set(doc(db, 'reviews/a4'), validReview());
     b2.set(doc(db, lockPath('alice', 'camaroes')), validLock('a4'));
@@ -2449,10 +2449,10 @@ describe('auditLog (F04: auditoria de avaliações, visitas e relatos)', () => {
 
   it('retry depois de falha reusa o mesmo id (o batch negado não gravou nada)', async () => {
     const data = validReview({ placeId: 'osm-n123', placeName: 'Bar do Zé' });
-    // 1ª tentativa negada (local ainda não existe): nada é gravado.
+
     await assertFails(addReview(alice(), data, { id: 'retry' }));
     if ((await readAudit('reviews', 'retry')).exists()) throw new Error('auditoria gravada sem a review');
-    // Retry com o mesmo id, agora criando o local no batch.
+
     const db = alice();
     const batch = writeBatch(db);
     batch.set(doc(db, 'places/osm-n123'), newPlace());
@@ -2460,8 +2460,8 @@ describe('auditLog (F04: auditoria de avaliações, visitas e relatos)', () => {
     batch.set(doc(db, lockPath('alice', 'osm-n123')), validLock('retry', { placeId: 'osm-n123' }));
     setAudit(db, batch, 'reviews', 'retry', data);
     await assertSucceeds(batch.commit());
-    // Reenviar depois de gravado (ack perdido) é negado: o app relê a review
-    // e conclui com sucesso, sem 2ª entrada.
+
+
     await assertFails(addReview(alice(), data, { id: 'retry' }));
   });
 });
@@ -2501,7 +2501,7 @@ describe('Onda 5 — titularidade e preferências privadas', () => {
     await assertFails(addReview(alice(), validReview()));
     await assertFails(addVisit(alice(), validVisit({ priceBand: 2 })));
     await assertFails(addOpenReport(alice(), validOpenReport()));
-    // O consumidor continua contribuindo quando outro usuário é titular.
+
     await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'placeOwners/camaroes'), { uid: 'bob', verifiedAt: Timestamp.now() }));
     await assertSucceeds(addVisit(alice(), validVisit()));
     await assertSucceeds(getDoc(doc(alice(), 'reviews/existing')));
@@ -2713,7 +2713,7 @@ describe('Onda 6 — respostas, privacidade, fila e Destaque', () => {
   it('batch máximo descoberto+relato+trava+auditoria respeita limite de acessos', async () => {
     const db=alice(), id='osm-n123';
     const batch=writeBatch(db);
-    // Mesmo schema de criação G2 já exercitado pela suíte administrativa.
+
     batch.set(doc(db,'places/'+id), {
       name:'Local',category:'Bar',neighborhood:'',city:'',address:'',lat:-23.5,lng:-46.6,
       geohash:'6gyf4bf0v',osmId:'node/123',source:'osm',createdBy:'alice',createdAt:serverTimestamp(),
@@ -2758,13 +2758,13 @@ describe('Onda 6 — respostas, privacidade, fila e Destaque', () => {
   it('SDK cliente reconcilia batch tardio por ID, valida auditoria/trava, impede retry duplicado e permite novo envio após cooldown', async () => {
     const db=alice();
     let writes=0;
-    // Representa commit já iniciado cujo resultado chega depois do timeout da UI.
+
     const operation=new Promise(resolve=>setTimeout(resolve,80)).then(()=>{
       writes++;return queueBatch(db,'sdk-attempt',{minutes:10});
     });
     const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),10));
     await require('node:assert/strict').rejects(Promise.race([operation,timeout]),/timeout/);
-    // Ausência enquanto operação está em voo não autoriza criar outra tentativa.
+
     await operation;
     const saved=await getDoc(doc(db,'queueReports/sdk-attempt'));
     require('node:assert/strict').equal(saved.data().minutes,10);

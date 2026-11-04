@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Paleta do HTML exportado do Stitch (Curator & Taste).
 abstract final class NaAreaColors {
   static const coral = Color(0xFF904D00);
   static const coralEscuro = Color(0xFF000000);

@@ -7,7 +7,6 @@ import '../feed/widgets/feed_card.dart' show placeSubtitle;
 import '../feed/widgets/place_photo.dart';
 import 'person_list_view_model.dart';
 
-/// Lista visível de uma pessoa (F13): os locais e "Copiar lista".
 class PersonListView extends StatefulWidget {
   const PersonListView({super.key, required this.viewModel});
 
@@ -37,7 +36,7 @@ class _PersonListViewState extends State<PersonListView> {
     final notice = widget.viewModel.takeNotice();
     if (notice == null) return;
     final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
-    // A tela pode já ter saído quando a pessoa tocar "Ver".
+
     final router = GoRouter.of(context);
     switch (notice) {
       case CopyDone(:final listId, :final message):

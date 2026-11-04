@@ -9,13 +9,12 @@ import 'package:naarea/ui/feed/widgets/trust_sources.dart';
 
 import '../support/builders.dart';
 
-final _now = DateTime.utc(2026, 9, 28, 15); // 12h em Natal
+final _now = DateTime.utc(2026, 9, 28, 15);
 
 Widget _host(Widget child) => MaterialApp(
   home: Scaffold(body: SingleChildScrollView(child: child)),
 );
 
-/// Pílula de um eixo (mesmo widget do detalhe): "Comida 5".
 Finder _pill(String text, {Finder? within}) => within == null
     ? find.text(text)
     : find.descendant(of: within, matching: find.text(text));
@@ -32,7 +31,7 @@ FeedItem _fourPeople() => groupActivitiesIntoFeed(
       authorId: 'a',
       authorName: 'Ana',
       placeId: 'x',
-      createdAt: DateTime.utc(2026, 9, 28, 14), // há 1 h
+      createdAt: DateTime.utc(2026, 9, 28, 14),
     ),
     review(
       authorId: 'd',
@@ -44,7 +43,7 @@ FeedItem _fourPeople() => groupActivitiesIntoFeed(
       authorId: 'b',
       authorName: 'Bia',
       placeId: 'x',
-      createdAt: DateTime.utc(2026, 9, 26, 15), // há 2 dias
+      createdAt: DateTime.utc(2026, 9, 26, 15),
     ),
   ],
   places: {'x': place(id: 'x', name: 'Mangai')},
@@ -53,7 +52,6 @@ FeedItem _fourPeople() => groupActivitiesIntoFeed(
 void main() {
   group('textos', () {
     test('companhia + período como frase', () {
-      // 22h UTC = 19h em Natal: noite
       final night = DateTime.utc(2026, 9, 27, 22);
       expect(
         visitContext(review(companion: Companion.amigos, createdAt: night)),
@@ -91,7 +89,7 @@ void main() {
           placeId: 'x',
           scores: Scores(food: 5, ambience: 4, service: 5),
           companion: Companion.amigos,
-          createdAt: DateTime.utc(2026, 9, 28, 13), // 10h Natal, há 2 h
+          createdAt: DateTime.utc(2026, 9, 28, 13),
         ),
         review(
           authorId: 'a',
@@ -135,7 +133,7 @@ void main() {
         expect(_pill('Atendimento 3'), findsOneWidget);
         expect(find.text('de manhã'), findsOneWidget);
         expect(find.text('há 2 h'), findsOneWidget);
-        // mesmo widget do detalhe: dica com o nome de cada eixo
+
         expect(find.byTooltip('Comida'), findsOneWidget);
         expect(find.byTooltip('Ambiente'), findsOneWidget);
         expect(find.byTooltip('Atendimento'), findsOneWidget);
@@ -432,7 +430,7 @@ void main() {
       findsOneWidget,
     );
     expect(_pill('Comida 5', within: row), findsOneWidget);
-    // Todas as notas do card estão na linha de alguém.
+
     expect(find.textContaining('Comida'), findsOneWidget);
   });
 }

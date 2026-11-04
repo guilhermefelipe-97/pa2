@@ -5,7 +5,6 @@ const foodTags = ['caseiro', 'vegetariano', 'vegano', 'low-carb', 'integral'];
 bool validFoodTags(Iterable<String> tags) =>
     tags.length == tags.toSet().length && tags.every(foodTags.contains);
 
-/// Só a última avaliação por autor conta; no empate vence o maior id.
 Map<String, int> confirmedFoodTags(
   Iterable<Review> reviews, {
   String? ownerUid,

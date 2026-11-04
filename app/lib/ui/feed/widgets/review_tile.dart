@@ -6,8 +6,6 @@ import 'author_avatar.dart';
 import 'axis_scores.dart';
 import 'review_photo.dart';
 
-/// Uma avaliação completa: autor, 3 eixos, comentário e contexto
-/// (período · companhia · tempo relativo).
 class ReviewTile extends StatelessWidget {
   const ReviewTile({
     super.key,
@@ -23,10 +21,8 @@ class ReviewTile extends StatelessWidget {
   final bool stitchLayout;
   final DateTime now;
 
-  /// Toque na linha do autor (avatar + nome): abre o perfil de quem avaliou.
   final VoidCallback? onAuthorTap;
 
-  /// Altura mínima de um alvo de toque acessível.
   static const double minTapTarget = 48;
 
   @override
@@ -68,7 +64,6 @@ class ReviewTile extends StatelessWidget {
       ),
     );
     if (tappable) {
-      // Avatar + nome: um único alvo, lido como "Abrir perfil de Ana".
       author = Semantics(
         key: ValueKey('review-author-${review.id}'),
         button: true,

@@ -1,4 +1,4 @@
-// Simula por padrão. --apply acrescenta provas sem apagar recibos ou alterar datas/créditos.
+
 const { FieldPath, Timestamp } = require('firebase-admin/firestore');
 const { firestoreFromEnv } = require('./seed');
 

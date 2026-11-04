@@ -4,11 +4,6 @@ import 'stable_hash.dart';
 
 final _bar = RegExp(r'\b(bar|bares|pub|pubs)\b');
 
-/// Ícone da categoria de um local (fallback da foto e lista do seletor). As
-/// categorias seguem o vocabulário do import do OSM ("Bar", "Pizzaria"...),
-/// mas a busca é por palavra-chave para tolerar texto livre; a ordem dos
-/// testes importa: a primeira palavra-chave encontrada vence.
-/// "bar"/"pub" só casam como palavra inteira ("Barraca", "República" não).
 IconData categoryIcon(String category) {
   final c = _normalize(category);
   if (c.contains('mercado') || c.contains('feira')) return Icons.storefront;
@@ -39,7 +34,6 @@ const _gradientPairs = [
   [Color(0xFF1D2B24), Color(0xFF526A50)],
 ];
 
-/// Gradiente do fallback da foto, estável por categoria (paleta floresta).
 LinearGradient categoryGradient(String category) {
   final pair =
       _gradientPairs[stableHash(_normalize(category)) % _gradientPairs.length];

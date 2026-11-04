@@ -240,7 +240,6 @@ class _EditorState extends State<_Editor> {
   );
 }
 
-/// Published text is loaded on every new visit to the place sheet.
 class PlacePresentationSection extends StatefulWidget {
   const PlacePresentationSection({super.key, required this.placeId});
   final String placeId;

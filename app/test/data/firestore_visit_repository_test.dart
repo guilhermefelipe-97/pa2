@@ -29,7 +29,6 @@ NewVisit _newVisit({
   priceBand: priceBand,
 );
 
-/// Local só descoberto pelo Photon (G2).
 const _discovered = Place(
   id: 'osm-n123',
   name: 'Bar do Zé',
@@ -85,7 +84,7 @@ void main() {
         'createdAt',
       });
       expect(visit.data()['companion'], 'amigos');
-      // F27: sem faixa escolhida, a chave vai com null.
+
       expect(visit.data()['priceBand'], isNull);
       expect(visit.data()['createdAt'], isA<Timestamp>());
       final lock = await db.doc('users/alice/visitLocks/mangai').get();
@@ -187,7 +186,7 @@ void main() {
           commitBatch: (batch) async {
             commits++;
             await batch.commit();
-            // A resposta nunca chega.
+
             await Completer<void>().future;
           },
         );
@@ -206,8 +205,7 @@ void main() {
         commitBatch: (batch) async {
           await batch.commit();
           id = (await db.collection('visits').get()).docs.single.id;
-          // A leitura da própria visita falha (rede instável). A partir
-          // daqui o teste não lê mais `visits` (o fake lê cada doc).
+
           whenCalling(
             Invocation.method(#get, null),
           ).on(db.doc('visits/$id')).thenThrow(_unavailable());
@@ -245,8 +243,7 @@ void main() {
       final db = FakeFirebaseFirestore();
       await db.doc('places/osm-n123').set({'name': 'Bar do Zé (de outra)'});
       final ref = db.doc('places/osm-n123');
-      // A 1ª leitura não vê o doc; o create dentro do batch vira update:
-      // negado, derrubando o batch.
+
       whenCalling(
         Invocation.method(#get, [null]),
       ).on(ref).thenThrow(_unavailable());
@@ -330,14 +327,14 @@ void main() {
         'consistente entre lotes cheios', () async {
       final db = FakeFirebaseFirestore();
       final authors = [for (var i = 0; i < 31; i++) 'u$i'];
-      // Lote 1 (u0..u29): 2 visitas de u0, a mais antiga em t(1).
+
       await _addVisit(db, id: 'old', authorId: 'u0', createdAt: _t(1));
       await _addVisit(db, id: 'new', authorId: 'u0', createdAt: _t(10));
-      // Lote 2 (u30): 1 visita em t(5).
+
       await _addVisit(db, id: 'mid', authorId: 'u30', createdAt: _t(5));
       final repo = FirestoreVisitRepository(db, perBatchLimit: 1);
       final result = (await repo.fetchVisitsByAuthors(authors)).items;
-      // Lote 1 cheio com t(10); lote 2 cheio com t(5): corta antes de t(10).
+
       expect(result.map((v) => v.id), ['new']);
     });
 

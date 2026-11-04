@@ -19,20 +19,16 @@ import 'nearby_view_model.dart';
 import 'nearby_map.dart';
 import 'nearby_skeleton.dart';
 
-/// Categoria e bairro do local (o que houver).
 List<String> _placeDetails(Place place) => [
   if (place.category.trim().isNotEmpty) place.category.trim(),
   if (place.neighborhood.trim().isNotEmpty) place.neighborhood.trim(),
 ];
 
-/// "120 m · Restaurante · Ponta Negra".
 String nearbySubtitle(NearbyItem item) => [
   formatDistance(item.distanceMeters),
   ..._placeDetails(item.place),
 ].join(' · ');
 
-/// O que o leitor de tela diz de um item: "Mangai, a 120 metros,
-/// Restaurante, Ponta Negra, está no Quero ir, Ana foi aqui".
 String nearbySemanticsLabel(
   NearbyItem item, {
   required bool saved,
@@ -48,14 +44,12 @@ String nearbySemanticsLabel(
   if (item.price != null) priceChipSemantics(item.price!),
 ].join(', ');
 
-/// Linha que explica a sugestão.
 String suggestionReasonLabel(NearbySuggestion s) => switch (s.reason) {
   SuggestionReason.friend => s.item.friendsLabel!,
   SuggestionReason.saved => 'Está no seu Quero ir',
   SuggestionReason.nearest => 'O mais perto de você',
 };
 
-/// Aba "Perto" (F10).
 class NearbyView extends StatefulWidget {
   const NearbyView({super.key, required this.viewModel});
 
@@ -119,7 +113,7 @@ class _NearbyViewState extends State<NearbyView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Seguir alguém em outra tela muda o "foi aqui": recarrega ao voltar.
+
     final active = ActiveTab.maybeOf(context);
     if (active == true && _active == false) _vm.reloadIfStale();
     _active = active;
@@ -410,8 +404,6 @@ class _NearbyViewState extends State<NearbyView> {
       );
     }
     if (items.isEmpty && vm.partial) {
-      // Sem a descoberta ao vivo e sem nada conhecido por perto: não dá para
-      // dizer "nada a 300 m".
       return _Message(
         key: const Key('nearby-partial-empty'),
         leading: const SponsoredSection(),
@@ -480,7 +472,7 @@ class _NearbyViewState extends State<NearbyView> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
-      // Dados do OpenStreetMap na tela (Photon ou seed): crédito ODbL no fim.
+
       if (items.any((i) => i.place.hasOsmData))
         const OsmCredit(padding: EdgeInsets.only(top: 4)),
     ];
@@ -512,7 +504,6 @@ class _NearbyViewState extends State<NearbyView> {
   }
 }
 
-/// Chips 300 m · 1 km · 3 km.
 class RadiusChips extends StatelessWidget {
   const RadiusChips({super.key, required this.viewModel});
 
@@ -549,7 +540,7 @@ class RadiusChips extends StatelessWidget {
                 ),
               ),
             ],
-            // F20: só os confirmados abertos nas últimas 3 h.
+
             if (viewModel.hasOpenFilter) ...[
               FilterChip(
                 labelPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -589,7 +580,6 @@ class RadiusChips extends StatelessWidget {
   }
 }
 
-/// Card "Sugestão": decide pela pessoa, com "Ver lugar" a 1 toque.
 class SuggestionCard extends StatelessWidget {
   const SuggestionCard({
     super.key,
@@ -693,8 +683,6 @@ class SuggestionCard extends StatelessWidget {
   }
 }
 
-/// Item da lista: foto, nome, distância · categoria, "Ana foi aqui" e o
-/// marcador "Quero ir".
 class NearbyTile extends StatelessWidget {
   const NearbyTile({
     super.key,
@@ -710,11 +698,8 @@ class NearbyTile extends StatelessWidget {
   final NearbyItem item;
   final bool saved;
 
-  /// "Aberto · confirmado por Ana há 20 min" (F20); `null` sem relato
-  /// recente.
   final OpenStatus? openStatus;
 
-  /// Hora de referência do [openStatus] (padrão: agora).
   final DateTime? now;
   final String? currentUserId;
   final VoidCallback? onTap;
@@ -963,8 +948,6 @@ class _Message extends StatelessWidget {
   }
 }
 
-/// Aviso discreto: a descoberta ao vivo falhou e a lista tem só os lugares
-/// já conhecidos (gravados).
 class PartialNotice extends StatelessWidget {
   const PartialNotice({super.key, required this.onRetry});
 

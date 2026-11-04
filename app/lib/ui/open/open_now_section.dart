@@ -5,9 +5,6 @@ import '../../data/repositories/owner_repository.dart';
 import 'open_now_view_model.dart';
 import 'open_status_line.dart';
 
-/// "Está aberto agora?" (F20) no detalhe: o status dos relatos recentes e,
-/// para quem está a até 150 m, Sim/Não em 1 toque. Sem relato e sem ação
-/// possível, não ocupa espaço.
 class OpenNowSection extends StatefulWidget {
   const OpenNowSection({
     super.key,
@@ -37,7 +34,6 @@ class _OpenNowSectionState extends State<OpenNowSection> {
     }
   }
 
-  /// Explica antes do pedido do sistema; só pede se a pessoa aceitar.
   Future<void> _askLocation() async {
     final ok = await showDialog<bool>(
       context: context,

@@ -57,7 +57,6 @@ bool _within(QueueReport r, DateTime now, Duration window) =>
 QueueSummary? liveQueue(Iterable<QueueReport> reports, DateTime now) =>
     _summary(reports.where((r) => _within(r, now, queueLiveWindow)));
 
-/// Fixed UTC−3; independent of device timezone and daylight saving.
 DateTime _local(DateTime t) => t.toUtc().subtract(const Duration(hours: 3));
 QueueSummary? historicalQueue(Iterable<QueueReport> reports, DateTime now) {
   final local = _local(now);
@@ -72,7 +71,6 @@ QueueSummary? historicalQueue(Iterable<QueueReport> reports, DateTime now) {
   );
 }
 
-/// Falha fechada: coordenadas e distância não finitas nunca liberam envio.
 bool nearForQueue(LatLng device, LatLng place) {
   bool valid(LatLng p) =>
       p.lat.isFinite &&

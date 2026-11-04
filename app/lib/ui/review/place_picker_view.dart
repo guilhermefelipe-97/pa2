@@ -27,7 +27,6 @@ class _PlacePickerViewState extends State<PlacePickerView> {
     widget.viewModel.load();
   }
 
-  /// Guarda contra toque duplo: só uma avaliação por vez.
   bool _opening = false;
 
   Future<void> _pick(Place p) async {
@@ -287,7 +286,6 @@ class _EmptyMessage extends StatelessWidget {
   }
 }
 
-/// Placeholder enquanto a busca responde.
 class _SkeletonList extends StatelessWidget {
   const _SkeletonList();
 

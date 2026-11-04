@@ -35,15 +35,12 @@ class FirestoreReviewRepository
 
   static const int defaultPerBatchLimit = 100;
 
-  /// Limite por lote na consulta do feed.
   final int perBatchLimit;
 
   static const String reviewsCollection = 'reviews';
 
-  /// Coleção das fotos (bytes no Firestore; id = id da avaliação).
   static const String reviewPhotosCollection = 'reviewPhotos';
 
-  /// Subcoleção das travas do F03: `users/{uid}/reviewLocks/{placeId}`.
   static const String reviewLocksCollection = 'reviewLocks';
 
   CollectionReference<Map<String, dynamic>> get _reviews =>
@@ -60,8 +57,6 @@ class FirestoreReviewRepository
 
   @override
   Future<DateTime?> reviewLockOf(String uid, String placeId) async {
-    // Do servidor: a trava muda fora deste aparelho (outro aparelho, corrida)
-    // e um cache velho abriria um formulário que as Rules negam.
     final snap = await _lockRef(
       uid,
       placeId,
@@ -86,7 +81,7 @@ class FirestoreReviewRepository
     if (newPlace != null && newPlace.id != review.placeId) {
       throw ArgumentError.value(newPlace.id, 'newPlace', 'outro local');
     }
-    // Id gerado no cliente: a foto usa o mesmo id da avaliação.
+
     final ref = _reviews.doc();
     final placeRef = newPlace != null && newPlace.discovered
         ? _db.collection(placesCollection).doc(newPlace.id)
@@ -99,12 +94,9 @@ class FirestoreReviewRepository
           const Duration(seconds: 10),
         );
         createPlace = !existing.exists;
-        // O local já existe (outra pessoa criou; nome do OSM pode ter mudado
-        // desde então): as Rules exigem o `name` do doc gravado.
+
         placeName = _storedName(existing) ?? placeName;
       } on Object {
-        // Sem ler, tenta criar: se já existir, o batch falha e o ramo de
-        // corrida abaixo resolve.
         createPlace = true;
       }
     }
@@ -118,24 +110,17 @@ class FirestoreReviewRepository
       );
       return (placeCreated: createPlace);
     } on Object catch (error, stack) {
-      // Ack perdido: o batch foi gravado (review + trava) mas a resposta não
-      // chegou. Reenviar com o mesmo id seria negado (a review já existe e a
-      // trava acabou de nascer); o caminho certo é reler a própria review e,
-      // se ela existe, concluir com sucesso.
       if (await _existsOnServer(ref) == true) {
         return (placeCreated: createPlace);
       }
       if (!createPlace) Error.throwWithStackTrace(error, stack);
-      // Corrida: o local nasceu entre a leitura e o commit (o set dele virou
-      // update, negado, e derrubou o batch). Com o doc lá, grava sem ele, com
-      // o nome que está gravado.
+
       final DocumentSnapshot<Map<String, dynamic>> existing;
       try {
         existing = await placeRef!
             .get(const GetOptions(source: Source.server))
             .timeout(const Duration(seconds: 10));
       } on Object {
-        // A releitura falhou: o erro que importa é o do commit.
         Error.throwWithStackTrace(error, stack);
       }
       if (!existing.exists) Error.throwWithStackTrace(error, stack);
@@ -150,7 +135,6 @@ class FirestoreReviewRepository
     return snap.exists && name is String ? name : null;
   }
 
-  /// `true`/`false` lido no servidor; `null` se a leitura falhou.
   static Future<bool?> _existsOnServer(
     DocumentReference<Map<String, dynamic>> ref,
   ) async {
@@ -173,17 +157,12 @@ class FirestoreReviewRepository
   ) {
     final batch = _db.batch();
     if (createPlace != null) {
-      // Mesmo batch: as Rules da review exigem o local ao fim dele.
       batch.set(
         _db.collection(placesCollection).doc(createPlace.id),
         newPlaceData(createPlace, uid: review.authorId),
       );
     }
-    // Schema exato (14 chaves) validado pelas Rules (hasOnly/hasAll). O período
-    // do dia NÃO é gravado; createdAt é sempre o timestamp do servidor.
-    // Eixo não avaliado vai como null (F14): a chave está sempre presente.
-    // `comment` já vem normalizado (aparado; null quando não há).
-    // `priceBand` (F27): 1–5 ou null quando não informado.
+
     batch.set(ref, {
       'silent': review.silent,
       'authorId': review.authorId,
@@ -200,7 +179,7 @@ class FirestoreReviewRepository
       'tags': review.tags,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    // F04: entrada de auditoria no mesmo batch (as Rules exigem o par).
+
     addAuditEntry(
       batch,
       _db,
@@ -210,21 +189,13 @@ class FirestoreReviewRepository
       placeId: review.placeId,
     );
     if (photo != null) {
-      // As Rules só aceitam a foto no mesmo batch da review nova do mesmo id.
       batch.set(_db.collection(reviewPhotosCollection).doc(ref.id), {
         'authorId': review.authorId,
         'jpeg': Blob(photo),
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
-    // F03: trava criada/renovada no mesmo batch, apontando para esta
-    // avaliação. Dentro dos 30 dias as Rules negam a trava e a review juntas.
-    // Retry: só acontece quando a review NÃO foi gravada (ver createReview),
-    // então o mesmo id ainda é novo para as Rules.
-    // Offline: o batch fica enfileirado no cache local e o commit só conclui
-    // ao sincronizar; até lá a trava não existe no servidor (outro aparelho
-    // ainda pode avaliar) e, se as Rules negarem na sincronização, o SDK
-    // desfaz as escritas locais.
+
     batch.set(_lockRef(review.authorId, review.placeId), {
       'lastAt': FieldValue.serverTimestamp(),
       'reviewId': ref.id,
@@ -322,7 +293,6 @@ class FirestoreReviewRepository
     final ids = placeIds.toSet().toList();
     final result = <String, Map<String, int>>{};
     for (final batch in chunked(ids, whereInLimit)) {
-      // Sem corte: todas as reviews globais, inclusive as últimas sem tags.
       final docs = await _reviews
           .where('placeId', whereIn: batch)
           .get(const GetOptions(source: Source.server));
@@ -341,10 +311,6 @@ class FirestoreReviewRepository
     return result;
   }
 
-  /// Leitura estrita de um eixo (F14), espelhando as Rules: a chave precisa
-  /// existir e valer `null` (não avaliado) ou um `int` de 1 a 5. Chave
-  /// ausente, decimal (4.5) ou texto invalida o doc (ignorado em [fromDoc]).
-  /// Os 3 null também: `Scores` exige ao menos um eixo.
   static int? _axis(Map<String, dynamic> d, String key) {
     if (!d.containsKey(key)) throw FormatException('eixo "$key" ausente');
     final v = d[key];
@@ -353,7 +319,6 @@ class FirestoreReviewRepository
     throw FormatException('eixo "$key" inválido: $v');
   }
 
-  // Uma tag inválida retira os votos, sem apagar a avaliação válida.
   static List<String> _readTags(Object? value) {
     if (value == null) return const [];
     if (value is! List || value.any((tag) => tag is! String)) return const [];
@@ -381,19 +346,17 @@ class FirestoreReviewRepository
           service: _axis(d, 'service'),
         ),
         companion: Companion.fromValue(d['companion'] as String?),
-        // Normaliza na leitura: avaliações da Onda 1 não têm a chave, e vazio
-        // ou só espaços vira null (a UI nunca mostra citação vazia).
+
         comment: Review.normalizeComment(
           d['comment'] is String ? d['comment'] as String : null,
         ),
         createdAt: ts.toDate(),
-        // Reviews anteriores ao G1 não têm a chave: sem foto.
+
         hasPhoto: d['hasPhoto'] == true,
         priceBand: readPriceBand(d),
         tags: _readTags(d['tags']),
       );
     } on Object {
-      // Documento fora do schema: ignora em vez de derrubar o feed.
       return null;
     }
   }

@@ -234,13 +234,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ReviewView), findsOneWidget);
 
-    // Um pop volta direto ao seletor: só uma avaliação foi empilhada.
     router.pop();
     await tester.pumpAndSettle();
     expect(find.byType(ReviewView), findsNothing);
     expect(find.byType(PlacePickerView), findsOneWidget);
 
-    // Depois de voltar, o toque funciona de novo.
     await tester.tap(find.text('Camarões Potiguar'));
     await tester.pumpAndSettle();
     expect(find.byType(ReviewView), findsOneWidget);

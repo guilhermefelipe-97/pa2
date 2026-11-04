@@ -89,7 +89,7 @@ void main() {
           });
         }
       }
-      // Mais de 100 reviews de um autor não produzem votos adicionais.
+
       for (var i = 0; i < 105; i++) {
         await db.doc('reviews/repetida$i').set({
           'authorId': 'a0',
@@ -114,7 +114,7 @@ void main() {
       expect(tags['p30'], {'vegano': 3, 'integral': 3});
       expect(tags['p0']?['vegano'], 4);
       expect(tags['p0']?['integral'], 3);
-      // Review legada sem tags é a última e retira o voto.
+
       await db.doc('reviews/ultima').set({
         'authorId': 'a0',
         'authorName': 'Autor 0',

@@ -12,7 +12,6 @@ class SettingsButton extends StatelessWidget {
   );
 }
 
-/// Carregamento sem dados simulados; um único anúncio para leitores de tela.
 class EditorialLoading extends StatelessWidget {
   const EditorialLoading({super.key});
   @override
@@ -57,7 +56,6 @@ class EditorialLoading extends StatelessWidget {
   }
 }
 
-/// Hierarquia editorial compartilhada; cada tela mantém seus dados e ações.
 class EditorialHeading extends StatelessWidget {
   const EditorialHeading({
     super.key,

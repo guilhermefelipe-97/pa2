@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import '../../routing/routes.dart';
 import 'dietary_filter_panel.dart';
 
-/// Compatible page for existing links; filters are now opened from the feed.
 class DietaryView extends StatelessWidget {
   const DietaryView({super.key});
   @override

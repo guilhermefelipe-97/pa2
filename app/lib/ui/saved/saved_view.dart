@@ -19,7 +19,6 @@ import '../lists/list_dialogs.dart';
 import '../lists/lists_store.dart';
 import 'saved_view_model.dart';
 
-/// "salvo há 2 h", "salvo ontem", "salvo em 20/09".
 String savedAgo(DateTime savedAt, DateTime now) {
   final rel = relativeTime(savedAt, now);
   final isDate =
@@ -27,7 +26,6 @@ String savedAgo(DateTime savedAt, DateTime now) {
   return isDate ? 'salvo em $rel' : 'salvo $rel';
 }
 
-/// Aba "Quero ir" (F11).
 class SavedView extends StatelessWidget {
   const SavedView({super.key, required this.viewModel});
 
@@ -35,7 +33,6 @@ class SavedView extends StatelessWidget {
 
   static const privateCaption = 'Só você vê esta lista';
 
-  /// Lista ativa com "Visível para quem me segue" (F13).
   static const visibleCaption = 'Quem te segue vê esta lista';
 
   @override
@@ -67,7 +64,7 @@ class SavedView extends StatelessWidget {
                   padding: const EdgeInsets.only(right: 8),
                   child: TextButton(
                     key: const Key('saved-decide'),
-                    // Sem salvos no chip ativo: nada a decidir.
+
                     onPressed: items.isEmpty
                         ? null
                         : () => showDecisionSheet(context, candidates: items),
@@ -91,7 +88,7 @@ class SavedView extends StatelessWidget {
           if (viewModel.isLoading) {
             return const EditorialLoading();
           }
-          // Puxar para atualizar em todos os estados (lista, vazio, erro).
+
           final refreshable = RefreshIndicator(
             onRefresh: viewModel.refresh,
             child: _body(context),
@@ -203,7 +200,6 @@ class SavedView extends StatelessWidget {
       );
     }
     if (vm.isListLoading && items.isEmpty) {
-      // Locais da lista ainda sem dados do catálogo.
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: const [
@@ -265,8 +261,6 @@ class SavedView extends StatelessWidget {
   }
 }
 
-/// Card compacto de um salvo: foto (ou fallback), nome, bairro · categoria e
-/// há quanto tempo foi salvo.
 class SavedCard extends StatelessWidget {
   const SavedCard({
     super.key,
@@ -371,7 +365,6 @@ class SavedCard extends StatelessWidget {
   }
 }
 
-/// Menu do card salvo: "Adicionar a lista" e "Remover do Quero ir".
 class _CardMenu extends StatelessWidget {
   const _CardMenu({required this.placeId, required this.placeName});
 
@@ -399,7 +392,6 @@ class _CardMenu extends StatelessWidget {
         }
       },
       itemBuilder: (context) => [
-        // Lido ao abrir o menu: o card não precisa reconstruir com as listas.
         if (context.read<ListsStore?>() != null)
           const PopupMenuItem(
             value: 'add',
@@ -420,8 +412,6 @@ class _CardMenu extends StatelessWidget {
   }
 }
 
-/// Chips do topo da aba: "Todos" + uma por lista, com contagem. O chip da
-/// lista ativa abre o menu Renomear/Excluir.
 class ListChips extends StatelessWidget {
   const ListChips({super.key, required this.viewModel});
 
@@ -431,7 +421,7 @@ class ListChips extends StatelessWidget {
   Widget build(BuildContext context) {
     final vm = viewModel;
     final selected = vm.selectedList;
-    // Altura mínima, não fixa: com fonte grande o chip cresce sem cortar.
+
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 56),
       child: SingleChildScrollView(
@@ -497,8 +487,6 @@ class _ActiveListChipState extends State<_ActiveListChip> {
     });
   }
 
-  /// "Copiada N vezes" (F13, N32), lido ao abrir o menu; `null` = ainda não
-  /// leu ou falhou (oculto).
   int? _copies;
   int _countSeq = 0;
 
@@ -508,8 +496,7 @@ class _ActiveListChipState extends State<_ActiveListChip> {
   @override
   void didUpdateWidget(_ActiveListChip oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Outra lista: o contador lido era da anterior (e uma leitura em voo
-    // dela é descartada).
+
     if (oldWidget.list.id != widget.list.id) {
       _copies = null;
       _countSeq++;
@@ -539,12 +526,11 @@ class _ActiveListChipState extends State<_ActiveListChip> {
     viewModel.selectList(null);
     if (!await lists.delete(list.id)) {
       _fail(messenger);
-      // A lista voltou: volta a selecioná-la (se a pessoa não escolheu outra).
+
       if (viewModel.selectedList == null) viewModel.selectList(list.id);
     }
   }
 
-  /// "Visível para quem me segue" (otimista): falha reverte e avisa.
   Future<void> _toggleVisible(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     if (!await viewModel.setSelectedListVisible(!list.visible)) {
@@ -588,7 +574,7 @@ class _ActiveListChipState extends State<_ActiveListChip> {
           MenuItemButton(
             key: const Key('list-copies'),
             leadingIcon: const Icon(Icons.content_copy_outlined),
-            // Informativo: só a contagem.
+
             onPressed: null,
             child: Text(copiesLabel(copies)),
           ),
@@ -601,7 +587,7 @@ class _ActiveListChipState extends State<_ActiveListChip> {
       builder: (context, controller, _) {
         void toggle() =>
             controller.isOpen ? controller.close() : controller.open();
-        // Botão de menu para leitores de tela.
+
         return Semantics(
           container: true,
           button: true,
@@ -635,10 +621,8 @@ class _ActiveListChipState extends State<_ActiveListChip> {
   }
 }
 
-/// Item do menu da lista (F13).
 const visibleToFollowersLabel = 'Visível para quem me segue';
 
-/// "Copiada 1 vez", "Copiada 3 vezes".
 String copiesLabel(int n) => n == 1 ? 'Copiada 1 vez' : 'Copiada $n vezes';
 
 class _Message extends StatelessWidget {
@@ -690,8 +674,6 @@ class _Message extends StatelessWidget {
   }
 }
 
-/// Erro ao carregar as listas: discreto, acima dos cards (o "Quero ir"
-/// continua funcionando).
 class _ListsErrorBanner extends StatelessWidget {
   const _ListsErrorBanner({required this.onRetry});
 

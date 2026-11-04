@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Rodapé institucional exibido no fim de Configurações.
 class NaAreaFooter extends StatelessWidget {
   const NaAreaFooter({super.key});
 

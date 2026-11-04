@@ -1,7 +1,5 @@
 part of 'place_activity.dart';
 
-/// "Voltei aqui" (F15): uma ida ao local sem notas, já gravada. Imutável;
-/// nunca anônima; o período do dia é derivado do `createdAt` do servidor.
 class Visit extends PlaceActivity {
   const Visit({
     required this.id,
@@ -35,8 +33,6 @@ class Visit extends PlaceActivity {
   final PriceBand? priceBand;
 }
 
-/// Dados que o cliente envia para registrar uma visita. Sem `createdAt` (é
-/// sempre o do servidor) e sem notas (Never do F15).
 class NewVisit {
   const NewVisit({
     required this.authorId,
@@ -55,6 +51,5 @@ class NewVisit {
   final String placeName;
   final Companion? companion;
 
-  /// Gasto por pessoa (F27); opcional.
   final PriceBand? priceBand;
 }

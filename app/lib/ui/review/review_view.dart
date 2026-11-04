@@ -16,7 +16,6 @@ import '../visit/visit_sheet.dart';
 import '../visit/visit_view_model.dart';
 import 'review_view_model.dart';
 
-/// Dica abaixo do Enviar enquanto nenhum eixo tem nota (F14).
 const String noAxisHint = 'Toque numa estrela de pelo menos um eixo';
 
 class ReviewView extends StatefulWidget {
@@ -34,10 +33,9 @@ class _ReviewViewState extends State<ReviewView> {
   @override
   void initState() {
     super.initState();
-    // F03: avaliou há menos de 30 dias → explica em vez do formulário.
+
     viewModel.checkLock();
-    // Android: foto tirada antes de o sistema encerrar o app (no-op nas
-    // outras plataformas).
+
     viewModel.recoverLostPhoto();
   }
 
@@ -46,9 +44,6 @@ class _ReviewViewState extends State<ReviewView> {
     if (ok && context.mounted) context.pop(true);
   }
 
-  /// F15: bloqueado pelo F03, a alternativa é registrar a visita (mesmo
-  /// fluxo do detalhe). Registrada, avisa e volta com `false` (nenhuma
-  /// avaliação nova, mas quem abriu recarrega para mostrar a visita).
   Future<void> _registerVisit(BuildContext context) async {
     final registered = await showVisitSheet(context, place: viewModel.place);
     if (!registered || !context.mounted) return;
@@ -376,9 +371,6 @@ class _ReviewViewState extends State<ReviewView> {
   }
 }
 
-/// F03: o usuário avaliou o local há menos de 30 dias. Sem formulário de
-/// notas: a explicação com as datas e, como alternativa, "Registrar visita"
-/// (F15: voltar conta como recorrência, sem nota).
 class _BlockedReview extends StatelessWidget {
   const _BlockedReview({required this.message, required this.onRegisterVisit});
 
@@ -431,8 +423,6 @@ class _BlockedReview extends StatelessWidget {
   }
 }
 
-/// Foto opcional (G1): adicionar pela câmera ou galeria; tocar na prévia
-/// oferece trocar ou remover.
 class _PhotoField extends StatelessWidget {
   const _PhotoField({required this.viewModel});
 
@@ -634,8 +624,6 @@ class _PhotoField extends StatelessWidget {
   }
 }
 
-/// Um eixo da avaliação rápida (F14): 5 estrelas grandes, um toque escolhe
-/// a nota; "Limpar" volta a não avaliado. Eixo vazio é ausência, nunca zero.
 class _AxisPicker extends StatelessWidget {
   const _AxisPicker({
     required this.axisKey,
@@ -649,7 +637,6 @@ class _AxisPicker extends StatelessWidget {
     this.enabled = true,
   });
 
-  /// Base das keys: `axis-<axisKey>-<n>` e `axis-<axisKey>-clear`.
   final String axisKey;
   final String emoji;
   final String label;
@@ -663,7 +650,6 @@ class _AxisPicker extends StatelessWidget {
   static const double maxStarSize = 44;
   static const double starPadding = 4;
 
-  /// Opacidade das estrelas durante o envio.
   static const double disabledOpacity = 0.38;
 
   @override
@@ -671,7 +657,7 @@ class _AxisPicker extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final current = value;
-    // Âmbar fechado: contraste AA sobre as superfícies claras.
+
     final filled = scheme.secondary;
     final opacity = enabled ? 1.0 : disabledOpacity;
     return Card(
@@ -706,8 +692,7 @@ class _AxisPicker extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // Reserva o espaço do Limpar mesmo oculto: o cabeçalho não
-                  // pula ao escolher a primeira nota.
+
                   Visibility(
                     visible: current != null,
                     maintainSize: true,
@@ -794,8 +779,6 @@ class _AxisPicker extends StatelessWidget {
   }
 }
 
-/// Limita o texto a [maxLength] unidades UTF-16 (`String.length`), a mesma
-/// conta do `size()` das Security Rules. Não corta um emoji ao meio.
 class Utf16LengthLimitingFormatter extends TextInputFormatter {
   const Utf16LengthLimitingFormatter(this.maxLength);
 
@@ -810,7 +793,7 @@ class Utf16LengthLimitingFormatter extends TextInputFormatter {
     if (text.length <= maxLength) return newValue;
     var cut = maxLength;
     final last = text.codeUnitAt(cut - 1);
-    if (last >= 0xD800 && last <= 0xDBFF) cut--; // high surrogate sem par
+    if (last >= 0xD800 && last <= 0xDBFF) cut--;
     final truncated = text.substring(0, cut);
     return TextEditingValue(
       text: truncated,

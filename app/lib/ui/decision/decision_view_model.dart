@@ -14,35 +14,14 @@ import '../../domain/models/place_activity.dart';
 import '../../domain/open_status.dart';
 import '../core/safe_change_notifier.dart';
 
-enum DecisionPhase {
-  /// Toque 1 feito: escolhendo a companhia.
-  choosing,
+enum DecisionPhase { choosing, loading, result, noneOpen }
 
-  /// Companhia escolhida, sinais ainda chegando.
-  loading,
-
-  /// Um lugar na tela.
-  result,
-
-  /// Todos os candidatos com "Fechado" relatado (ou nenhum candidato).
-  noneOpen,
-}
-
-/// Sinais lidos para o ranking. Cada um é opcional: a leitura que falhar
-/// vira "sem sinal" e o critério dela é ignorado.
 typedef _Signals = ({
   List<Review> reviews,
   Map<String, OpenStatus> openStatuses,
   LatLng? position,
 });
 
-/// Modo decisão (F09): "Decidir por mim" no Quero ir. Toque 1 abre a escolha
-/// de companhia (e já começa a ler os sinais); toque 2 escolhe e mostra 1
-/// lugar dos salvos do chip ativo, com "Outra opção".
-///
-/// Sinais: histórico paginado dos locais candidatos, somente de quem o
-/// usuário segue, relatos "Está aberto agora?" e a
-/// última posição conhecida, SÓ se a permissão já existe (nunca pede).
 class DecisionViewModel extends SafeChangeNotifier {
   DecisionViewModel({
     required List<DecisionCandidate> candidates,
@@ -99,28 +78,23 @@ class DecisionViewModel extends SafeChangeNotifier {
 
   Companion? _companion;
 
-  /// Companhia escolhida (`null` = "Tanto faz").
   Companion? get companion => _companion;
 
   DateTime? _decidedAt;
   List<DecisionOption> _options = const [];
 
-  /// Do melhor para o pior (vazio antes do toque 2 ou se todos fechados).
   List<DecisionOption> get options => _options;
 
   int _index = 0;
 
-  /// "Outra opção" passou do último e voltou ao 1º.
   bool _wrapped = false;
   bool get wrapped => _wrapped;
 
-  /// Lugar exibido.
   DecisionOption? get current =>
       _phase == DecisionPhase.result && _options.isNotEmpty
       ? _options[_index]
       : null;
 
-  /// Motivo do lugar exibido (do critério que desempatou).
   String? get reason {
     final o = current;
     final at = _decidedAt;
@@ -130,12 +104,9 @@ class DecisionViewModel extends SafeChangeNotifier {
 
   int _seq = 0;
 
-  /// Começa a ler os sinais (no toque 1, enquanto a pessoa escolhe a
-  /// companhia). Chamadas repetidas reusam a mesma leitura.
   Future<void> prepare() =>
       sessionChanged ? Future.value() : _signals ??= _loadSignals();
 
-  /// Toque 2: escolhe a companhia (`null` = "Tanto faz") e ranqueia.
   Future<void> choose(Companion? companion) async {
     if (sessionChanged || _initialUid == null) return;
     final seq = ++_seq;
@@ -160,8 +131,6 @@ class DecisionViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// "Outra opção": o próximo; depois do último, volta ao 1º e avisa
-  /// ([wrapped]).
   void next() {
     if (_phase != DecisionPhase.result || _options.isEmpty) return;
     if (_index + 1 < _options.length) {
@@ -174,7 +143,6 @@ class DecisionViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// Volta para a escolha de companhia.
   void back() {
     _seq++;
     _phase = DecisionPhase.choosing;
@@ -196,8 +164,6 @@ class DecisionViewModel extends SafeChangeNotifier {
     );
   }
 
-  /// Avaliações de quem o usuário segue; falha (seguidos ou avaliações) =
-  /// nenhuma (os critérios de avaliação são ignorados).
   Future<List<Review>> _loadReviews() async {
     final me = _auth.currentUserId;
     if (me == null || _candidates.isEmpty) return const [];
@@ -235,7 +201,6 @@ class DecisionViewModel extends SafeChangeNotifier {
     }
   }
 
-  /// "Está aberto agora?" dos candidatos; falha = nenhum fechado.
   Future<Map<String, OpenStatus>> _loadOpenStatuses() async {
     final repo = _openReports;
     if (repo == null || _candidates.isEmpty) return const {};
@@ -251,7 +216,6 @@ class DecisionViewModel extends SafeChangeNotifier {
     }
   }
 
-  /// Última posição, só com a permissão já concedida (nunca pede).
   Future<LatLng?> _loadPosition() async {
     final location = _location;
     if (location == null) return null;

@@ -8,12 +8,6 @@ import '../../domain/models/place.dart';
 import '../../domain/search_tokens.dart';
 import '../core/safe_change_notifier.dart';
 
-/// Escolha do local a avaliar: busca por nome no catálogo do Brasil (G2:
-/// gravados + descobertos pelo Photon) sem ler a coleção inteira. Busca curta
-/// (0–1 letra) mostra sugestões (curados com foto).
-///
-/// A posição (se a permissão JÁ foi dada; o seletor nunca pede) só dá o viés
-/// da descoberta: os lugares mais perto aparecem primeiro.
 class PlacePickerViewModel extends SafeChangeNotifier {
   PlacePickerViewModel({
     required PlaceRepository placeRepository,
@@ -30,8 +24,6 @@ class PlacePickerViewModel extends SafeChangeNotifier {
   static const searchErrorMessage =
       'Não foi possível buscar os locais. Verifique sua conexão.';
 
-  /// Última posição conhecida para o viés (sem pedido do sistema). Só uma
-  /// posição obtida fica guardada: sem ela, a próxima busca tenta de novo.
   LatLng? _near;
   LatLng? get near => _near;
 
@@ -49,12 +41,10 @@ class PlacePickerViewModel extends SafeChangeNotifier {
     }
   }
 
-  /// Espera depois da última tecla antes de consultar.
   final Duration debounce;
 
   Timer? _timer;
 
-  /// Só a resposta da consulta mais recente é aplicada.
   int _seq = 0;
 
   String _query = '';
@@ -66,7 +56,6 @@ class PlacePickerViewModel extends SafeChangeNotifier {
 
   bool _isLoading = false;
 
-  /// Carregando (a View mostra skeleton).
   bool get isLoading => _isLoading;
 
   String? _errorMessage;
@@ -75,15 +64,12 @@ class PlacePickerViewModel extends SafeChangeNotifier {
   String? _category;
   static const filterOptions = ['Cafés & Padarias', 'Restaurantes', 'Bares'];
 
-  /// Chip de categoria selecionado (null = todas).
   String? get selectedCategory => _category;
 
-  /// Busca curta: mostra sugestões em vez de resultados.
   bool get isShowingSuggestions => serverTerm(normalizeQuery(_query)) == null;
 
   List<Place> get _base => isShowingSuggestions ? _suggestions : _results;
 
-  /// Categorias presentes na lista atual (para os chips), em ordem alfabética.
   List<String> get categories {
     final set = {
       for (final p in _base)
@@ -92,7 +78,6 @@ class PlacePickerViewModel extends SafeChangeNotifier {
     return set.toList()..sort((a, b) => nameLower(a).compareTo(nameLower(b)));
   }
 
-  /// Locais a exibir (resultados ou sugestões, filtrados pelo chip).
   List<Place> get places {
     final c = _category;
     final base = _base;
@@ -119,18 +104,15 @@ class PlacePickerViewModel extends SafeChangeNotifier {
     }).toList();
   }
 
-  /// A busca devolveu o máximo de resultados: pode haver mais (refinar).
   bool get isResultCapped =>
       !isShowingSuggestions && _results.length >= placeSearchLimit;
 
-  /// Busca concluída sem resultados: "Nenhum local com esse nome".
   bool get showNoResults =>
       !_isLoading &&
       _errorMessage == null &&
       !isShowingSuggestions &&
       _results.isEmpty;
 
-  /// Carga inicial: sugestões (e já começa a buscar a posição do viés).
   Future<void> load() {
     unawaited(_bias());
     return _loadSuggestions();
@@ -142,7 +124,7 @@ class PlacePickerViewModel extends SafeChangeNotifier {
     _timer?.cancel();
     _category = null;
     if (isShowingSuggestions) {
-      _seq++; // descarta consulta em voo
+      _seq++;
       _results = const [];
       _errorMessage = null;
       _isLoading = false;
@@ -150,7 +132,7 @@ class PlacePickerViewModel extends SafeChangeNotifier {
       if (!_suggestionsLoaded) _loadSuggestions();
       return;
     }
-    _seq++; // resposta antiga não pode tirar o skeleton durante o debounce
+    _seq++;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -162,7 +144,6 @@ class PlacePickerViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// "Tentar de novo": repete a operação atual sem esperar o debounce.
   Future<void> retry() {
     _timer?.cancel();
     return isShowingSuggestions ? _loadSuggestions() : _search();

@@ -7,7 +7,6 @@ class FirestoreSponsorshipRepository implements SponsorshipRepository {
   final bool emulator;
   @override
   Future<List<SponsoredSlot>> current(DateTime now) async {
-    // Produção desligada até F23/F26, independentemente da flag do servidor.
     if (!emulator) return [];
     final config = await db
         .collection('config')
@@ -15,8 +14,7 @@ class FirestoreSponsorshipRepository implements SponsorshipRepository {
         .get(const GetOptions(source: Source.server))
         .timeout(const Duration(seconds: 10));
     if (config.data()?['sponsorshipEnabled'] != true) return [];
-    // Catálogo confiável: leituras por ID permitem às Rules validar vigência
-    // e titularidade de cada slot sem tratar regras como filtros de consulta.
+
     final ids = config.data()?['sponsoredSlotIds'];
     if (ids is! List || ids.any((id) => id is! String)) return [];
     final docs = <DocumentSnapshot<Map<String, dynamic>>>[];

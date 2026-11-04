@@ -55,8 +55,6 @@ import '../ui/dietary/dietary_store.dart';
 import '../ui/dietary/dietary_view.dart';
 import '../ui/owner/owner_view.dart';
 
-/// Decide para onde redirecionar conforme o estado de autenticação.
-/// Função pura para ser testável.
 String? authRedirect({
   required bool isInitialized,
   required bool isSignedIn,
@@ -70,8 +68,6 @@ String? authRedirect({
   return null;
 }
 
-/// "Está aberto agora?" (F20) do detalhe; `null` sem o repositório de
-/// relatos (ex.: testes que não o fornecem).
 OpenNowViewModel? _openNowFor(BuildContext context, String placeId) {
   final reports = context.read<OpenReportRepository?>();
   if (reports == null) return null;
@@ -185,9 +181,7 @@ GoRouter buildRouter(AuthRepository auth) {
           builder: (context, vm) => AuthView(isSignUp: true, viewModel: vm),
         ),
       ),
-      // Telas principais com a barra inferior (Amigos · Perto · Quero ir ·
-      // Pessoas).
-      // Cada aba guarda o próprio estado (IndexedStack).
+
       StatefulShellRoute(
         builder: (context, state, shell) => AppShell(navigationShell: shell),
         navigatorContainerBuilder: (context, shell, children) => AppBranchStack(
@@ -215,8 +209,7 @@ GoRouter buildRouter(AuthRepository auth) {
               ),
             ],
           ),
-          // "Perto" (F10): criado só na 1ª visita à aba (branch sem preload),
-          // então a permissão é pedida no contexto dela.
+
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -298,9 +291,7 @@ GoRouter buildRouter(AuthRepository auth) {
           ),
         ],
       ),
-      // Fora do shell: cobre a barra inferior. Abre só com o id (link direto,
-      // reload na web, aba "Quero ir"); `extra` (FeedItem/Place) só adianta
-      // a primeira pintura.
+
       GoRoute(
         path: Routes.placeDetailPattern,
         builder: (context, state) {
@@ -324,9 +315,7 @@ GoRouter buildRouter(AuthRepository auth) {
           );
         },
       ),
-      // Lista visível de uma pessoa (F13), com "Copiar lista". Rota de topo
-      // própria: o go_router casa o caminho inteiro, então ela e o perfil
-      // (/pessoa/:uid) não se confundem, em qualquer ordem.
+
       GoRoute(
         path: Routes.personListPattern,
         builder: (context, state) {
@@ -348,7 +337,7 @@ GoRouter buildRouter(AuthRepository auth) {
           );
         },
       ),
-      // Perfil simples de uma pessoa (F06), fora do shell como o detalhe.
+
       GoRoute(
         path: Routes.personPattern,
         builder: (context, state) {
@@ -382,7 +371,7 @@ GoRouter buildRouter(AuthRepository auth) {
         routes: [
           GoRoute(
             path: ':placeId',
-            // Sem o Place (ex.: deep link / reload na web) volta para a escolha.
+
             redirect: (context, state) =>
                 state.extra is Place ? null : Routes.pickPlace,
             builder: (context, state) => ViewModelHost<ReviewViewModel>(

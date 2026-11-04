@@ -15,10 +15,6 @@ import '../../domain/price_band.dart';
 import '../../domain/visit_lock.dart';
 import '../core/safe_change_notifier.dart';
 
-/// "Voltei aqui" (F15): registra uma ida ao local sem notas, com companhia
-/// opcional; o período do dia vem do horário do servidor (F02). No máximo
-/// uma visita a cada [visitCooldown] por local (garantido pelas Rules; aqui
-/// só explica antes de enviar).
 class VisitViewModel extends SafeChangeNotifier {
   VisitViewModel({
     required this.place,
@@ -85,22 +81,18 @@ class VisitViewModel extends SafeChangeNotifier {
 
   PriceBand? _priceBand;
 
-  /// Gasto por pessoa (F27); opcional, nunca bloqueia o envio.
   PriceBand? get priceBand => _priceBand;
 
   bool _isCheckingLock = false;
 
-  /// Consultando a trava (o Confirmar fica desabilitado).
   bool get isCheckingLock => _isCheckingLock;
 
   DateTime? _blockedSince;
 
-  /// Hora da última visita, enquanto dentro do intervalo; `null` = pode.
   DateTime? get blockedSince => _blockedSince;
 
   bool get isBlocked => isOwnBusiness || _blockedSince != null;
 
-  /// "Você registrou uma visita às 13h. De novo a partir das 01h."
   String? get blockedMessage {
     if (isOwnBusiness) return ownerContributionMessage;
     final since = _blockedSince;
@@ -120,14 +112,10 @@ class VisitViewModel extends SafeChangeNotifier {
       !isBlocked &&
       !_isSubmitting;
 
-  /// O sheet pode fechar (toque fora, arrastar, voltar)? Não durante o
-  /// envio.
   bool get canClose => !_isSubmitting;
 
   Timer? _releaseTimer;
 
-  /// Bloqueado: na hora da liberação o Confirmar volta sozinho (o sheet pode
-  /// ficar aberto até lá).
   void _setBlocked(DateTime? lastAt) {
     _releaseTimer?.cancel();
     _releaseTimer = null;
@@ -140,7 +128,6 @@ class VisitViewModel extends SafeChangeNotifier {
     });
   }
 
-  /// Tocar de novo na companhia selecionada desmarca.
   void toggleCompanion(Companion value) {
     if (_isSubmitting) return;
     _companion = _companion == value ? null : value;
@@ -148,16 +135,12 @@ class VisitViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// Faixa escolhida (F27); `null` limpa. Ignorada durante o envio e com
-  /// a visita bloqueada (12 h). Não mexe na mensagem de erro.
   void setPriceBand(PriceBand? value) {
     if (_isSubmitting || isBlocked || value == _priceBand) return;
     _priceBand = value;
     notifyListeners();
   }
 
-  /// Consulta a trava antes de liberar o Confirmar. Erro ou mais de
-  /// [visitLockTimeout]: segue sem trava e as Rules decidem no envio.
   Future<void> checkLock() async {
     final uid = _auth.currentUserId;
     if (uid == null || _isCheckingLock) return;
@@ -180,7 +163,6 @@ class VisitViewModel extends SafeChangeNotifier {
     }
   }
 
-  /// `true` quando a visita foi gravada.
   Future<bool> submit() async {
     if (!canSubmit) return false;
     final uid = _auth.currentUserId;
@@ -204,7 +186,7 @@ class VisitViewModel extends SafeChangeNotifier {
           .timeout(const Duration(seconds: 10));
       if (profile == null) throw StateError('perfil ausente');
       if (_auth.currentUserId != uid || isDisposed) return false;
-      // Local só descoberto (Photon, G2): nasce no mesmo batch da visita.
+
       final newPlace = place.discovered ? place : null;
       final result = await _visits.createVisit(
         NewVisit(
@@ -227,8 +209,6 @@ class VisitViewModel extends SafeChangeNotifier {
       }
       return _auth.currentUserId == uid && !isDisposed;
     } on Object {
-      // Inclui permission-denied das Rules (ex.: visita registrada em outro
-      // aparelho há menos de 12 h): reconsulta e explica, se for o caso.
       _isSubmitting = false;
       await checkLock();
       if (!isBlocked) _errorMessage = errorText;

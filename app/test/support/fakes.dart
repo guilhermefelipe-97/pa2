@@ -3,7 +3,7 @@ import 'package:naarea/data/repositories/dietary_repository.dart';
 import 'package:naarea/data/repositories/owner_repository.dart';
 import 'package:naarea/data/repositories/food_tag_repository.dart';
 import 'package:naarea/domain/food_tags.dart';
-// Fakes escritos à mão (sem mocks gerados) para testar os ViewModels.
+
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -96,7 +96,6 @@ class FakeUserRepository implements UserRepository {
   bool failSearch = false;
   int getFollowingCalls = 0;
 
-  /// Permite controlar quando/como cada chamada responde (ex.: Completer).
   Future<List<UserProfile>> Function(String query)? searchOverride;
   Future<Set<String>> Function(String uid)? getFollowingOverride;
   Completer<void>? followGate;
@@ -162,21 +161,16 @@ class FakePlaceRepository implements PlaceRepository {
   final List<Set<String>> getCalls = [];
   final List<bool> refreshMissingCalls = [];
 
-  /// Viés de posição de cada [search] (mesma posição de [searchCalls]).
   final List<LatLng?> searchNear = [];
 
-  /// Permite controlar quando/como cada busca responde (ex.: Completer).
   Future<List<Place>> Function(String query)? searchOverride;
 
-  /// Descobertos (Photon) por id: [discoveredPlace] e [ensurePersisted].
   final Map<String, Place> discovered = {};
 
-  /// Ids passados a [ensurePersisted] (com o uid).
   final List<String> persistCalls = [];
   final List<String> markedPersisted = [];
   Object? persistError;
 
-  /// Segura cada [ensurePersisted] até ser liberado.
   Completer<void>? persistGate;
 
   @override
@@ -205,7 +199,6 @@ class FakePlaceRepository implements PlaceRepository {
     discovered.remove(place.id);
   }
 
-  /// Segura cada `getPlaces` até ser liberado.
   Completer<void>? getGate;
 
   @override
@@ -248,18 +241,13 @@ class FakePlaceRepository implements PlaceRepository {
     };
   }
 
-  /// (lat, lng, raio) de cada [nearby].
   final List<({double lat, double lng, double radius})> nearbyCalls = [];
 
-  /// Segura cada `nearby` até ser liberado.
   Completer<void>? nearbyGate;
 
-  /// Próximos resultados de [nearby] marcados como parciais (Photon falhou)
-  /// ou no limite.
   bool nearbyPartial = false;
   bool nearbyCapped = false;
 
-  /// Erro de [nearby] (no lugar do `Exception('network')` de [fail]).
   Object? nearbyError;
 
   @override
@@ -291,22 +279,18 @@ class FakePlaceRepository implements PlaceRepository {
   }
 }
 
-/// Localização controlada pelo teste. Por padrão: sem permissão até o
-/// primeiro [locate], que a concede e devolve [position].
 class FakeLocationService implements LocationService {
   FakeLocationService({this.position, this.granted = false});
 
   LatLng? position;
   bool granted;
 
-  /// Próximo status de [locate] (diferente de `ok` não devolve posição).
   LocationStatus status = LocationStatus.ok;
   int locateCalls = 0;
   int hasPermissionCalls = 0;
   int openAppSettingsCalls = 0;
   int openLocationSettingsCalls = 0;
 
-  /// Segura cada `locate` até ser liberado.
   Completer<void>? locateGate;
 
   @override
@@ -334,7 +318,6 @@ class FakeLocationService implements LocationService {
 
   int lastKnownCalls = 0;
 
-  /// Última posição conhecida (padrão: [position]).
   LatLng? lastKnown;
   bool useLastKnown = false;
 
@@ -383,36 +366,24 @@ class FakeReviewRepository
   final List<Review> stored = [];
   final List<NewReview> created = [];
 
-  /// Foto enviada com cada avaliação de [created] (mesma posição).
   final List<Uint8List?> createdPhotos = [];
 
-  /// Fotos gravadas, por id da avaliação (simula `reviewPhotos`).
   final Map<String, Uint8List> photos = {};
   final List<List<String>> fetchCalls = [];
   Object? createError;
   Object? fetchError;
-  DateTime Function() clock = () =>
-      DateTime.utc(2026, 9, 10, 23); // 20h em Natal
+  DateTime Function() clock = () => DateTime.utc(2026, 9, 10, 23);
 
-  /// Local novo enviado com cada avaliação de [created] (mesma posição).
   final List<Place?> createdNewPlaces = [];
 
-  /// O que [createReview] informa sobre o local novo (`null` = criou se
-  /// veio um [newPlace]).
   bool? placeCreated;
 
-  /// Travas do F03 (`users/{uid}/reviewLocks/{placeId}`): `lastAt` por
-  /// `'{uid}/{placeId}'`. [createReview] grava e respeita como as Rules.
   final Map<String, DateTime> locks = {};
 
-  /// Erro de [reviewLockOf] (ex.: sem conexão).
   Object? lockError;
 
-  /// Se definido, [reviewLockOf] devolve este futuro (ex.: um que nunca
-  /// completa, para o timeout).
   Future<DateTime?>? pendingLock;
 
-  /// Chamadas de [reviewLockOf] (`'{uid}/{placeId}'`).
   final List<String> lockCalls = [];
 
   void lock(String uid, String placeId, DateTime lastAt) =>
@@ -426,7 +397,6 @@ class FakeReviewRepository
     return locks['$uid/$placeId'];
   }
 
-  /// Se definido, [createReview] espera por ele antes de responder.
   Completer<void>? createGate;
 
   @override
@@ -440,7 +410,6 @@ class FakeReviewRepository
     final lockId = '${review.authorId}/${review.placeId}';
     final now = clock();
     if (isReviewBlocked(locks[lockId], now)) {
-      // Como as Rules: permission-denied dentro do período mínimo.
       throw StateError('permission-denied: trava do F03');
     }
     locks[lockId] = now;
@@ -496,15 +465,12 @@ class FakeReviewRepository
     return fakeAuthorBatches(stored, authorIds, perBatchLimit, limit);
   }
 
-  /// Limite por lote de 30 autores, como o `perBatchLimit` do Firestore.
   int perBatchLimit = 100;
 
-  /// `limit` de cada chamada de [fetchReviewsByAuthors] (mesma posição).
   final List<int?> fetchLimits = [];
 }
 
 class FakeSavedRepository implements SavedRepository {
-  /// uid → (placeId → savedAt).
   final Map<String, Map<String, DateTime>> byUser = {};
   DateTime Function() clock = () => DateTime.utc(2026, 9, 28, 15);
 
@@ -513,11 +479,9 @@ class FakeSavedRepository implements SavedRepository {
   int listCalls = 0;
   final List<String> writes = [];
 
-  /// Escritas em voo agora (para provar que nunca há 2 do mesmo id).
   final Map<String, int> inFlight = {};
   int maxConcurrentPerId = 0;
 
-  /// Segura cada escrita até ser liberada (ex.: Completer).
   Completer<void>? writeGate;
   Future<List<SavedPlace>> Function(String uid)? listOverride;
 
@@ -555,10 +519,8 @@ class FakeSavedRepository implements SavedRepository {
   Object? savedAtOfError;
   int savedAtOfCalls = 0;
 
-  /// Ids cujo salvamento falha (ex.: local fora do catálogo).
   final Set<String> failSaveIds = {};
 
-  /// Como as Rules: `set` num doc que já existe vira update, negado.
   @override
   Future<void> save({required String uid, required String placeId}) =>
       _write(placeId, 'save', () {
@@ -589,23 +551,19 @@ class FakeSavedRepository implements SavedRepository {
 class FakeListsRepository implements ListsRepository {
   FakeListsRepository({this.saved});
 
-  /// Para o batch "remover de tudo" apagar o salvo junto.
   final FakeSavedRepository? saved;
 
-  /// uid → (listId → lista).
   final Map<String, Map<String, PlaceList>> byUser = {};
   DateTime Function() clock = () => DateTime.utc(2026, 9, 28, 15);
 
   Object? listError;
   Object? writeError;
 
-  /// Falha só as escritas cujo rótulo (ex.: `add:a:mangai`) casar.
   bool Function(String op)? failWhen;
   int listCalls = 0;
   int _ids = 0;
   final List<String> writes = [];
 
-  /// Segura cada escrita até ser liberada.
   Completer<void>? writeGate;
 
   PlaceList seed(
@@ -637,13 +595,10 @@ class FakeListsRepository implements ListsRepository {
     return list;
   }
 
-  /// Quem copiou cada lista: `'{dona}/{listId}'` → uids (F13).
   final Map<String, Set<String>> copies = {};
 
-  /// Para conferir "segue a dona" como as Rules (sem ele, libera).
   FakeUserRepository? users;
 
-  /// Quem está lendo (as Rules olham o leitor). Sem ele, libera.
   FakeAuthRepository? auth;
 
   Object? visibleListsError;
@@ -651,13 +606,10 @@ class FakeListsRepository implements ListsRepository {
   Object? recordCopyError;
   final List<String> visibleListsCalls = [];
 
-  /// Registros de cópia negados pelas Rules (ex.: 2ª cópia da mesma pessoa).
   int deniedCopies = 0;
 
-  /// Segura cada [copyCount] até ser liberado.
   Completer<void>? copyCountGate;
 
-  /// Segura cada [listLists] até ser liberado.
   Completer<void>? listGate;
 
   PlaceList? get(String uid, String id) => byUser[uid]?[id];
@@ -729,7 +681,7 @@ class FakeListsRepository implements ListsRepository {
   Future<List<PlaceList>> listVisibleLists(String ownerUid) async {
     visibleListsCalls.add(ownerUid);
     if (visibleListsError != null) throw visibleListsError!;
-    // Como as Rules: só a dona ou quem a segue.
+
     final reader = auth?.currentUserId;
     if (reader != null && reader != ownerUid && !_follows(reader, ownerUid)) {
       throw const ListAccessDeniedException();
@@ -760,7 +712,7 @@ class FakeListsRepository implements ListsRepository {
   }) async {
     writes.add('copy:$ownerUid/$listId:$copierUid');
     if (recordCopyError != null) throw recordCopyError!;
-    // A cópia precisa existir e manter o crédito original; uma por pessoa.
+
     final list = byUser[ownerUid]?[listId];
     final key = '$ownerUid/$listId';
     final target = byUser[copierUid]?[copiedListId];
@@ -795,7 +747,7 @@ class FakeListsRepository implements ListsRepository {
   Future<void> deleteList({required String uid, required String listId}) =>
       _write('delete:$listId', () {
         byUser[uid]?.remove(listId);
-        // O contador de cópias sai junto (mesmo batch).
+
         copies.remove('$uid/$listId');
       });
 
@@ -821,7 +773,6 @@ class FakeListsRepository implements ListsRepository {
   }) {
     final ids = listIds.toList();
     return _write('removeEverywhere:$placeId:${ids.join(',')}', () {
-      // Batch: valida tudo antes de aplicar.
       for (final id in ids) {
         _existing(uid, id);
       }
@@ -836,8 +787,6 @@ class FakeListsRepository implements ListsRepository {
   }
 }
 
-/// Mesmo contrato da implementação real (cache LRU, dedupe, backoff): só a
-/// fonte é um Map em memória.
 class FakeReviewPhotoRepository extends CachedReviewPhotoRepository {
   FakeReviewPhotoRepository([
     Map<String, Uint8List>? photos,
@@ -847,13 +796,10 @@ class FakeReviewPhotoRepository extends CachedReviewPhotoRepository {
 
   final Map<String, Uint8List> photos;
 
-  /// Leituras na fonte (depois do cache).
   final List<String> calls = [];
 
-  /// Ids cuja leitura falha (ex.: sem rede).
   final Set<String> failing = {};
 
-  /// Segura as respostas até completar (testes de "carregando").
   Completer<void>? gate;
 
   @override
@@ -866,15 +812,12 @@ class FakeReviewPhotoRepository extends CachedReviewPhotoRepository {
 }
 
 class FakePhotoPicker implements PhotoPicker {
-  /// Próxima resposta: bytes, `null` (cancelou) ou erro em [error].
   Uint8List? next;
   Object? error;
   final List<PhotoSource> calls = [];
 
-  /// Segura o seletor "aberto" até completar.
   Completer<void>? gate;
 
-  /// Foto pendente para [retrieveLost] (Android).
   Uint8List? lost;
   int retrieveLostCalls = 0;
 
@@ -895,8 +838,6 @@ class FakePhotoPicker implements PhotoPicker {
   }
 }
 
-/// Visitas ("Voltei aqui", F15) em memória, com a trava de 12 h aplicada
-/// como as Rules.
 class FakeVisitRepository implements VisitRepository {
   final List<Visit> stored = [];
   final List<NewVisit> created = [];
@@ -905,22 +846,17 @@ class FakeVisitRepository implements VisitRepository {
   Object? fetchError;
   Object? lockError;
 
-  /// Se definido, [createVisit] espera por ele antes de responder.
   Completer<void>? createGate;
 
-  /// Se definido, [visitLockOf] devolve este futuro.
   Future<DateTime?>? pendingLock;
 
   DateTime Function() clock = () => DateTime.utc(2026, 9, 10, 23);
 
-  /// `lastAt` por `'{uid}/{placeId}'`.
   final Map<String, DateTime> locks = {};
   final List<String> lockCalls = [];
   final List<List<String>> fetchCalls = [];
   final List<String> placeFetchCalls = [];
 
-  /// O que [createVisit] informa sobre o local novo (`null` = criou se veio
-  /// um newPlace).
   bool? placeCreated;
 
   void lock(String uid, String placeId, DateTime lastAt) =>
@@ -974,7 +910,6 @@ class FakeVisitRepository implements VisitRepository {
     return fakeAuthorBatches(stored, authorIds, perBatchLimit, limit);
   }
 
-  /// Limite por lote de 30 autores, como o `perBatchLimit` do Firestore.
   int perBatchLimit = 100;
 
   @override
@@ -992,9 +927,6 @@ class FakeVisitRepository implements VisitRepository {
   }
 }
 
-/// Simula a consulta por autores do Firestore: lotes de [whereInLimit]
-/// autores, cada um com as suas [perBatchLimit] (ou [limit]) idas mais
-/// recentes, juntados com o mesmo corte do app ([mergeAuthorBatches]).
 ActivityBatch<T> fakeAuthorBatches<T extends PlaceActivity>(
   List<T> stored,
   List<String> authorIds,
@@ -1026,8 +958,6 @@ ActivityBatch<T> fakeAuthorBatches<T extends PlaceActivity>(
   );
 }
 
-/// Relatos "Está aberto agora?" (F20) em memória, com a trava de 30 min
-/// aplicada como as Rules.
 class FakeOpenReportRepository implements OpenReportRepository {
   final List<OpenReport> stored = [];
   final List<NewOpenReport> created = [];
@@ -1036,12 +966,10 @@ class FakeOpenReportRepository implements OpenReportRepository {
   Object? fetchError;
   Object? lockError;
 
-  /// Se definido, [createReport] espera por ele antes de responder.
   Completer<void>? createGate;
 
   DateTime Function() clock = () => DateTime.utc(2026, 9, 10, 23);
 
-  /// `lastAt` por `'{uid}/{placeId}'`.
   final Map<String, DateTime> locks = {};
   final List<String> placeFetchCalls = [];
   final List<List<String>> placesFetchCalls = [];
@@ -1049,7 +977,6 @@ class FakeOpenReportRepository implements OpenReportRepository {
   void lock(String uid, String placeId, DateTime lastAt) =>
       locks['$uid/$placeId'] = lastAt;
 
-  /// Relato já gravado (de qualquer pessoa).
   void add(
     String placeId, {
     required bool open,

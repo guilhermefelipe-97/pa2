@@ -28,7 +28,6 @@ const _mangai = Place(
   city: 'Natal',
 );
 
-/// 12/10/2030 às 20h em Natal (longe do relógio real).
 final _today = DateTime.utc(2030, 10, 12, 23);
 
 const _blockedVisitText =
@@ -183,7 +182,7 @@ void main() {
       expect(find.text('Visita registrada'), findsOneWidget);
       expect(visits.created.single.authorName, 'Eu');
       expect(visits.created.single.companion, Companion.amigos);
-      // A visita aparece no detalhe, como "Você", sem notas.
+
       await tester.scrollUntilVisible(
         find.byType(VisitTile),
         180,
@@ -193,7 +192,7 @@ void main() {
       expect(find.byType(VisitTile), findsOneWidget);
       expect(find.textContaining('$visitTileLabel · Noite · Amigos'), findsOne);
       expect(find.text('🍽️'), findsNothing);
-      // Antes de 12 h: botão desabilitado, com o horário.
+
       final button = tester.widget<ButtonStyleButton>(
         find.byKey(const Key('place-visit')),
       );
@@ -267,7 +266,7 @@ void main() {
       );
       app.router.go(Routes.placeDetail('mangai'));
       await tester.pumpAndSettle();
-      // O selo mostra o ícone 🔁 (decorativo) + o texto.
+
       final badge = find.byKey(const Key('place-recurrence'));
       expect(
         find.descendant(of: badge, matching: find.text('5 idas de 3 amigos')),
@@ -277,7 +276,7 @@ void main() {
         find.descendant(of: badge, matching: find.text('🔁')),
         findsOneWidget,
       );
-      // O ícone fica fora da semântica: o leitor de tela fala só o texto.
+
       expect(find.bySemanticsLabel('5 idas de 3 amigos'), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp('🔁')), findsNothing);
       final averages = find.text('Médias das avaliações exibidas');
@@ -340,7 +339,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byType(VisitTile), findsOneWidget);
-      // Ninguém voltou (1 ida): sem selo.
+
       expect(find.text('🔁'), findsNothing);
     });
   });
@@ -399,8 +398,7 @@ void main() {
       );
       expect(confirm.onPressed, isNull);
       expect(visits.created, isEmpty);
-      // Sem envio, o toque fora fecha (e o temporizador de liberação vai
-      // junto com o ViewModel).
+
       await tester.tapAt(const Offset(20, 20));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('visit-confirm')), findsNothing);
@@ -441,7 +439,7 @@ void main() {
         find.descendant(of: row, matching: find.byType(AxisScores)),
         findsNothing,
       );
-      // O feed usa o relógio real: o tempo relativo varia.
+
       expect(
         tester.getSemantics(row).label,
         startsWith('Ana, você segue, foi aqui à noite, '),
@@ -466,7 +464,7 @@ void main() {
           ),
         );
       final visits = FakeVisitRepository()..clock = () => _today;
-      // Toni, no aparelho dele, toca "Voltei aqui".
+
       final toni = VisitViewModel(
         place: _mangai,
         authRepository: FakeAuthRepository(uid: 'toni'),

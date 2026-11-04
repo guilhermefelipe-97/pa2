@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Existing stored category values remain compatible with older lists.
-/// Only Material icons and category names are rendered in the interface.
 const listCategories = <({String? value, String label, IconData icon})>[
   (value: null, label: 'Geral', icon: Icons.bookmarks_outlined),
   (value: '☕', label: 'Cafés', icon: Icons.local_cafe_outlined),

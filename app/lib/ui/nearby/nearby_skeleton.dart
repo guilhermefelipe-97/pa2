@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Composição de carregamento do export Stitch, sem conteúdo fictício.
 class NearbySkeleton extends StatelessWidget {
   const NearbySkeleton({super.key});
 

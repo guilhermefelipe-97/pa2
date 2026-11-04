@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:naarea/data/firebase/firebase_account_repository.dart';
 import 'package:naarea/data/repositories/auth_repository.dart' as app;
 
-// O MockUser do SDK também é mutável; este teste registra suas chamadas.
 // ignore: must_be_immutable
 class TrackedUser extends MockUser {
   TrackedUser()

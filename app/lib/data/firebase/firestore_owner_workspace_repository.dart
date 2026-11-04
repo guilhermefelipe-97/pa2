@@ -26,7 +26,7 @@ class FirestoreOwnerWorkspaceRepository implements OwnerWorkspaceRepository {
     if (value.description.length > 1000 || value.hours.length > 500) {
       throw ArgumentError('Apresentação ou horários acima do limite.');
     }
-    // Rules revalidate the current owner at commit time, including revocations.
+
     await db
         .collection('placePresentations')
         .doc(placeId)

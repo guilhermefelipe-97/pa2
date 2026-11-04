@@ -59,7 +59,7 @@ class FirestoreReputationRepository implements ReputationRepository {
     if (text.isEmpty || text.length > 1000) {
       throw ArgumentError('Resposta de 1–1000 caracteres');
     }
-    // ID determinístico: reconcilia antes de repetir a tentativa.
+
     final existing = await replyFor(reviewId);
     if (existing != null) {
       if (existing.authorId == uid && existing.text == text) return;

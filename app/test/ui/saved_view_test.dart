@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import '../support/builders.dart';
 import '../support/fakes.dart';
 
-final _now = DateTime.utc(2026, 9, 28, 15); // 12h em Natal
+final _now = DateTime.utc(2026, 9, 28, 15);
 
 final _catalog = [
   place(
@@ -72,9 +72,9 @@ Future<_Setup> _pump(WidgetTester tester, _Setup s) async {
 }
 
 FakeSavedRepository _threeSaved() => FakeSavedRepository()
-  ..seed('me', 'a', DateTime.utc(2026, 9, 28, 13)) // há 2 h
-  ..seed('me', 'b', DateTime.utc(2026, 9, 27, 15)) // ontem
-  ..seed('me', 'c', DateTime.utc(2026, 9, 1, 15)); // 01/09
+  ..seed('me', 'a', DateTime.utc(2026, 9, 28, 13))
+  ..seed('me', 'b', DateTime.utc(2026, 9, 27, 15))
+  ..seed('me', 'c', DateTime.utc(2026, 9, 1, 15));
 
 void main() {
   group('savedAgo', () {
@@ -219,7 +219,6 @@ void main() {
       );
       final listCalls = repo.listCalls;
 
-      // O local entrou no catálogo e outro aparelho salvou mais um.
       s.places.places.add(place(id: 'novo', name: 'Recém-importado'));
       repo.seed('me', 'a', DateTime.utc(2026, 9, 28, 13));
       await tester.fling(

@@ -39,9 +39,7 @@ class _AccountSecurityViewState extends State<AccountSecurityView>
     try {
       await repo?.refresh();
       if (mounted) setState(() {});
-    } on Object {
-      /* Mantém o e-mail já carregado até uma nova consulta. */
-    }
+    } on Object {}
   }
 
   @override

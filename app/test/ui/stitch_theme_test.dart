@@ -178,7 +178,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(app.saved.byUser['me'], contains('p1'));
       expect(app.router.routeInformationProvider.value.uri.path, Routes.feed);
-      // Aguarda o aviso de salvamento, que também acompanha a troca de rota.
+
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
       app.router.go(Routes.person('me'));

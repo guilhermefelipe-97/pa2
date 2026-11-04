@@ -7,7 +7,6 @@ import '../../domain/models/place.dart';
 import '../core/osm_credit.dart';
 import 'nearby_view_model.dart';
 
-/// Os marcadores usam os mesmos resultados filtrados da lista.
 class NearbyMap extends StatefulWidget {
   const NearbyMap({
     super.key,

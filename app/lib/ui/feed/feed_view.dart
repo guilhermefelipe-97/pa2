@@ -35,9 +35,7 @@ class _FeedViewState extends State<FeedView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Seguir alguém acontece em Pessoas ou num perfil: ao voltar para
-    // Amigos (troca de aba ou retorno de uma rota por cima), recarrega se
-    // isso mudou quem aparece aqui.
+
     final active = ActiveTab.maybeOf(context);
     if (active == true && _active == false) widget.viewModel.reloadIfStale();
     _active = active;
@@ -56,8 +54,6 @@ class _FeedViewState extends State<FeedView> {
     widget.viewModel.load();
   }
 
-  // Ao voltar destas telas a aba fica ativa de novo (ActiveTab) e recarrega
-  // se alguém foi seguido/deixado de seguir no caminho.
   void _openPlace(FeedItem item) {
     context.push(Routes.placeDetail(item.placeId), extra: item);
   }
@@ -206,7 +202,6 @@ class _FeedViewState extends State<FeedView> {
           return RefreshIndicator(
             onRefresh: vm.retry,
             child: ListView.builder(
-              // Pull-to-refresh funciona mesmo com poucos cards.
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
               itemCount: items.length + offset + 2,
@@ -312,8 +307,6 @@ class _FeedViewState extends State<FeedView> {
   }
 }
 
-/// Nome aproximado do bairro a partir de um local próximo ao GPS já autorizado.
-/// Estado vazio/erro que também aceita puxar para atualizar.
 class _PullToRefresh extends StatelessWidget {
   const _PullToRefresh({required this.onRefresh, required this.child});
 

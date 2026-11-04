@@ -38,8 +38,6 @@ Future<void> showCreateListDialog(
   }
 }
 
-/// Renomear (nome + emoji) com as mesmas validações da criação. Completa com
-/// `null` se cancelou; senão, com o resultado da escrita.
 Future<bool?> showRenameListDialog(
   BuildContext context,
   ListsStore lists,
@@ -66,7 +64,6 @@ Future<bool?> showRenameListDialog(
   return lists.rename(list.id, values.name, emoji: values.emoji);
 }
 
-/// Pede confirmação antes de excluir. `true` = confirmou.
 Future<bool> confirmDeleteList(BuildContext context, PlaceList list) async {
   final ok = await showDialog<bool>(
     context: context,

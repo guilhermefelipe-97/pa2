@@ -8,8 +8,6 @@ import '../saved/saved_places_store.dart';
 import 'list_name_form.dart';
 import 'lists_store.dart';
 
-/// Abre o "Adicionar a lista" de [placeId] (F12). Sem [ListsStore] no
-/// contexto, não faz nada.
 Future<void> showAddToListSheet(BuildContext context, String placeId) async {
   if (context.read<ListsStore?>() == null) return;
   await showModalBottomSheet<void>(
@@ -21,8 +19,6 @@ Future<void> showAddToListSheet(BuildContext context, String placeId) async {
   );
 }
 
-/// Bottom sheet com as listas marcáveis e "Nova lista" inline. Marcar salva
-/// o local no "Quero ir"; desmarcar tira só daquela lista.
 class AddToListSheet extends StatefulWidget {
   const AddToListSheet({super.key, required this.placeId});
 
@@ -76,14 +72,13 @@ class _AddToListSheetState extends State<AddToListSheet> {
   @override
   Widget build(BuildContext context) {
     final lists = context.watch<ListsStore>();
-    // Reconstrói quando o "Quero ir" muda (contagens).
+
     context.watch<SavedPlacesStore?>();
     final theme = Theme.of(context);
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
 
     final Widget body;
     if (lists.isIdle) {
-      // Sem usuário: não há o que carregar (nada de spinner eterno).
       body = const Padding(
         padding: EdgeInsets.all(24),
         child: Center(child: Text(AddToListSheet.signedOutMessage)),

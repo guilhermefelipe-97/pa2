@@ -8,7 +8,6 @@ class FirestoreUserRepository implements UserRepository {
 
   final FirebaseFirestore _db;
 
-  /// Maior code point do BMP de uso privado: fecha a faixa da busca por prefixo.
   static const String _prefixUpperBound = '\uf8ff';
 
   CollectionReference<Map<String, dynamic>> get _users =>

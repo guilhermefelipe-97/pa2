@@ -28,9 +28,6 @@ import 'price_section.dart';
 import 'review_photo_strip.dart';
 import 'place_gallery.dart';
 
-/// Detalhe do local: foto grande, marcador "Quero ir" e as avaliações dos
-/// amigos ali. Abre por `placeId` sozinho (ex.: a partir dos salvos); com
-/// dados prontos da navegação, aparece já e só atualiza.
 class PlaceDetailView extends StatefulWidget {
   const PlaceDetailView({super.key, required this.viewModel});
 
@@ -66,28 +63,23 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Avaliação registrada.')));
     }
-    // `true`: avaliação nova; `false`: a tela de bloqueio do F03 registrou
-    // uma visita (F15). As duas aparecem no detalhe (como "Você").
+
     if (sent == false) widget.viewModel.markVisited();
     if (sent != null) widget.viewModel.load();
   }
 
-  /// "Voltei aqui" (F15): sheet com companhia opcional; registrada, avisa e
-  /// recarrega (a visita aparece como "Você" e conta na recorrência).
   Future<void> _visit(Place place) async {
     final registered = await showVisitSheet(context, place: place);
     if (!mounted || !registered) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text(VisitViewModel.successMessage)),
     );
-    // Trava local já (o botão desabilita sem esperar a releitura).
+
     widget.viewModel
       ..markVisited()
       ..load();
   }
 
-  /// Perfil de quem avaliou ("Você" abre o próprio). Seguir/deixar de seguir
-  /// lá muda quem aparece aqui: recarrega ao voltar, se mudou.
   Future<void> _openPerson(PlaceActivity r) async {
     await context.push(Routes.person(r.authorId));
     if (!mounted) return;
@@ -197,8 +189,7 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
     final at = vm.now();
     final item = vm.item;
     final overall = item == null ? null : friendsOverallScore(item);
-    // F27: uma seção de preço só — no fim da lista quando há idas (inclusive
-    // só a do próprio usuário), ou junto do convite quando não há nenhuma.
+
     final priceSection = PriceSection(
       key: const Key('place-price-section'),
       summary: vm.price,
@@ -325,7 +316,7 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                         'Não foi possível carregar tags. Tentar novamente',
                       ),
                     ),
-                  // F20: "Está aberto agora?" confirmado por quem está lá.
+
                   if (vm.openNow != null)
                     OpenNowSection(viewModel: vm.openNow!, place: place),
                   QueueSection(place: place, compact: true),
@@ -340,7 +331,7 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                         item.activities.firstWhere((a) => a.authorId == id),
                       ),
                     ),
-                    // F15: recorrência acima das notas.
+
                     if (vm.recurrenceLabel != null) ...[
                       const SizedBox(height: 12),
                       RecurrenceBadge(
@@ -348,8 +339,7 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                         label: vm.recurrenceLabel!,
                       ),
                     ],
-                    // F27: cabe no orçamento? A faixa típica aqui; a
-                    // distribuição e o rachar no fim da lista.
+
                     if (vm.price != null) ...[
                       const SizedBox(height: 12),
                       PriceChip(
@@ -455,8 +445,7 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
                 ),
               ),
             ),
-          // F27: preço relatado (faixa típica, distribuição, quem relatou
-          // e quanto dá para rachar).
+
           if (item != null)
             SliverToBoxAdapter(
               child: Padding(
@@ -505,7 +494,6 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
   }
 }
 
-/// Nenhum amigo avaliou o local ainda: convite para ser o primeiro.
 class _FriendsAvatars extends StatelessWidget {
   const _FriendsAvatars({
     required this.item,
@@ -596,12 +584,9 @@ class _NoFriendReviews extends StatelessWidget {
 
   final VoidCallback onReview;
 
-  /// "Voltei aqui" (F15) ao lado do convite.
   final Widget visitAction;
   final bool showActions;
 
-  /// F03: avaliou há menos de 30 dias (ex.: avaliação que ainda não chegou
-  /// na leitura): outro título e texto no lugar do botão.
   final String? reviewAgainLabel;
 
   @override
@@ -613,8 +598,6 @@ class _NoFriendReviews extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            // Com trava, a avaliação do usuário existe (talvez ainda não
-            // apareça na leitura): o convite "ninguém avaliou" seria falso.
             reviewAgainLabel != null
                 ? 'Você já avaliou este lugar'
                 : 'Nenhum amigo avaliou ainda',
@@ -645,8 +628,6 @@ class _NoFriendReviews extends StatelessWidget {
   }
 }
 
-/// F03: no lugar do CTA "Avaliar de novo", quando a última avaliação do
-/// usuário aqui tem menos de 30 dias.
 class _ReviewAgainLater extends StatelessWidget {
   const _ReviewAgainLater({required this.label});
 
@@ -672,14 +653,11 @@ class _ReviewAgainLater extends StatelessWidget {
   }
 }
 
-/// "Voltei aqui" (F15). Com visita há menos de 12 h, o botão fica
-/// desabilitado e a explicação aparece logo abaixo.
 class _VisitAction extends StatelessWidget {
   const _VisitAction({required this.onVisit, this.blockedLabel});
 
   final VoidCallback onVisit;
 
-  /// "Você registrou uma visita às 13h. De novo a partir das 01h."
   final String? blockedLabel;
 
   @override
@@ -710,7 +688,6 @@ class _VisitAction extends StatelessWidget {
   }
 }
 
-/// Tela sem os dados do local (carregando, erro, não encontrado).
 class _Bare extends StatelessWidget {
   const _Bare({required this.child});
 
@@ -775,8 +752,6 @@ class _CenteredMessage extends StatelessWidget {
   }
 }
 
-/// `Foto: autor · licença` (+ selo "ilustrativa"): atribuição exigida
-/// pelas licenças CC BY / CC BY-SA das fotos do seed.
 class PhotoCredit extends StatelessWidget {
   const PhotoCredit({super.key, required this.place});
 
@@ -823,7 +798,6 @@ class PhotoCredit extends StatelessWidget {
   }
 }
 
-/// Endereço e cozinha do local (dados do OSM), quando existem.
 class PlaceFacts extends StatelessWidget {
   const PlaceFacts({super.key, required this.place});
 

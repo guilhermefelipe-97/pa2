@@ -20,7 +20,6 @@ List<({String id, String name})> distinctAuthors(FeedItem item) {
   ];
 }
 
-/// Cada amigo contribui uma vez, com a avaliação mais recente e os eixos que preencheu.
 double? friendsOverallScore(FeedItem item) {
   final perPerson = <double>[];
   for (final source in item.sources) {
@@ -39,7 +38,6 @@ double? friendsOverallScore(FeedItem item) {
   return perPerson.reduce((a, b) => a + b) / perPerson.length;
 }
 
-/// Local, nota dos amigos e comentário recente com autoria.
 class FeedCard extends StatelessWidget {
   const FeedCard({
     super.key,

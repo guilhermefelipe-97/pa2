@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// Moldura das telas principais: barra de navegação inferior
-/// (Amigos · Perto · Quero ir · Pessoas) em volta do branch ativo.
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   void _select(int index) {
-    // Tocar na aba ativa volta à raiz dela.
     navigationShell.goBranch(
       index,
       initialLocation: index == navigationShell.currentIndex,
@@ -18,8 +15,6 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Uma rota fora do shell (detalhe, perfil) por cima deixa as abas
-    // invisíveis; ao voltar, a aba atual fica ativa de novo ([ActiveTab]).
     final shellIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     return Scaffold(
       body: _ShellVisibility(isCurrent: shellIsCurrent, child: navigationShell),
@@ -59,11 +54,6 @@ class AppShell extends StatelessWidget {
   }
 }
 
-/// Container dos branches: como o `StatefulShellRoute.indexedStack` (estado
-/// de cada aba preservado num [IndexedStack]), mas desliga os [Hero]s das
-/// abas escondidas — senão um card invisível de outra aba, com a mesma tag
-/// do local, "voaria" para o detalhe (e tags repetidas disparam assert) — e
-/// avisa cada aba se ela está visível ([ActiveTab]).
 class AppBranchStack extends StatelessWidget {
   const AppBranchStack({
     super.key,
@@ -99,7 +89,6 @@ class AppBranchStack extends StatelessWidget {
   }
 }
 
-/// O shell é a rota do topo (nenhuma rota de fora dele por cima).
 class _ShellVisibility extends InheritedWidget {
   const _ShellVisibility({required this.isCurrent, required super.child});
 
@@ -116,16 +105,11 @@ class _ShellVisibility extends InheritedWidget {
       oldWidget.isCurrent != isCurrent;
 }
 
-/// Diz a uma aba se ela é a visível: aba selecionada e sem outra rota por
-/// cima do shell. Voltar a ficar ativa (troca de aba ou retorno de rota) é
-/// quando feed e Pessoas recarregam se seguir/deixar de seguir os deixou
-/// desatualizados.
 class ActiveTab extends InheritedWidget {
   const ActiveTab({super.key, required this.isActive, required super.child});
 
   final bool isActive;
 
-  /// `null` fora do shell (ex.: tela montada sozinha num teste).
   static bool? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<ActiveTab>()?.isActive;
 

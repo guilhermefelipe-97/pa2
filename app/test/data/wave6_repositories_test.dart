@@ -65,7 +65,7 @@ void main() {
         commitBatch: (_) => Future<void>.error(StateError('rede')),
       );
       await expectLater(rejected.createReport(report(5)), throwsStateError);
-      // Operação encerrada e ausência confirmada permitem editar, sem trava permanente.
+
       await expectLater(rejected.createReport(report(8)), throwsStateError);
       expect(await rejected.reconcilePending('a', 'p'), isNull);
     },

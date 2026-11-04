@@ -12,8 +12,6 @@ import '../core/follow_events.dart';
 import '../core/load_visits.dart';
 import '../core/safe_change_notifier.dart';
 
-/// Feed "Amigos foram aqui" (F05): avaliações e visitas ("Voltei aqui",
-/// F15) de quem o usuário segue, por local.
 class FeedViewModel extends SafeChangeNotifier {
   FeedViewModel({
     required AuthRepository authRepository,
@@ -54,7 +52,7 @@ class FeedViewModel extends SafeChangeNotifier {
 
   void _preferencesChanged() {
     final store = dietary!;
-    // Oculta cards antigos enquanto preferências são desconhecidas ou mudam.
+
     if (!store.ready || store.loading || store.revision != _dietaryRevision) {
       _generation++;
       _items = const [];
@@ -80,7 +78,6 @@ class FeedViewModel extends SafeChangeNotifier {
   final FollowStaleness _follow;
   final DateTime Function() _clock;
 
-  /// "Agora" para o tempo relativo dos cards (injetável nos testes).
   DateTime now() => _clock();
 
   bool _isLoading = false;
@@ -96,23 +93,14 @@ class FeedViewModel extends SafeChangeNotifier {
 
   Set<String> _following = const {};
 
-  /// O usuário segue [uid] (segundo a última carga): selo "você segue" no
-  /// card, sem leituras extras.
   bool isFollowing(String uid) => _following.contains(uid);
 
-  /// Usuário da última carga bem-sucedida (troca de conta limpa o estado).
   String? _loadedUid;
 
-  /// Alguém foi seguido/deixado de seguir em outra tela desde o início da
-  /// última carga.
   bool get isStale => _follow.isStale;
 
-  /// Recarrega só se ficou desatualizado. Chamado quando o feed volta a ficar
-  /// visível (retorno de rota ou ativação da aba). Uma carga que começou
-  /// depois da mudança já basta: não agenda outra.
   Future<void> reloadIfStale() => _follow.isStale ? load() : Future.value();
 
-  /// Não segue ninguém: mostrar o CTA "Encontrar pessoas".
   bool get followsNobody => _followsNobody;
 
   bool _loadedOnce = false;
@@ -121,9 +109,6 @@ class FeedViewModel extends SafeChangeNotifier {
   bool _reloadPending = false;
   Future<void>? _inFlight;
 
-  /// Recarrega o feed. Se já houver uma carga em andamento, agenda mais uma
-  /// para logo depois (ex.: voltou da tela de avaliação durante a carga) e
-  /// devolve um Future que só completa quando essa recarga terminar.
   Future<void> load() {
     if (_inFlight != null) {
       _reloadPending = true;
@@ -149,7 +134,6 @@ class FeedViewModel extends SafeChangeNotifier {
     final uid = _auth.currentUserId;
     final generation = _generation;
     if (uid != _loadedUid) {
-      // Outra conta (ou saiu): nada do usuário anterior fica visível.
       _following = const {};
       _items = const [];
       _followsNobody = false;
@@ -157,7 +141,7 @@ class FeedViewModel extends SafeChangeNotifier {
       _loadedUid = null;
     }
     if (uid == null) return;
-    // Esta carga lê o estado atual: mudanças anteriores já entram nela.
+
     _follow.clear();
     _isLoading = true;
     _errorMessage = null;
@@ -172,11 +156,10 @@ class FeedViewModel extends SafeChangeNotifier {
         throw StateError('preferências indisponíveis');
       }
       final selected = {...?preferences?.tags};
-      // Cópia: o Set pode ser o do repositório.
+
       final following = {...await _users.getFollowing(uid)}..remove(uid);
       var items = const <FeedItem>[];
       if (following.isNotEmpty) {
-        // Falha só das visitas: cards só com as avaliações.
         final read = await loadFriendActivities(
           reviews: _reviews,
           visits: _visits,
@@ -184,7 +167,7 @@ class FeedViewModel extends SafeChangeNotifier {
           where: 'feed',
           publicOnly: true,
         );
-        // Só os locais que aparecem no feed; _loadPlaces nunca lança.
+
         final places = await _loadPlaces({
           for (final a in read.activities) a.placeId,
         });
@@ -202,8 +185,7 @@ class FeedViewModel extends SafeChangeNotifier {
       items = items
           .where((i) => matchesFoodTags(selected, tags[i.placeId] ?? {}))
           .toList();
-      // Só depois de tudo dar certo: uma falha no meio mantém o estado
-      // anterior inteiro (relação, cards e CTA coerentes entre si).
+
       _following = following;
       _followsNobody = following.isEmpty;
       _items = items;
@@ -224,9 +206,6 @@ class FeedViewModel extends SafeChangeNotifier {
     }
   }
 
-  /// Falha ao ler os locais não derruba o feed: os cards usam o fallback
-  /// (nome da avaliação, sem foto) e a leitura é tentada de novo na próxima
-  /// carga. O repositório guarda em cache o que já leu (1 leitura por local).
   Future<Map<String, Place>> _loadPlaces(Set<String> ids) async {
     if (ids.isEmpty) return const {};
     try {
@@ -243,8 +222,6 @@ class FeedViewModel extends SafeChangeNotifier {
 
   Future<void> signOut() => _auth.signOut();
 
-  /// Uid do usuário logado: o ícone "Você" abre o próprio perfil (as
-  /// próprias avaliações e visitas, que o feed não mostra).
   String? get currentUserId => _auth.currentUserId;
 
   @override

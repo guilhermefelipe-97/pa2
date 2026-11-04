@@ -299,7 +299,6 @@ void main() {
       expect(tile('l1').value, isTrue);
       expect(tile('l2').value, isFalse);
 
-      // Desmarcar: sai só daquela lista, continua no Quero ir.
       await tester.tap(find.byKey(const Key('list-check-l1')));
       await tester.pumpAndSettle();
       expect(tile('l1').value, isFalse);
@@ -426,7 +425,6 @@ void main() {
       await openSheet(
         tester,
         seed: (l) {
-          // Salvos: membro não salvo seria limpo pela reconciliação.
           for (var i = 0; i < 200; i++) {
             l.saved!.seed('me', 'p$i', DateTime.utc(2026, 9, 1));
           }
@@ -460,7 +458,7 @@ void main() {
         find.byKey(const Key('list-check-l1')),
       );
       expect(tile.value, isFalse);
-      // O local já estava salvo: continua.
+
       expect(app.saved.byUser['me']!.containsKey('a'), isTrue);
     });
   });
@@ -494,8 +492,7 @@ void main() {
           seed: (l) => l.seed('me', 'l', 'Lista'),
         );
         places.getGate = Completer();
-        // Salvar confirma o local no catálogo antes de gravar (G2), e essa
-        // leitura também espera o portão: não dá para esperar o salvo aqui.
+
         final adding = app.listsStore(tester).setMembership('l', 'd', true);
         await tester.pump();
         await tester.ensureVisible(_chip('l'));

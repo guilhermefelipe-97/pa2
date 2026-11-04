@@ -16,8 +16,6 @@ import '../feed/widgets/author_avatar.dart';
 import '../feed/widgets/visit_tile.dart' show visitMeta, visitTileLabel;
 import 'profile_view_model.dart';
 
-/// Perfil simples (`/pessoa/:uid`): nome, Seguir/Seguindo e as avaliações e
-/// visitas ("Voltei aqui", F15) da pessoa, mais recentes primeiro.
 class ProfileView extends StatefulWidget {
   const ProfileView({super.key, required this.viewModel});
 
@@ -100,8 +98,6 @@ class _ProfileViewState extends State<ProfileView> {
     }
   }
 
-  // O local pode levar a outro perfil, onde seguir/deixar de seguir muda
-  // este: recarrega ao voltar, se mudou.
   Future<void> _openPlace(PlaceActivity r) async {
     await context.push(Routes.placeDetail(r.placeId));
     if (!mounted) return;
@@ -117,7 +113,6 @@ class _ProfileViewState extends State<ProfileView> {
 
         return Scaffold(
           appBar: AppBar(
-            // Aberto por link direto: sem tela anterior, "voltar" vai ao feed.
             automaticallyImplyLeading: false,
             leading: GoRouterState.of(context).uri.path == '/perfil'
                 ? null
@@ -203,7 +198,7 @@ class _ProfileViewState extends State<ProfileView> {
             ),
         ],
       );
-    } // Item 0: cabeçalho; depois avaliações e visitas (ou o texto de vazio).
+    }
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -585,7 +580,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// Uma lista visível no perfil (F13): emoji, nome e quantos locais.
 class _ProfileListTile extends StatelessWidget {
   const _ProfileListTile({
     super.key,
@@ -631,10 +625,8 @@ class _ProfileListTile extends StatelessWidget {
   }
 }
 
-/// "1 local", "12 locais".
 String placesCountLabel(int n) => n == 1 ? '1 local' : '$n locais';
 
-/// Uma visita no perfil (F15): local e contexto, sem notas.
 class _ProfileVisitTile extends StatelessWidget {
   const _ProfileVisitTile({
     super.key,

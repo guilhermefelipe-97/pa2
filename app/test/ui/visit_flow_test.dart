@@ -31,7 +31,6 @@ const _mangai = Place(
   city: 'Natal',
 );
 
-/// 12/10/2030 às 20h em Natal.
 final _today = DateTime.utc(2030, 10, 12, 23);
 
 PlaceDetailViewModel _detail({
@@ -83,17 +82,17 @@ void main() {
       await tester.pump();
 
       final confirm = find.byKey(const Key('visit-confirm'));
-      await tester.tapAt(const Offset(20, 20)); // barreira
-      await tester.pump(const Duration(seconds: 1)); // spinner: sem settle
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pump(const Duration(seconds: 1));
       expect(confirm, findsOneWidget);
       await tester.drag(
         find.byKey(const Key('visit-handle')),
         const Offset(0, 500),
       );
-      await tester.pump(const Duration(seconds: 1)); // spinner: sem settle
+      await tester.pump(const Duration(seconds: 1));
       expect(confirm, findsOneWidget);
-      await tester.binding.handlePopRoute(); // voltar do sistema
-      await tester.pump(const Duration(seconds: 1)); // spinner: sem settle
+      await tester.binding.handlePopRoute();
+      await tester.pump(const Duration(seconds: 1));
       expect(confirm, findsOneWidget);
 
       visits.createGate!.complete();
@@ -134,7 +133,6 @@ void main() {
       'feed: visita mais antiga que o corte das avaliações é descartada',
       () async {
         final reviews = FakeReviewRepository()
-          // Lote cheio (2): o corte das avaliações é t(5).
           ..perBatchLimit = 2
           ..stored.addAll([
             review(
@@ -175,9 +173,7 @@ void main() {
           followEvents: FollowEvents(),
         );
         await vm.load();
-        // O lote de avaliações pode estar incompleto antes de 05/09: a visita
-        // de 02/09 em "y" não aparece sozinha (as avaliações dessa época não
-        // vieram). Sem o corte comum, "y" viraria um card.
+
         expect(vm.items.map((i) => i.placeId), ['x']);
         expect(vm.items.single.trips, 3);
       },
@@ -361,8 +357,8 @@ void main() {
   });
 
   group('item 7: linha de fonte', () {
-    final now = DateTime.utc(2026, 9, 28, 15); // 12h em Natal
-    final night = DateTime.utc(2026, 9, 27, 22); // 19h de ontem
+    final now = DateTime.utc(2026, 9, 28, 15);
+    final night = DateTime.utc(2026, 9, 27, 22);
     final fiveDaysAgo = DateTime.utc(2026, 9, 23, 15);
 
     testWidgets('visita depois de avaliação: eixos com "(avaliou há 5 dias)"; '
@@ -609,7 +605,7 @@ void main() {
       );
       app.router.go(Routes.placeDetail('mangai'));
       await tester.pumpAndSettle();
-      // Outro aparelho avaliou depois que o detalhe abriu.
+
       reviews.lock('me', 'mangai', _today);
       await tester.tap(find.byKey(const Key('place-review')));
       await tester.pumpAndSettle();

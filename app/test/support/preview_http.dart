@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-/// Local test photos only; no requests leave the preview renderer.
 class PreviewPhotoClient implements HttpClient {
   PreviewPhotoClient(this.photos);
   final Map<String, List<int>> photos;

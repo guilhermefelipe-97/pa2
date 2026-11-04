@@ -36,13 +36,10 @@ class FirestoreListsRepository implements ListsRepository {
 
   @override
   Future<List<PlaceList>> listVisibleLists(String ownerUid) async {
-    // O filtro é obrigatório: as Rules só liberam a consulta do seguidor
-    // que prova `visible == true`.
     final QuerySnapshot<Map<String, dynamic>> snap;
     try {
       snap = await _lists(ownerUid).where('visible', isEqualTo: true).get();
     } on FirebaseException catch (e, stack) {
-      // Quem não segue a dona (ou deixou de seguir): negado pelas Rules.
       if (e.code == 'permission-denied') {
         Error.throwWithStackTrace(const ListAccessDeniedException(), stack);
       }
@@ -77,12 +74,12 @@ class FirestoreListsRepository implements ListsRepository {
           for (final p in ids)
             if (p is String) p,
       ],
-      // Escrita local ainda sem o timestamp do servidor: acabou de criar.
+
       createdAt: switch (data['createdAt']) {
         final Timestamp ts => ts.toDate(),
         _ => now,
       },
-      // Listas anteriores ao F13 não têm a chave: privadas.
+
       visible: data['visible'] == true,
       copiedFrom: fromUid is String && fromName is String && fromList is String
           ? ListCredit(uid: fromUid, name: fromName, listId: fromList)
@@ -99,8 +96,6 @@ class FirestoreListsRepository implements ListsRepository {
     required List<String> placeIds,
     ListCredit? copiedFrom,
   }) {
-    // Schema exato validado pelas Rules (o trio do crédito vem junto ou não
-    // vem; `visible` ausente = privada).
     return _lists(uid).doc(listId).set({
       'name': name,
       'emoji': emoji,
@@ -193,13 +188,10 @@ class FirestoreListsRepository implements ListsRepository {
     });
   }
 
-  /// Máximo de escritas num batch do Firestore.
   static const int maxBatchWrites = 500;
 
   @override
   Future<void> deleteList({required String uid, required String listId}) async {
-    // O contador de cópias (F13) sai junto: no mesmo batch da lista. Com
-    // mais de 499 cópias, as excedentes saem antes, em batches próprios.
     final copies = (await _copies(uid, listId).get()).docs;
     final last = maxBatchWrites - 1;
     final early = copies.length > last ? copies.length - last : 0;

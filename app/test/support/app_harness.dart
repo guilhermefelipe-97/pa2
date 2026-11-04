@@ -37,7 +37,6 @@ import 'package:provider/provider.dart';
 
 import 'fakes.dart';
 
-/// App inteiro (router + providers como no main.dart) com fakes.
 class TestApp {
   TestApp({
     required this.auth,
@@ -66,7 +65,6 @@ class TestApp {
   final FakeLocationService location;
   final FakeVisitRepository visits;
 
-  /// "Está aberto agora?" (F20): só existe quando o teste o fornece.
   final FakeOpenReportRepository? openReports;
 
   SavedPlacesStore store(WidgetTester tester) => Provider.of<SavedPlacesStore>(
@@ -118,7 +116,7 @@ Future<TestApp> pumpApp(
   final r = reviews ?? FakeReviewRepository();
   final p = placeRepository ?? FakePlaceRepository(places);
   final s = saved ?? FakeSavedRepository();
-  // As Rules das listas (F13) olham quem lê e quem segue quem.
+
   final l = (lists ?? FakeListsRepository(saved: s))
     ..users ??= u
     ..auth ??= auth;
@@ -178,7 +176,7 @@ Future<TestApp> pumpApp(
             authRepository: auth,
             savedRepository: s,
             clock: clock,
-            // Igual ao main.dart (G2): local descoberto nasce antes do salvo.
+
             persistPlace: (uid, placeId) =>
                 ensurePlaceForSave(p, uid: uid, placeId: placeId),
           ),
@@ -227,8 +225,6 @@ Future<TestApp> pumpApp(
   );
 }
 
-/// ViewModel do detalhe cujos fakes têm exatamente os dados do [item]
-/// (a recarga confirma o que veio do feed).
 PlaceDetailViewModel detailVmFor(FeedItem item, {DateTime? now}) {
   final users = FakeUserRepository()
     ..followingByUser['me'] = {for (final a in item.activities) a.authorId};

@@ -4,8 +4,6 @@ import '../../domain/models/place_activity.dart';
 import '../activity_batch.dart';
 import '../chunk.dart';
 
-/// Pagina inclusive documentos legados (silent ausente = público). Não usa
-/// where(silent=false), que excluiria os documentos das versões anteriores.
 Future<ActivityBatch<T>> fetchPublicByAuthors<T extends PlaceActivity>(
   CollectionReference<Map<String, dynamic>> collection,
   List<String> authors, {
@@ -57,12 +55,6 @@ Future<ActivityBatch<T>> fetchPublicByAuthors<T extends PlaceActivity>(
   return mergeAuthorBatches(batches, batchLimit: perBatchLimit);
 }
 
-/// Idas (avaliações ou visitas) de [authorIds] em [collection], mais
-/// recentes primeiro: `authorId in` em lotes de [whereInLimit], cada lote com
-/// as suas `min(limit, perBatchLimit)` mais recentes, juntados por
-/// [mergeAuthorBatches] (corte consistente entre lotes cheios). Docs fora do
-/// schema ([fromDoc] devolve `null`) são ignorados, mas o `createdAt` deles
-/// conta para o corte.
 Future<ActivityBatch<T>> fetchLatestByAuthors<T extends PlaceActivity>(
   CollectionReference<Map<String, dynamic>> collection,
   List<String> authorIds, {
@@ -102,9 +94,6 @@ Future<ActivityBatch<T>> fetchLatestByAuthors<T extends PlaceActivity>(
   );
 }
 
-/// Idas de [authorIds] no local [placeId], mais recentes primeiro. Filtra no
-/// servidor (`placeId ==` + `authorId in`, lotes de [whereInLimit]): não lê
-/// idas de terceiros e não perde as mais antigas.
 Future<List<T>> fetchForPlace<T extends PlaceActivity>(
   CollectionReference<Map<String, dynamic>> collection,
   String placeId,

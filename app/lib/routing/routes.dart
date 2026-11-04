@@ -20,7 +20,6 @@ abstract final class Routes {
   static const placeDetailPattern = '/local/:placeId';
   static const personPattern = '/pessoa/:uid';
 
-  /// Lista visível de uma pessoa (F13), com "Copiar lista".
   static const personListPattern = '/pessoa/:uid/lista/:listId';
 
   static String reviewFor(String placeId) => '/avaliar/$placeId';

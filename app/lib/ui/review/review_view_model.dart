@@ -18,13 +18,9 @@ import '../../domain/review_lock.dart';
 import '../core/messages.dart';
 import '../core/safe_change_notifier.dart';
 
-/// Recodifica fora da UI (isolate; na web roda na mesma thread).
 Future<Uint8List> compressPhotoInBackground(Uint8List bytes) =>
     compute(compressPhoto, bytes);
 
-/// Avaliação em 3 eixos (F01), cada um opcional com mínimo de 1 (F14), com
-/// contexto (F02), comentário e foto opcionais (G1). Respeita o período
-/// mínimo entre avaliações do mesmo local (F03): ver [checkLock].
 class ReviewViewModel extends SafeChangeNotifier {
   ReviewViewModel({
     required this.place,
@@ -99,8 +95,6 @@ class ReviewViewModel extends SafeChangeNotifier {
   static const String noCameraMessage =
       'Este aparelho não tem câmera disponível';
 
-  /// Acesso negado pelo sistema: explica como liberar, no caminho de
-  /// configurações de cada plataforma.
   static String permissionDeniedMessage(
     PhotoSource source,
     TargetPlatform platform,
@@ -123,30 +117,20 @@ class ReviewViewModel extends SafeChangeNotifier {
 
   bool _isCheckingLock = false;
 
-  /// Consultando a trava do F03 (o formulário ainda não aparece).
   bool get isCheckingLock => _isCheckingLock;
 
   DateTime? _blockedSince;
 
-  /// Hora da última avaliação, quando ainda dentro do período mínimo (F03);
-  /// `null` = pode avaliar.
   DateTime? get blockedSince => _blockedSince;
 
-  /// Avaliou o local há menos de [reviewCooldown]: sem formulário.
   bool get isBlocked => isOwnBusiness || _blockedSince != null;
 
-  /// "Você avaliou este lugar em 12/10. Pode avaliar de novo a partir de
-  /// 11/11 às 20h."
   String? get blockedMessage {
     if (isOwnBusiness) return ownerContributionMessage;
     final since = _blockedSince;
     return since == null ? null : reviewBlockedMessage(since);
   }
 
-  /// Consulta a trava do F03 antes de mostrar o formulário (com
-  /// [showProgress], o formulário fica oculto enquanto consulta). Erro ou
-  /// mais de [reviewLockTimeout]: segue sem trava, e as Rules negam o envio
-  /// se ainda estiver travado.
   Future<void> checkLock({bool showProgress = true}) async {
     final uid = _auth.currentUserId;
     if (uid == null || _isCheckingLock) return;
@@ -189,34 +173,26 @@ class ReviewViewModel extends SafeChangeNotifier {
 
   PriceBand? _priceBand;
 
-  /// Gasto por pessoa (F27); opcional, nunca bloqueia o envio.
   PriceBand? get priceBand => _priceBand;
 
-  /// Texto como digitado (é aparado só no envio).
   String get comment => _comment;
 
-  /// Acima de 280 unidades UTF-16 depois do trim (mesma conta das Rules).
   bool get commentTooLong => !Review.isCommentWithinLimit(_comment);
 
   Uint8List? _photo;
 
-  /// JPEG já recodificado (≤ 1080 px, ≤ 150.000 bytes, sem EXIF) que vai
-  /// junto com a avaliação; `null` = sem foto.
   Uint8List? get photo => _photo;
 
   bool _isPicking = false;
 
-  /// Câmera ou galeria aberta (não abre um segundo seletor).
   bool get isPicking => _isPicking;
 
   bool _isProcessingPhoto = false;
 
-  /// Recodificando a foto escolhida (Enviar fica desabilitado).
   bool get isProcessingPhoto => _isProcessingPhoto;
 
   String? _photoMessage;
 
-  /// Aviso sobre a foto (não deu para usar, permissão negada).
   String? get photoMessage => _photoMessage;
 
   bool _isSubmitting = false;
@@ -225,8 +201,6 @@ class ReviewViewModel extends SafeChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  /// Avaliação mínima (F14): pelo menos um eixo; os outros, companhia,
-  /// comentário e foto são opcionais.
   bool get hasValidAxes =>
       Scores.isValidCombination(_food, _ambience, _service);
 
@@ -245,29 +219,21 @@ class ReviewViewModel extends SafeChangeNotifier {
   void setAmbience(int value) => _set(() => _ambience = _clamp(value));
   void setService(int value) => _set(() => _service = _clamp(value));
 
-  /// "Limpar": o eixo volta a não avaliado (nunca zero).
   void clearFood() => _set(() => _food = null);
   void clearAmbience() => _set(() => _ambience = null);
   void clearService() => _set(() => _service = null);
 
-  /// Tocar de novo na companhia selecionada desmarca.
   void toggleCompanion(Companion value) =>
       _set(() => _companion = _companion == value ? null : value);
 
   void setComment(String value) => _set(() => _comment = value);
 
-  /// Faixa escolhida (F27); `null` limpa. Ignorada durante o envio. Não
-  /// mexe na mensagem de erro (o preço não resolve erro nenhum).
   void setPriceBand(PriceBand? value) {
     if (_isSubmitting || value == _priceBand) return;
     _priceBand = value;
     notifyListeners();
   }
 
-  /// Abre a câmera ou a galeria. Cancelar não muda nada (nem a foto atual).
-  /// A foto escolhida é sempre recodificada; se não der, avisa e segue com a
-  /// foto que já havia (ou sem foto).
-  /// Ocupado com a foto ou o envio: os botões de foto ficam desabilitados.
   bool get photoBusy => _isSubmitting || _isPicking || _isProcessingPhoto;
 
   Future<void> pickPhoto(PhotoSource source) async {
@@ -291,7 +257,6 @@ class ReviewViewModel extends SafeChangeNotifier {
     await _usePhoto(original);
   }
 
-  /// Android: recupera a foto tirada antes de o sistema encerrar o app.
   Future<void> recoverLostPhoto() async {
     if (photoBusy) return;
     final Uint8List? original;
@@ -317,8 +282,6 @@ class ReviewViewModel extends SafeChangeNotifier {
     return photoUnusableMessage;
   }
 
-  /// Recodifica [original]. Se falhar, avisa e mantém a foto que já havia
-  /// (ou segue sem foto).
   Future<void> _usePhoto(Uint8List original) async {
     _isProcessingPhoto = true;
     _photoMessage = null;
@@ -358,7 +321,6 @@ class ReviewViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// Retorna `true` quando a avaliação foi gravada.
   Future<bool> submit() async {
     if (!canSubmit) return false;
     final uid = _auth.currentUserId;
@@ -382,7 +344,7 @@ class ReviewViewModel extends SafeChangeNotifier {
           .timeout(const Duration(seconds: 10));
       if (profile == null) throw StateError('perfil ausente');
       if (_auth.currentUserId != uid || isDisposed) return false;
-      // Local só descoberto (Photon, G2): nasce no mesmo batch da avaliação.
+
       final newPlace = place.discovered ? place : null;
       final result = await _reviews.createReview(
         NewReview(
@@ -393,7 +355,7 @@ class ReviewViewModel extends SafeChangeNotifier {
           placeName: place.name,
           scores: Scores(food: _food, ambience: _ambience, service: _service),
           companion: _companion,
-          comment: _comment, // NewReview normaliza: trim, vazio → null
+          comment: _comment,
           priceBand: _priceBand,
           tags: tags.toList(),
         ),
@@ -404,16 +366,11 @@ class ReviewViewModel extends SafeChangeNotifier {
         if (result.placeCreated) {
           _places?.markPersisted(newPlace);
         } else {
-          // Outra pessoa criou o local (dados dela, talvez outro nome): a
-          // próxima leitura busca o doc gravado.
           _places?.invalidate(newPlace.id);
         }
       }
       return _auth.currentUserId == uid && !isDisposed;
     } on Object {
-      // Inclui permission-denied das Rules. Uma causa comum é a trava do F03
-      // ter nascido depois de abrir o formulário (outro aparelho, corrida):
-      // confere de novo e, se travou, mostra a tela de bloqueio com as datas.
       await checkLock(showProgress: false);
       if (!isBlocked) _errorMessage = saveError;
       return false;

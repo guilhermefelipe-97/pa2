@@ -42,7 +42,7 @@ void main() {
       ];
       rows.add(report('fora', 'fora', 180, DateTime.utc(2026, 10, 23, 20)));
       expect(historicalQueue(rows, evening)!.count, 3);
-      // 23 UTC e 00 UTC pertencem à mesma faixa local 20–21 e ao mesmo dia local.
+
       final midnight = DateTime.utc(2026, 10, 31, 0);
       final crossing = [
         for (var i = 1; i <= 3; i++)

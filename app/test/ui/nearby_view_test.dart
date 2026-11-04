@@ -43,7 +43,7 @@ Future<TestApp> _openNearby(
     reviews: reviews,
     visits: visits,
   );
-  // A consulta do chip GPS de Amigos não pertence às ações da aba Perto.
+
   app.places.nearbyCalls.clear();
   await tester.tap(_tab('Perto'));
   await tester.pumpAndSettle();
@@ -136,7 +136,7 @@ void main() {
         .map((d) => d.label)
         .toList();
     expect(labels, ['Amigos', 'Perto', 'Quero ir', 'Pessoas', 'Perfil']);
-    // A aba só é montada (e a permissão só é vista) quando visitada.
+
     expect(app.location.hasPermissionCalls, 0);
 
     await tester.tap(_tab('Perto'));
@@ -218,7 +218,7 @@ void main() {
           matching: find.byType(Scrollable),
         ),
       );
-      // Na lista, o item também mostra quem foi.
+
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('nearby-perto240')),
@@ -295,7 +295,7 @@ void main() {
       find.descendant(of: item, matching: find.text('Ana voltou 2 vezes')),
       findsOneWidget,
     );
-    // Ícone decorativo ao lado do texto.
+
     expect(
       find.descendant(of: item, matching: find.text('🔁')),
       findsOneWidget,
@@ -320,7 +320,7 @@ void main() {
     expect(find.text('Longe 700'), findsWidgets);
     expect(find.text('700 m · Restaurante · Ponta Negra'), findsWidgets);
     expect(app.places.nearbyCalls, hasLength(2));
-    // A sugestão foi recalculada (o único local).
+
     expect(find.byKey(const Key('nearby-suggestion')), findsOneWidget);
   });
 

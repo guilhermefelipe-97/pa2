@@ -67,17 +67,10 @@ import 'ui/core/theme.dart';
 import 'ui/lists/lists_store.dart';
 import 'ui/saved/saved_places_store.dart';
 
-/// `flutter run --dart-define=USE_EMULATOR=true` usa os emuladores locais
-/// (auth :9099, firestore :8080) em vez do projeto real.
 const bool useEmulator = bool.fromEnvironment('USE_EMULATOR');
 
-/// Host dos emuladores. Vazio = padrão (10.0.2.2 no emulador Android,
-/// localhost no resto). Num celular físico, passe o IP do PC na rede local:
-/// `--dart-define=EMULATOR_HOST=192.168.0.10`.
 const String emulatorHost = String.fromEnvironment('EMULATOR_HOST');
 
-/// Endpoint do Photon (descoberta de lugares, G2). Padrão: a instância
-/// pública; outra via `--dart-define=PHOTON_URL=https://...`.
 const String photonUrl = String.fromEnvironment(
   'PHOTON_URL',
   defaultValue: PhotonClient.defaultBaseUrl,
@@ -93,8 +86,6 @@ Future<void> main() async {
       ),
     );
   } on Object catch (e) {
-    // Ex.: lib/firebase_options.dart ainda é o placeholder. Mostra a instrução
-    // em vez de travar com erro não tratado antes do runApp.
     runApp(SetupErrorApp(error: e));
     return;
   }
@@ -146,13 +137,12 @@ Future<void> main() async {
         ),
         ChangeNotifierProvider<AuthRepository>.value(value: authRepository),
         Provider<UserRepository>.value(value: userRepository),
-        // Cliente HTTP do Photon: fechado quando o app sai da árvore.
+
         Provider<PhotonClient>(
           create: (_) => PhotonClient(baseUrl: photonUrl),
           dispose: (_, client) => client.close(),
         ),
-        // Catálogo do Brasil (G2): Photon para descobrir + `places` para o
-        // que alguém já avaliou/salvou (Natal vem do seed).
+
         Provider<PlaceRepository>(
           create: (context) => CatalogPlaceRepository(
             persisted: FirestorePlaceRepository(db),
@@ -183,13 +173,13 @@ Future<void> main() async {
         Provider<ReviewRepository>(
           create: (_) => FirestoreReviewRepository(db),
         ),
-        // "Voltei aqui" (F15): visitas sem nota, contam como recorrência.
+
         Provider<VisitRepository>(create: (_) => FirestoreVisitRepository(db)),
-        // "Está aberto agora?" (F20): relatos de quem está no local.
+
         Provider<OpenReportRepository>(
           create: (_) => FirestoreOpenReportRepository(db),
         ),
-        // Fotos de quem avaliou (G1): cache em memória, limpo na troca de usuário.
+
         Provider<ReviewPhotoRepository>(
           create: (_) => FirestoreReviewPhotoRepository(
             db,
@@ -205,14 +195,14 @@ Future<void> main() async {
         Provider<PlacePhotoPicker>(
           create: (_) => ImagePickerPlacePhotoPicker(),
         ),
-        // Posição só em memória, para o "Perto" (F10).
+
         Provider<LocationService>(
           create: (_) => const GeolocatorLocationService(),
         ),
-        // Seguir/deixar de seguir no perfil: o feed recarrega ao voltar.
+
         ChangeNotifierProvider<FollowEvents>(create: (_) => FollowEvents()),
         Provider<SavedRepository>(create: (_) => FirestoreSavedRepository(db)),
-        // "Quero ir": ids salvos carregados uma vez por sessão (segue o login).
+
         ChangeNotifierProvider<SavedPlacesStore>(
           lazy: false,
           create: (context) {
@@ -220,15 +210,14 @@ Future<void> main() async {
             return SavedPlacesStore(
               authRepository: authRepository,
               savedRepository: context.read(),
-              // Local descoberto pelo Photon nasce em `places` antes do salvo.
+
               persistPlace: (uid, placeId) =>
                   ensurePlaceForSave(places, uid: uid, placeId: placeId),
             );
           },
         ),
         Provider<ListsRepository>(create: (_) => FirestoreListsRepository(db)),
-        // Listas nomeadas (F12): coerentes com o "Quero ir" (assume a remoção
-        // em batch do SavedPlacesStore).
+
         ChangeNotifierProvider<ListsStore>(
           lazy: false,
           create: (context) => ListsStore(
@@ -260,7 +249,6 @@ class NaAreaApp extends StatelessWidget {
   }
 }
 
-/// Tela mínima quando o Firebase não pôde ser inicializado.
 class SetupErrorApp extends StatelessWidget {
   const SetupErrorApp({super.key, required this.error});
 

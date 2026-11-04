@@ -1,7 +1,7 @@
 const { FieldValue } = require('firebase-admin/firestore');
 const { firestoreFromEnv } = require('./seed');
 
-/** O operador verifica fora do app antes de registrar esta decisão explícita. */
+
 async function manageOwnership(db, { action, uid, placeId, operator, reason }) {
   if (!['approve', 'reject', 'revoke'].includes(action) ||
       !uid || !placeId || !operator?.trim() || !reason?.trim() ||

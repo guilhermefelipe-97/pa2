@@ -32,7 +32,7 @@ class _PeopleViewState extends State<PeopleView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Seguir alguém num perfil (aberto de outra aba) muda os botões daqui.
+
     final active = ActiveTab.maybeOf(context);
     if (active == true && _active == false) widget.viewModel.reloadIfStale();
     _active = active;
@@ -52,7 +52,6 @@ class _PeopleViewState extends State<PeopleView> {
   }
 
   void _onSubmitted(String value) {
-    // Enter: busca já, sem deixar o debounce disparar uma segunda busca.
     _debounce?.cancel();
     widget.viewModel.search(value);
   }

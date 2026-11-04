@@ -25,7 +25,6 @@ const _mangai = Place(
   city: 'Natal',
 );
 
-/// Segue "a" (Ana), que avaliou o Mangai.
 ({FakeUserRepository users, FakeReviewRepository reviews}) _anaFoiNoMangai() {
   final users = FakeUserRepository()
     ..addUser('me', 'Eu')
@@ -43,16 +42,14 @@ const _mangai = Place(
   return (users: users, reviews: reviews);
 }
 
-/// Na aba Pessoas: busca [name] e toca em Seguir.
 Future<void> _followInPeople(WidgetTester tester, String name) async {
   await tester.enterText(find.byKey(const Key('people-search')), name);
-  await tester.pump(const Duration(milliseconds: 350)); // debounce
+  await tester.pump(const Duration(milliseconds: 350));
   await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(FilledButton, 'Seguir'));
   await tester.pumpAndSettle();
 }
 
-/// Nome do autor num tile de avaliação do detalhe (abre o perfil).
 Finder _authorInTile(String name) =>
     find.descendant(of: find.byType(ReviewTile), matching: find.text(name));
 
@@ -274,7 +271,7 @@ void main() {
 
       await tester.tap(find.text('Mangai'));
       await tester.pumpAndSettle();
-      // push não reflete na URI do go_router (optionURLReflectsImperativeAPIs).
+
       expect(find.byType(PlaceDetailView), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('Ana'),
@@ -330,7 +327,7 @@ void main() {
         await tester.tap(find.byKey(const Key('place-review')));
         await tester.pumpAndSettle();
         expect(find.byType(ReviewView), findsOneWidget);
-        // Simula o envio: a avaliação existe e a tela volta com `true`.
+
         app.reviews.stored.add(
           review(
             authorId: 'me',
@@ -443,7 +440,7 @@ void main() {
 
     testWidgets('app reaberto: os salvos continuam na aba', (tester) async {
       final saved = FakeSavedRepository();
-      // Sessão 1: salva pelo detalhe.
+
       final app1 = await pumpApp(tester, places: [_mangai], saved: saved);
       app1.router.go(Routes.placeDetail('mangai'));
       await tester.pumpAndSettle();
@@ -452,7 +449,6 @@ void main() {
       await tester.tap(find.byKey(const Key('save-mangai')));
       await tester.pumpAndSettle();
 
-      // Sessão 2: app novo, mesmo "servidor".
       await tester.pumpWidget(const SizedBox());
       final app2 = await pumpApp(tester, places: [_mangai], saved: saved);
       app2.router.go(Routes.saved);
@@ -553,7 +549,7 @@ void main() {
           city: 'Natal',
         ),
       ];
-      // Sessão 1: salva os dois e põe o Mangai numa lista nova.
+
       final app1 = await pumpApp(
         tester,
         places: places,
@@ -565,7 +561,6 @@ void main() {
       await store.create('Sábado', withPlace: 'mangai')!.done;
       await tester.pumpAndSettle();
 
-      // Sessão 2: app novo, mesmo "servidor".
       await tester.pumpWidget(const SizedBox());
       final app2 = await pumpApp(
         tester,
@@ -586,7 +581,6 @@ void main() {
   });
 
   group('F06: fonte de confiança e perfil', () {
-    // Celular alto: o card inteiro (e o bloco "Quem foi") fica na tela.
     setUp(() {
       final view =
           TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
@@ -726,7 +720,7 @@ void main() {
         app.router.push(Routes.person('a'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Mangai')); // avaliação dela: detalhe
+        await tester.tap(find.text('Mangai'));
         await tester.pumpAndSettle();
         expect(find.byType(PlaceDetailView), findsOneWidget);
         await tester.tap(_authorInTile('Ana'));
@@ -754,7 +748,7 @@ void main() {
       final before = app.reviews.fetchCalls.length;
       await tester.tap(anaCard());
       await tester.pumpAndSettle();
-      // o perfil lê as avaliações dela (1 leitura)
+
       expect(app.reviews.fetchCalls.length, before + 1);
 
       await tester.pageBack();
