@@ -24,7 +24,6 @@ import '../support/fakes.dart';
 
 final _now = DateTime.utc(2026, 9, 28, 15);
 
-/// PNG válido de verdade (o engine de teste decodifica).
 final Uint8List _png = img.encodePng(img.Image(width: 16, height: 9));
 
 const _mangai = Place(
@@ -41,11 +40,7 @@ void _tallPhone(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
-/// Espera, de forma determinística, o engine decodificar cada imagem montada:
-/// resolve o mesmo ImageProvider do widget (mesma chave no ImageCache) e
-/// aguarda o 1º quadro ou o erro; depois redesenha.
 Future<void> _decode(WidgetTester tester) async {
-  // Pumps até o repositório responder e o ReviewPhoto montar o Image.memory.
   for (var i = 0; i < 3; i++) {
     await tester.pump();
   }
@@ -104,8 +99,8 @@ void main() {
     ) async {
       _tallPhone(tester);
       await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
-      await tester.pump(); // trava do F03 (checkLock)
-      expect(find.text('Foto (opcional)'), findsOneWidget);
+      await tester.pump();
+      expect(find.text('Foto da sua visita (opcional)'), findsOneWidget);
 
       picker.next = Uint8List.fromList([1, 2, 3]);
       await choose(tester, 'photo-add');
@@ -116,7 +111,6 @@ void main() {
       expect(find.byKey(const Key('photo-preview')), findsOneWidget);
       expect(find.byKey(const Key('photo-add')), findsNothing);
 
-      // Toque na prévia: "Trocar foto" / "Remover foto".
       await choose(tester, 'photo-preview');
       expect(find.text('Trocar foto'), findsOneWidget);
       expect(find.text('Remover foto'), findsOneWidget);
@@ -134,7 +128,7 @@ void main() {
     testWidgets('fechar a câmera sem foto não muda nada', (tester) async {
       _tallPhone(tester);
       await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
-      await tester.pump(); // trava do F03 (checkLock)
+      await tester.pump();
       picker.next = null;
       await choose(tester, 'photo-add');
       await choose(tester, 'photo-source-camera');
@@ -145,7 +139,7 @@ void main() {
     testWidgets('permissão negada explica como liberar', (tester) async {
       _tallPhone(tester);
       await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
-      await tester.pump(); // trava do F03 (checkLock)
+      await tester.pump();
       picker.error = const PhotoPermissionDeniedException(PhotoSource.camera);
       await choose(tester, 'photo-add');
       await choose(tester, 'photo-source-camera');
@@ -170,7 +164,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(home: ReviewView(viewModel: failing)),
       );
-      await tester.pump(); // trava do F03 (checkLock)
+      await tester.pump();
       await choose(tester, 'photo-add');
       await choose(tester, 'photo-source-gallery');
       expect(find.text('Não foi possível usar essa foto'), findsOneWidget);
@@ -295,7 +289,7 @@ void main() {
       for (final id in ['r0', 'r1', 'r2']) {
         expect(find.byKey(Key('review-photo-tile-$id')), findsOneWidget);
       }
-      // Capa = foto mais recente (Ana), com crédito sobre ela.
+
       expect(find.text('Foto de Ana'), findsWidgets);
 
       await tester.tap(find.byKey(const Key('review-photo-tile-r1')));
@@ -364,8 +358,8 @@ void main() {
       await tester.pumpAndSettle();
       await _decode(tester);
       expect(find.byKey(const Key('review-photo-tile-mine')), findsOneWidget);
-      // Capa + miniatura.
-      expect(find.text('Sua foto'), findsNWidgets(2));
+
+      expect(find.text('Sua foto'), findsNWidgets(3));
       expect(find.textContaining('Foto de'), findsNothing);
     },
   );
@@ -407,7 +401,7 @@ void main() {
       );
       expect(find.byKey(const Key('review-photo-p1')), findsOneWidget);
 
-      photos.gate = Completer<void>(); // p2 fica "carregando"
+      photos.gate = Completer<void>();
       await tester.pumpWidget(
         frame(photos, ReviewPhoto(review: r2, placeName: 'Mangai')),
       );

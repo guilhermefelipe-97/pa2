@@ -25,7 +25,7 @@ import '../support/builders.dart';
 import '../support/app_harness.dart';
 import '../support/fakes.dart';
 
-final _now = DateTime.utc(2026, 9, 28, 15); // 12h em Natal
+final _now = DateTime.utc(2026, 9, 28, 15);
 
 FeedViewModel _feedVm({
   FakeUserRepository? users,
@@ -41,15 +41,12 @@ FeedViewModel _feedVm({
   visitRepository: FakeVisitRepository(),
 );
 
-/// Tela de celular alta (412x2000 dp) para as listas preguiçosas construírem
-/// tudo o que o teste procura.
 void _tallPhone(WidgetTester tester) {
   tester.view.physicalSize = const Size(412, 2000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 }
 
-/// Repositório cujo envio só termina quando [gate] completa.
 class _GatedReviewRepository extends FakeReviewRepository {
   _GatedReviewRepository(this.gate);
 
@@ -64,6 +61,17 @@ class _GatedReviewRepository extends FakeReviewRepository {
     await gate;
     return super.createReview(review, photo: photo, newPlace: newPlace);
   }
+}
+
+Future<void> openDetailAverages(WidgetTester tester) async {
+  final title = find.text('Médias das avaliações exibidas');
+  await tester.scrollUntilVisible(
+    title,
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(title);
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -100,7 +108,7 @@ void main() {
     _tallPhone(tester);
     final vm = reviewVm();
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
-    await tester.pump(); // trava do F03 (checkLock)
+    await tester.pump();
 
     FilledButton submit() =>
         tester.widget<FilledButton>(find.byKey(const Key('review-submit')));
@@ -109,17 +117,17 @@ void main() {
     expect(find.text(noAxisHint), findsOneWidget);
     expect(clearVisible(tester, 'food'), isFalse);
     expect(find.text('Avalie o que quiser — um eixo já basta.'), findsNothing);
-    // A dica fica junto dos eixos, antes da companhia e do Enviar.
+
     expect(
       tester.getTopLeft(find.text(noAxisHint)).dy,
       lessThan(
         tester.getTopLeft(find.text('Com quem você foi? (opcional)')).dy,
       ),
     );
-    // Eixo sem nota: o mesmo "sem notas" das médias.
-    expect(find.text(noScoresLabel), findsNWidgets(3));
 
-    final headerBefore = tester.getSize(header('🍽️ Comida'));
+    expect(find.text('Sem nota'), findsNWidgets(3));
+
+    final headerBefore = tester.getSize(header('Comida & Bebida'));
     await tester.tap(find.byKey(const Key('axis-food-4')));
     await tester.pump();
     expect(vm.food, 4);
@@ -128,10 +136,9 @@ void main() {
     expect(find.text(noAxisHint), findsNothing);
     expect(clearVisible(tester, 'food'), isTrue);
     expect(find.text('4 de 5'), findsOneWidget);
-    // Limpar aparece sem o cabeçalho mudar de tamanho.
-    expect(tester.getSize(header('🍽️ Comida')), headerBefore);
 
-    // Trocar de 4 para 2.
+    expect(tester.getSize(header('Comida & Bebida')), headerBefore);
+
     await tester.tap(find.byKey(const Key('axis-food-2')));
     await tester.pump();
     expect(vm.food, 2);
@@ -155,7 +162,7 @@ void main() {
     final handle = tester.ensureSemantics();
     final vm = reviewVm();
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
-    await tester.pump(); // trava do F03 (checkLock)
+    await tester.pump();
 
     expect(
       tester.getSemantics(find.bySemanticsLabel('Comida 4 de 5')),
@@ -177,7 +184,6 @@ void main() {
       containsSemantics(isSelected: true),
     );
 
-    // A dica é região viva: anunciada quando aparece.
     vm.clearFood();
     await tester.pump();
     expect(
@@ -194,7 +200,7 @@ void main() {
     final gate = Completer<void>();
     final vm = reviewVm(reviews: _GatedReviewRepository(gate.future));
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
-    await tester.pump(); // trava do F03 (checkLock)
+    await tester.pump();
     await tester.tap(find.byKey(const Key('axis-food-4')));
     await tester.pump();
 
@@ -207,7 +213,7 @@ void main() {
     );
     expect(
       tester
-          .widget<TextButton>(find.byKey(const Key('axis-food-clear')))
+          .widget<IconButton>(find.byKey(const Key('axis-food-clear')))
           .onPressed,
       isNull,
     );
@@ -256,7 +262,7 @@ void main() {
         .widget<IconButton>(find.byKey(const Key('axis-food-5')))
         .iconSize!;
     expect(size, lessThanOrEqualTo(44));
-    // 5 estrelas lado a lado dentro da largura útil (320 - 2 x 16).
+
     final right = tester.getTopRight(find.byKey(const Key('axis-food-5'))).dx;
     expect(right, lessThanOrEqualTo(320 - 16));
   });
@@ -267,7 +273,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: AxisScores.scores(Scores(food: 4)))),
     );
-    expect(find.text('🍽️ 4'), findsOneWidget);
+    expect(find.text('Comida 4'), findsOneWidget);
     expect(find.textContaining('✨'), findsNothing);
     expect(find.textContaining('🤝'), findsNothing);
     expect(find.textContaining('sem notas'), findsNothing);
@@ -309,11 +315,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: AxisScores.averages(avg))),
     );
-    expect(find.text('🍽️ 4,5'), findsOneWidget);
-    // 3 avaliações: comida e atendimento em 2 delas → "(2)" visível.
+    expect(find.text('Comida 4,5'), findsOneWidget);
+
     expect(find.text(' (2)'), findsNWidgets(2));
-    expect(find.text('✨ sem notas'), findsOneWidget);
-    expect(find.textContaining('✨ 0'), findsNothing);
+    expect(find.text('Ambiente sem notas'), findsOneWidget);
+    expect(find.textContaining('Ambiente 0'), findsNothing);
     expect(
       find.bySemanticsLabel('Comida 4,5 de 5, 2 avaliações'),
       findsOneWidget,
@@ -340,10 +346,10 @@ void main() {
       compress: (b) async => b,
     );
     await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
-    await tester.pump(); // trava do F03 (checkLock)
+    await tester.pump();
 
     final field = find.byKey(const Key('review-comment'));
-    // O seletor de preço (F27) empurra o campo para fora da área montada.
+
     await tester.scrollUntilVisible(field, 200);
     expect(tester.widget<TextField>(field).maxLength, 280);
 
@@ -387,7 +393,7 @@ void main() {
             companion: Companion.amigos,
             comment: 'Carne de sol perfeita',
             createdAt: DateTime.utc(2026, 9, 28, 13),
-          ), // 10h Natal, há 2 h
+          ),
         ]);
       final vm = _feedVm(
         users: users,
@@ -405,40 +411,24 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Mangai'), findsOneWidget);
-      expect(find.text('Tirol · Restaurante'), findsOneWidget);
-      expect(find.text('Quem foi'), findsOneWidget);
-      // Beto (mais recente) primeiro, com os eixos dele; depois Ana.
+      expect(find.text('Tirol · Natal'), findsOneWidget);
+      expect(find.text('Restaurante'), findsOneWidget);
       expect(find.text('Beto'), findsOneWidget);
       expect(find.text('Ana'), findsOneWidget);
-      expect(find.text('você segue'), findsNWidgets(2));
-      Finder inRow(String uid, String text) => find.descendant(
-        of: find.byKey(ValueKey('trust-source-$uid')),
-        matching: find.text(text),
-      );
-      expect(inRow('b', '🍽️ 4'), findsOneWidget);
-      expect(inRow('b', '✨ 3'), findsOneWidget);
-      expect(inRow('b', '🤝 5'), findsOneWidget);
-      expect(inRow('b', 'com amigos de manhã'), findsOneWidget);
-      expect(inRow('a', '🍽️ 5'), findsOneWidget);
-      expect(inRow('a', '✨ 2'), findsOneWidget);
-      expect(inRow('a', '🤝 4'), findsOneWidget);
-      expect(inRow('a', 'no almoço'), findsOneWidget);
-      expect(find.text('há 2 h'), findsOneWidget);
-      expect(find.text('ontem'), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.text('Beto')).dy,
-        lessThan(tester.getTopLeft(find.text('Ana')).dy),
-      );
-      // sem média agregada no card
-      expect(find.textContaining('4,5'), findsNothing);
-      expect(find.textContaining('Média'), findsNothing);
+      final beto = tester
+          .widget<Semantics>(find.byKey(const ValueKey('trust-source-b')))
+          .properties
+          .label!;
+      final ana = tester
+          .widget<Semantics>(find.byKey(const ValueKey('trust-source-a')))
+          .properties
+          .label!;
+      expect(beto, contains('comida 4, ambiente 3, atendimento 5'));
+      expect(ana, contains('comida 5, ambiente 2, atendimento 4'));
+      expect(beto, contains('você segue'));
+      expect(find.text('3,8'), findsOneWidget);
       expect(find.textContaining('Carne de sol perfeita'), findsOneWidget);
-      expect(
-        find.text('— Beto · há 2 h'),
-        findsOneWidget,
-        reason: 'citação traz autor e tempo próprios',
-      );
-      // avatares com a inicial de quem foi
+      expect(find.text('— Beto'), findsOneWidget);
       expect(find.text('B'), findsOneWidget);
       expect(find.text('A'), findsOneWidget);
     },
@@ -463,7 +453,6 @@ void main() {
   testWidgets('PlacePhoto: URL quebrada cai no fallback sem erro visível', (
     tester,
   ) async {
-    // No flutter_test toda requisição HTTP responde 400: simula o 404.
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -513,6 +502,7 @@ void main() {
     'PlaceDetailView: foto grande e todas as avaliações dos amigos no local',
     (tester) async {
       _tallPhone(tester);
+      final handle = tester.ensureSemantics();
       final item = groupActivitiesIntoFeed(
         [
           review(
@@ -522,7 +512,7 @@ void main() {
             scores: Scores(food: 5, ambience: 2, service: 4),
             companion: Companion.familia,
             createdAt: DateTime.utc(2026, 9, 25, 23),
-          ), // 20h do dia 25 em Natal: há 3 dias
+          ),
           review(
             authorId: 'b',
             authorName: 'Beto',
@@ -530,7 +520,7 @@ void main() {
             scores: Scores(food: 3, ambience: 4, service: 1),
             comment: 'Atendimento demorou',
             createdAt: DateTime.utc(2026, 9, 28, 14, 55),
-          ), // há 5 min
+          ),
         ],
         places: {'x': place(id: 'x', name: 'Mangai', neighborhood: 'Tirol')},
       ).single;
@@ -544,21 +534,23 @@ void main() {
 
       expect(find.byType(PlacePhoto), findsOneWidget);
       expect(find.text('Mangai'), findsWidgets);
-      // eixos por avaliação
-      expect(find.text('🍽️ 5'), findsOneWidget);
-      expect(find.text('✨ 2'), findsOneWidget);
-      expect(find.text('🤝 1'), findsOneWidget);
+
+      expect(find.bySemanticsLabel('Comida 5 de 5'), findsOneWidget);
+      expect(find.bySemanticsLabel('Ambiente 2 de 5'), findsOneWidget);
+      expect(find.bySemanticsLabel('Atendimento 1 de 5'), findsOneWidget);
       expect(find.text('Atendimento demorou'), findsOneWidget);
       expect(find.text('Noite · Família · há 3 dias'), findsOneWidget);
       expect(find.textContaining('há 5 min'), findsOneWidget);
       expect(find.text('Ana'), findsOneWidget);
       expect(find.text('Beto'), findsOneWidget);
-      // médias dos amigos: comida (5+3)/2, ambiente (2+4)/2, atendimento (4+1)/2
-      expect(find.text('🍽️ 4'), findsOneWidget);
-      expect(find.text('✨ 3'), findsOneWidget);
-      expect(find.text('🤝 2,5'), findsOneWidget);
+      await openDetailAverages(tester);
+
+      expect(find.text('Comida 4'), findsOneWidget);
+      expect(find.text('Ambiente 3'), findsOneWidget);
+      expect(find.text('Atendimento 2,5'), findsOneWidget);
       expect(find.text('2 avaliações de amigos'), findsOneWidget);
       expect(find.text('Tirol · Restaurante · Natal'), findsOneWidget);
+      handle.dispose();
     },
   );
 
@@ -580,13 +572,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('🍽️ 4,5'), findsOneWidget);
+    await openDetailAverages(tester);
+    expect(find.text('Comida 4,5'), findsOneWidget);
     expect(
       find.bySemanticsLabel('Comida 4,5 de 5, 2 avaliações'),
       findsOneWidget,
     );
-    expect(find.text('✨ sem notas'), findsOneWidget);
-    expect(find.textContaining('✨ 0'), findsNothing);
+    expect(find.text('Ambiente sem notas'), findsOneWidget);
+    expect(find.textContaining('Ambiente 0'), findsNothing);
     expect(
       find.bySemanticsLabel('Atendimento 3 de 5, 1 avaliação'),
       findsOneWidget,
@@ -622,8 +615,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    // Comida (2+5)/2 nas 2; ambiente e atendimento só da antiga.
-    expect(find.text('🍽️ 3,5'), findsOneWidget);
+    await openDetailAverages(tester);
+
+    expect(find.text('Comida 3,5'), findsOneWidget);
     expect(
       find.bySemanticsLabel('Comida 3,5 de 5, 2 avaliações'),
       findsOneWidget,
@@ -636,7 +630,7 @@ void main() {
       find.bySemanticsLabel('Atendimento 5 de 5, 1 avaliação'),
       findsOneWidget,
     );
-    // "(n)" visível só onde a contagem difere do total (2).
+
     expect(find.text(' (1)'), findsNWidgets(2));
     expect(find.text(' (2)'), findsNothing);
     handle.dispose();
@@ -708,7 +702,6 @@ void main() {
     expect(find.text('Foto: Marcos · CC0'), findsOneWidget);
     expect(find.text('ilustrativa'), findsNothing);
 
-    // sem foto: sem crédito
     await tester.pumpWidget(
       MaterialApp(
         home: PlaceDetailView(
@@ -867,7 +860,7 @@ void main() {
         expect(node, containsSemantics(isButton: true, hasTapAction: true));
 
         await tester.tap(find.text('Ana'));
-        await tester.tap(find.text('A')); // avatar
+        await tester.tap(find.text('A'));
         expect(taps, 2);
         handle.dispose();
       },

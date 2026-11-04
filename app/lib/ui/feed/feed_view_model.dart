@@ -4,13 +4,14 @@ import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/visit_repository.dart';
 import '../../domain/feed.dart';
+import '../../domain/food_tags.dart';
+import '../../data/repositories/food_tag_repository.dart';
+import '../dietary/dietary_store.dart';
 import '../../domain/models/place.dart';
 import '../core/follow_events.dart';
 import '../core/load_visits.dart';
 import '../core/safe_change_notifier.dart';
 
-/// Feed "Amigos foram aqui" (F05): avaliações e visitas ("Voltei aqui",
-/// F15) de quem o usuário segue, por local.
 class FeedViewModel extends SafeChangeNotifier {
   FeedViewModel({
     required AuthRepository authRepository,
@@ -19,6 +20,8 @@ class FeedViewModel extends SafeChangeNotifier {
     required PlaceRepository placeRepository,
     required FollowEvents followEvents,
     required VisitRepository visitRepository,
+    this.dietary,
+    this.foodTagRepository,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _users = userRepository,
@@ -26,7 +29,46 @@ class FeedViewModel extends SafeChangeNotifier {
        _places = placeRepository,
        _visits = visitRepository,
        _follow = FollowStaleness(followEvents),
-       _clock = clock ?? DateTime.now;
+       _clock = clock ?? DateTime.now {
+    _auth.addListener(_sessionChanged);
+    dietary?.addListener(_preferencesChanged);
+  }
+  final DietaryStore? dietary;
+  final FoodTagRepository? foodTagRepository;
+  int _generation = 0;
+  int _dietaryRevision = -1;
+  Map<String, Map<String, int>> confirmedTags = {};
+  bool get hasFoodFilter => dietary?.tags.isNotEmpty ?? false;
+  void _sessionChanged() {
+    _generation++;
+    _items = const [];
+    confirmedTags = {};
+    _loadedOnce = false;
+    _loadedUid = null;
+    _following = const {};
+    notifyListeners();
+    load();
+  }
+
+  void _preferencesChanged() {
+    final store = dietary!;
+
+    if (!store.ready || store.loading || store.revision != _dietaryRevision) {
+      _generation++;
+      _items = const [];
+      notifyListeners();
+    }
+    if (store.error != null) {
+      _errorMessage = store.error;
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
+    if (!store.loading && store.revision != _dietaryRevision) {
+      _dietaryRevision = store.revision;
+      load();
+    }
+  }
 
   final AuthRepository _auth;
   final UserRepository _users;
@@ -36,7 +78,6 @@ class FeedViewModel extends SafeChangeNotifier {
   final FollowStaleness _follow;
   final DateTime Function() _clock;
 
-  /// "Agora" para o tempo relativo dos cards (injetável nos testes).
   DateTime now() => _clock();
 
   bool _isLoading = false;
@@ -52,23 +93,14 @@ class FeedViewModel extends SafeChangeNotifier {
 
   Set<String> _following = const {};
 
-  /// O usuário segue [uid] (segundo a última carga): selo "você segue" no
-  /// card, sem leituras extras.
   bool isFollowing(String uid) => _following.contains(uid);
 
-  /// Usuário da última carga bem-sucedida (troca de conta limpa o estado).
   String? _loadedUid;
 
-  /// Alguém foi seguido/deixado de seguir em outra tela desde o início da
-  /// última carga.
   bool get isStale => _follow.isStale;
 
-  /// Recarrega só se ficou desatualizado. Chamado quando o feed volta a ficar
-  /// visível (retorno de rota ou ativação da aba). Uma carga que começou
-  /// depois da mudança já basta: não agenda outra.
   Future<void> reloadIfStale() => _follow.isStale ? load() : Future.value();
 
-  /// Não segue ninguém: mostrar o CTA "Encontrar pessoas".
   bool get followsNobody => _followsNobody;
 
   bool _loadedOnce = false;
@@ -77,9 +109,6 @@ class FeedViewModel extends SafeChangeNotifier {
   bool _reloadPending = false;
   Future<void>? _inFlight;
 
-  /// Recarrega o feed. Se já houver uma carga em andamento, agenda mais uma
-  /// para logo depois (ex.: voltou da tela de avaliação durante a carga) e
-  /// devolve um Future que só completa quando essa recarga terminar.
   Future<void> load() {
     if (_inFlight != null) {
       _reloadPending = true;
@@ -103,8 +132,8 @@ class FeedViewModel extends SafeChangeNotifier {
 
   Future<void> _loadOnce() async {
     final uid = _auth.currentUserId;
+    final generation = _generation;
     if (uid != _loadedUid) {
-      // Outra conta (ou saiu): nada do usuário anterior fica visível.
       _following = const {};
       _items = const [];
       _followsNobody = false;
@@ -112,37 +141,63 @@ class FeedViewModel extends SafeChangeNotifier {
       _loadedUid = null;
     }
     if (uid == null) return;
-    // Esta carga lê o estado atual: mudanças anteriores já entram nela.
+
     _follow.clear();
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      // Cópia: o Set pode ser o do repositório.
+      final preferences = dietary;
+      if (preferences != null &&
+          (!preferences.ready ||
+              preferences.loading ||
+              preferences.error != null)) {
+        _items = const [];
+        throw StateError('preferências indisponíveis');
+      }
+      final selected = {...?preferences?.tags};
+
       final following = {...await _users.getFollowing(uid)}..remove(uid);
       var items = const <FeedItem>[];
       if (following.isNotEmpty) {
-        // Falha só das visitas: cards só com as avaliações.
         final read = await loadFriendActivities(
           reviews: _reviews,
           visits: _visits,
           authors: following.toList(),
           where: 'feed',
+          publicOnly: true,
         );
-        // Só os locais que aparecem no feed; _loadPlaces nunca lança.
+
         final places = await _loadPlaces({
           for (final a in read.activities) a.placeId,
         });
-        items = groupActivitiesIntoFeed(read.activities, places: places);
+        items = groupPublicActivitiesIntoFeed(read.activities, places: places);
       }
-      // Só depois de tudo dar certo: uma falha no meio mantém o estado
-      // anterior inteiro (relação, cards e CTA coerentes entre si).
+      final tags = foodTagRepository == null
+          ? <String, Map<String, int>>{}
+          : await foodTagRepository!.confirmedFor(items.map((i) => i.placeId));
+      if (generation != _generation ||
+          uid != _auth.currentUserId ||
+          isDisposed) {
+        return;
+      }
+      confirmedTags = tags;
+      items = items
+          .where((i) => matchesFoodTags(selected, tags[i.placeId] ?? {}))
+          .toList();
+
       _following = following;
       _followsNobody = following.isEmpty;
       _items = items;
       _loadedOnce = true;
       _loadedUid = uid;
     } on Object {
+      if (generation != _generation ||
+          uid != _auth.currentUserId ||
+          isDisposed) {
+        return;
+      }
+      if (dietary != null || foodTagRepository != null) _items = const [];
       _errorMessage =
           'Não foi possível carregar o feed. Verifique sua conexão.';
     } finally {
@@ -151,9 +206,6 @@ class FeedViewModel extends SafeChangeNotifier {
     }
   }
 
-  /// Falha ao ler os locais não derruba o feed: os cards usam o fallback
-  /// (nome da avaliação, sem foto) e a leitura é tentada de novo na próxima
-  /// carga. O repositório guarda em cache o que já leu (1 leitura por local).
   Future<Map<String, Place>> _loadPlaces(Set<String> ids) async {
     if (ids.isEmpty) return const {};
     try {
@@ -163,14 +215,20 @@ class FeedViewModel extends SafeChangeNotifier {
     }
   }
 
+  Future<void> retry() async {
+    if (dietary?.error != null) await dietary!.load();
+    await load();
+  }
+
   Future<void> signOut() => _auth.signOut();
 
-  /// Uid do usuário logado: o ícone "Você" abre o próprio perfil (as
-  /// próprias avaliações e visitas, que o feed não mostra).
   String? get currentUserId => _auth.currentUserId;
 
   @override
   void dispose() {
+    _auth.removeListener(_sessionChanged);
+    dietary?.removeListener(_preferencesChanged);
+    _generation++;
     _follow.dispose();
     super.dispose();
   }

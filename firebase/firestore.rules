@@ -1,7 +1,7 @@
 rules_version = '2';
 
-// NaÁrea — integridade garantida no servidor (Integridade = prioridade 7).
-// Toda regra aqui tem teste em firebase/tests/.
+
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -13,25 +13,135 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
-    // ---------- users ----------
+    function isAdmin() {
+      return signedIn() && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+    }
+
+    match /admins/{uid} {
+      allow get: if isOwner(uid);
+      allow list, write: if false;
+    }
+
+
+    match /{path=**}/ownershipRequests/{placeId} {
+      allow read: if isAdmin();
+    }
+
+    function validDecision(uid, placeId) {
+      let d = request.resource.data;
+      let decision = {'operator': d.operator, 'reason': d.reason, 'decidedAt': d.decidedAt};
+      return isAdmin() && request.auth.uid != uid
+        && resource.data.status == 'pending'
+        && exists(/databases/$(database)/documents/places/$(placeId))
+        && d.createdAt == resource.data.createdAt
+        && d.operator == request.auth.uid && d.decidedAt == request.time
+        && d.reason is string && d.reason == d.reason.trim()
+        && d.reason.size() >= 1 && d.reason.size() <= 500
+        && ((d.status == 'rejected'
+          && d.keys().hasOnly(['status', 'createdAt', 'operator', 'reason', 'decidedAt', 'rejection'])
+          && d.rejection == decision)
+        || (d.status == 'approved'
+          && d.keys().hasOnly(['status', 'createdAt', 'operator', 'reason', 'decidedAt', 'approval'])
+          && d.approval == decision
+          && !exists(/databases/$(database)/documents/placeOwners/$(placeId))
+          && getAfter(/databases/$(database)/documents/placeOwners/$(placeId)).data == {'uid': uid, 'verifiedAt': request.time}));
+    }
+
+    function validFoodTags(tags) {
+      return tags is list && tags.size() <= 5
+        && tags.toSet().size() == tags.size()
+        && tags.hasOnly(['caseiro', 'vegetariano', 'vegano', 'low-carb', 'integral']);
+    }
+
+    function notBusinessOwner(placeId) {
+      let path = /databases/$(database)/documents/placeOwners/$(placeId);
+      return !exists(path) || get(path).data.uid != request.auth.uid;
+    }
+
+    match /placeOwners/{placeId} {
+      allow read: if signedIn();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['uid', 'verifiedAt'])
+        && request.resource.data.uid is string
+        && request.resource.data.uid != request.auth.uid
+        && request.resource.data.verifiedAt == request.time
+        && exists(/databases/$(database)/documents/places/$(placeId))
+        && get(/databases/$(database)/documents/users/$(request.resource.data.uid)/ownershipRequests/$(placeId)).data.status == 'pending'
+        && getAfter(/databases/$(database)/documents/users/$(request.resource.data.uid)/ownershipRequests/$(placeId)).data.status == 'approved'
+        && getAfter(/databases/$(database)/documents/users/$(request.resource.data.uid)/ownershipRequests/$(placeId)).data.operator == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.resource.data.uid)/ownershipRequests/$(placeId)).data.decidedAt == request.time;
+      allow update, delete: if false;
+    }
+
+
     function validProfile(data) {
-      return data.keys().hasOnly(['displayName', 'displayNameLower'])
+      return data.keys().hasOnly(['displayName', 'displayNameLower', 'username', 'bio', 'city', 'instagram'])
         && data.keys().hasAll(['displayName', 'displayNameLower'])
         && data.displayName is string
         && data.displayName.trim().size() > 0
         && data.displayName == data.displayName.trim()
         && data.displayName.size() <= 60
-        && data.displayNameLower == data.displayName.lower();
+        && data.displayNameLower == data.displayName.lower()
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 240))
+        && (!('city' in data) || (data.city is string && data.city.size() <= 80))
+        && (!('instagram' in data) || (data.instagram is string && (data.instagram == '' || data.instagram.matches('[a-zA-Z0-9._]{1,30}'))))
+        && (!('username' in data) || (data.username is string
+          && data.username.matches('[a-z0-9][a-z0-9._]{2,23}')
+          && getAfter(/databases/$(database)/documents/usernames/$(data.username)).data.uid == request.auth.uid));
     }
 
     match /users/{uid} {
       allow read: if signedIn();
       allow create: if isOwner(uid) && validProfile(request.resource.data);
-      // Nome é imutável: reviews.authorName é desnormalizado e ficaria desatualizado.
+
+
       allow update: if isOwner(uid)
         && validProfile(request.resource.data)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['displayName', 'displayNameLower']);
+        && (!('username' in resource.data)
+          || ('username' in request.resource.data &&
+            (request.resource.data.username == resource.data.username
+            || !existsAfter(/databases/$(database)/documents/usernames/$(resource.data.username)))));
       allow delete: if false;
+
+      match /media/{kind} {
+        allow read: if signedIn() && kind in ['avatar', 'cover'];
+        allow create, update: if isOwner(uid) && kind in ['avatar', 'cover']
+          && request.resource.data.keys().hasOnly(['jpeg'])
+          && request.resource.data.keys().hasAll(['jpeg'])
+          && request.resource.data.jpeg is bytes
+          && request.resource.data.jpeg.size() > 0 && request.resource.data.jpeg.size() <= 150000;
+        allow delete: if isOwner(uid) && kind in ['avatar', 'cover'];
+      }
+
+      match /ownershipRequests/{placeId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && exists(/databases/$(database)/documents/places/$(placeId))
+          && request.resource.data.keys().hasOnly(['status', 'createdAt'])
+          && request.resource.data.keys().hasAll(['status', 'createdAt'])
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt == request.time;
+        allow update: if validDecision(uid, placeId);
+        allow delete: if false;
+      }
+
+      match /preferences/{preferenceId} {
+        allow read: if isOwner(uid) && preferenceId in ['food', 'privacy'];
+        allow create, update: if isOwner(uid) && preferenceId == 'food'
+          && request.resource.data.keys().hasOnly(['tags'])
+          && request.resource.data.keys().hasAll(['tags'])
+          && validFoodTags(request.resource.data.tags);
+        allow delete: if false;
+      }
+
+      match /preferences/privacy {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['silent'])
+          && request.resource.data.keys().hasAll(['silent'])
+          && request.resource.data.silent is bool;
+        allow delete: if false;
+      }
 
       match /following/{targetUid} {
         allow read: if isOwner(uid);
@@ -44,17 +154,17 @@ service cloud.firestore {
         allow update: if false;
       }
 
-      // "Quero ir" (F11): privado — só o dono lê e escreve. Doc só com o
-      // createdAt do servidor; sem notas nem listas (F12). Salvar de novo um
-      // local já salvo seria update: negado (o cliente só cria ou apaga).
-      // Trava do F03: período mínimo entre avaliações do mesmo usuário no
-      // mesmo local (Fase 1, "Não faz"). `lastAt` = hora da última avaliação
-      // (sempre do servidor). Só nasce/renova no mesmo batch que cria a
-      // avaliação nova `reviewId` do mesmo autor e local. Avaliações
-      // anteriores ao F03 sem trava não bloqueiam a 1ª nova (o backfill
-      // `seed/backfill-review-locks.js` cria as travas delas pelo Admin SDK).
-      // MESMO período de `reviewCooldown` em app/lib/domain/review_lock.dart
-      // (teste de paridade lê este arquivo).
+
+
+
+
+
+
+
+
+
+
+
       match /reviewLocks/{placeId} {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid) && validLock(placeId, request.resource.data);
@@ -64,13 +174,13 @@ service cloud.firestore {
         allow delete: if false;
       }
 
-      // Trava do F15 ("Voltei aqui"): no máximo 1 visita a cada 12 h por
-      // usuário e local. Mesmo padrão do F03: `lastAt` do servidor, só
-      // nasce/renova no mesmo batch que cria a visita nova `visitId` do mesmo
-      // autor e local; nunca apagável. Separada da trava de avaliação: quem
-      // está no período do F03 pode registrar visita.
-      // MESMO período de `visitCooldown` em app/lib/domain/visit_lock.dart
-      // (teste de paridade lê este arquivo).
+
+
+
+
+
+
+
       match /visitLocks/{placeId} {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid) && validVisitLock(placeId, request.resource.data);
@@ -80,17 +190,26 @@ service cloud.firestore {
         allow delete: if false;
       }
 
-      // Trava do F20 ("Está aberto agora?"): no máximo 1 relato a cada 30 min
-      // por usuário e local. Mesmo padrão do F03/F15: `lastAt` do servidor,
-      // só nasce/renova no mesmo batch que cria o relato novo `reportId` do
-      // mesmo autor e local; nunca apagável.
-      // MESMO período de `openReportCooldown` em app/lib/domain/open_status.dart
-      // (teste de paridade lê este arquivo).
+
+
+
+
+
+
       match /openReportLocks/{placeId} {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid) && validOpenReportLock(placeId, request.resource.data);
         allow update: if isOwner(uid)
           && validOpenReportLock(placeId, request.resource.data)
+          && request.time >= resource.data.lastAt + duration.value(30, 'm');
+        allow delete: if false;
+      }
+
+      match /queueReportLocks/{placeId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && validQueueReportLock(placeId, request.resource.data);
+        allow update: if isOwner(uid)
+          && validQueueReportLock(placeId, request.resource.data)
           && request.time >= resource.data.lastAt + duration.value(30, 'm');
         allow delete: if false;
       }
@@ -105,12 +224,12 @@ service cloud.firestore {
         allow update: if false;
       }
 
-      // Listas nomeadas (F12): subconjunto do "Quero ir" (o app mantém a
-      // coerência; remover do Quero ir tira das listas num batch). Nome
-      // único sem caixa/acento e o máximo de 30 listas são do app.
-      // F13: privadas por padrão; com `visible == true`, quem segue a dona
-      // (`users/{leitor}/following/{dona}`) lê a lista para copiá-la. A
-      // consulta do seguidor precisa filtrar `visible == true`.
+
+
+
+
+
+
       match /lists/{listId} {
         allow read: if isOwner(uid)
           || (signedIn()
@@ -121,7 +240,7 @@ service cloud.firestore {
           && validCopiedFrom(uid, request.resource.data)
           && request.resource.data.createdAt == request.time
           && request.resource.data.updatedAt == request.time;
-        // O crédito da cópia (F13) só nasce no create e nunca muda.
+
         allow update: if isOwner(uid)
           && validList(request.resource.data)
           && request.resource.data.createdAt == resource.data.createdAt
@@ -129,30 +248,56 @@ service cloud.firestore {
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(copiedFromKeys());
         allow delete: if isOwner(uid);
 
-        // Contador de cópias (F13, N32): um doc por pessoa que copiou, id =
-        // uid dela. Só cria quem segue a dona e com a lista visível; uma por
-        // pessoa (o 2º create vira update, negado) e imutável. A dona lê
-        // todos (contagem via count()); quem copiou lê só o próprio. Só a
-        // dona apaga (junto com a lista, no mesmo batch).
+
+
+
+
         match /copies/{copierUid} {
           allow read: if isOwner(uid) || isOwner(copierUid);
           allow create: if isOwner(copierUid)
-            && exists(/databases/$(database)/documents/users/$(copierUid)/following/$(uid))
-            && get(/databases/$(database)/documents/users/$(uid)/lists/$(listId)).data.visible == true
-            && request.resource.data.keys().hasOnly(['createdAt'])
-            && request.resource.data.keys().hasAll(['createdAt'])
+            && request.resource.data.keys().hasOnly(['createdAt', 'copiedListId'])
+            && request.resource.data.keys().hasAll(['createdAt', 'copiedListId'])
+            && validCopyReceipt(uid, listId, copierUid, request.resource.data)
             && request.resource.data.createdAt == request.time;
           allow delete: if isOwner(uid);
-          allow update: if false;
+          allow update: if isOwner(copierUid)
+            && resource.data.keys().hasOnly(['createdAt'])
+            && request.resource.data.keys().hasOnly(['createdAt', 'copiedListId'])
+            && request.resource.data.keys().hasAll(['createdAt', 'copiedListId'])
+            && request.resource.data.createdAt == resource.data.createdAt
+            && validCopyReceipt(uid, listId, copierUid, request.resource.data);
         }
       }
+    }
+
+    match /usernames/{handle} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn() && handle.matches('[a-z0-9][a-z0-9._]{2,23}')
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == handle;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username != handle;
+    }
+
+    function validCopyReceipt(ownerUid, listId, copierUid, data) {
+      return ownerUid != copierUid
+        && data.copiedListId is string && data.copiedListId.matches('[^/]{1,128}')
+        && exists(/databases/$(database)/documents/users/$(copierUid)/following/$(ownerUid))
+        && get(/databases/$(database)/documents/users/$(ownerUid)/lists/$(listId)).data.visible == true
+        && getAfter(/databases/$(database)/documents/users/$(copierUid)/lists/$(data.copiedListId)).data.copiedFromUid == ownerUid
+        && getAfter(/databases/$(database)/documents/users/$(copierUid)/lists/$(data.copiedListId)).data.copiedFromListId == listId
+        && getAfter(/databases/$(database)/documents/users/$(copierUid)/lists/$(data.copiedListId)).data.createdAt is timestamp
+        && getAfter(/databases/$(database)/documents/users/$(copierUid)/lists/$(data.copiedListId)).data.createdAt <= request.time;
     }
 
     function lockKeys() {
       return ['lastAt', 'reviewId', 'placeId'];
     }
 
-    // A avaliação `reviewId` é nova, nasce neste batch, do mesmo autor e local.
+
     function validLock(placeId, data) {
       let reviewPath = /databases/$(database)/documents/reviews/$(data.reviewId);
       let review = getAfter(reviewPath);
@@ -171,7 +316,7 @@ service cloud.firestore {
       return ['lastAt', 'visitId', 'placeId'];
     }
 
-    // A visita `visitId` é nova, nasce neste batch, do mesmo autor e local.
+
     function validVisitLock(placeId, data) {
       let visitPath = /databases/$(database)/documents/visits/$(data.visitId);
       let visit = getAfter(visitPath);
@@ -190,7 +335,7 @@ service cloud.firestore {
       return ['lastAt', 'reportId', 'placeId'];
     }
 
-    // O relato `reportId` é novo, nasce neste batch, do mesmo autor e local.
+
     function validOpenReportLock(placeId, data) {
       let reportPath = /databases/$(database)/documents/openReports/$(data.reportId);
       let report = getAfter(reportPath);
@@ -205,13 +350,32 @@ service cloud.firestore {
         && report.data.placeId == placeId;
     }
 
-    // Obrigatórias (F12). As opcionais do F13 ficam fora do hasAll: listas
-    // antigas, sem elas, continuam válidas.
+    function queueReportLockKeys() {
+      return ['lastAt', 'reportId', 'placeId'];
+    }
+
+
+    function validQueueReportLock(placeId, data) {
+      let reportPath = /databases/$(database)/documents/queueReports/$(data.reportId);
+      let report = getAfter(reportPath);
+      return data.keys().hasOnly(queueReportLockKeys())
+        && data.keys().hasAll(queueReportLockKeys())
+        && data.placeId == placeId
+        && data.reportId is string
+        && data.lastAt == request.time
+        && !exists(reportPath)
+        && report != null
+        && report.data.authorId == request.auth.uid
+        && report.data.placeId == placeId;
+    }
+
+
+
     function listKeys() {
       return ['name', 'emoji', 'placeIds', 'createdAt', 'updatedAt'];
     }
 
-    // Crédito de lista copiada (F13): o trio vem junto ou não vem.
+
     function copiedFromKeys() {
       return ['copiedFromUid', 'copiedFromName', 'copiedFromListId'];
     }
@@ -220,10 +384,10 @@ service cloud.firestore {
       return listKeys().concat(['visible']).concat(copiedFromKeys());
     }
 
-    // Sem crédito, ou o trio completo apontando para uma lista que quem
-    // copia pode ler: de outra pessoa, que ele segue, existente e visível.
-    // O nome é igual ao `displayName` da autora (imutável, então o crédito
-    // nunca fica desatualizado).
+
+
+
+
     function validCopiedFrom(uid, data) {
       return !data.keys().hasAny(copiedFromKeys())
         || (data.keys().hasAll(copiedFromKeys())
@@ -236,7 +400,7 @@ service cloud.firestore {
             && data.copiedFromName == get(/databases/$(database)/documents/users/$(data.copiedFromUid)).data.displayName);
     }
 
-    // MESMA lista de `listEmojis` em app/lib/domain/models/place_list.dart.
+
     function listEmojis() {
       return ['🎉', '🍕', '🍔', '🍣', '🍻', '☕', '🍰', '🌮', '🌊', '💑', '👯', '⭐'];
     }
@@ -249,31 +413,31 @@ service cloud.firestore {
         && data.name.size() >= 1
         && data.name.size() <= 40
         && data.name == data.name.trim()
-        // O app colapsa espaços internos repetidos.
+
         && !data.name.matches('.*\\s\\s.*')
         && (data.emoji == null || data.emoji in listEmojis())
         && data.placeIds is list
         && data.placeIds.size() <= 200;
     }
 
-    // ---------- places ----------
-    // Seed/admin grava Natal (ignora as Rules). Fora disso (G2), o app cria o
-    // local descoberto pelo Photon/OSM na 1ª interação (avaliar ou salvar):
-    // só create, nunca update/delete; id `osm-{n|w|r}{id}` (sem zero à
-    // esquerda) = mesmo esquema do
-    // seed, então o mesmo local nunca vira dois docs (o 2º create de uma
-    // corrida é um update, negado, e o app segue com o doc que já existe).
-    // Sem `nameLower`/`searchTokens`: o cliente não grava campos de busca
-    // (não dá para validá-los e um forjado poluiria a busca de todos). Fora
-    // de Natal, a busca acha os locais criados pelo Photon.
+
+
+
+
+
+
+
+
+
+
     function placeKeys() {
       return ['name', 'category', 'neighborhood', 'city', 'address', 'lat',
               'lng', 'geohash', 'osmId', 'source', 'createdBy', 'createdAt'];
     }
 
-    // MESMO vocabulário de `CATEGORIES` em firebase/seed/osm/category.js e
-    // `osmCategories` em app/lib/domain/osm_category.dart (teste de paridade
-    // em firebase/tests/osm.test.js).
+
+
+
     function placeCategories() {
       return ['Restaurante', 'Lanchonete', 'Pub', 'Bar', 'Café', 'Sorveteria',
               'Praça de alimentação', 'Cervejaria', 'Pizzaria', 'Hamburgueria',
@@ -291,9 +455,9 @@ service cloud.firestore {
       return v is string && v.size() <= 120;
     }
 
-    // Retângulo APROXIMADO do Brasil (com Fernando de Noronha e Trindade;
-    // inclui pedaços de países vizinhos). MESMO de `brazilBounds` em
-    // app/lib/domain/geo.dart (teste de paridade lê este arquivo).
+
+
+
     function inBrazilBounds(lat, lng) {
       return lat is number && lng is number
         && lat >= -34.0 && lat <= 5.5
@@ -313,9 +477,9 @@ service cloud.firestore {
         && optionalText(data.city)
         && optionalText(data.address)
         && inBrazilBounds(data.lat, data.lng)
-        // Só o formato: um geohash forjado não tem efeito, porque o "Perto"
-        // usa o geohash apenas para escolher candidatos e sempre filtra pela
-        // distância real (haversine) sobre lat/lng, que são validados acima.
+
+
+
         && data.geohash is string
         && data.geohash.matches('[0-9b-hjkmnp-z]{9}')
         && data.osmId == osmTypeName(placeId[4]) + '/' + placeId[5:placeId.size()]
@@ -328,16 +492,31 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && validNewPlace(request.resource.data, placeId);
       allow update, delete: if false;
+      match /photos/{photoId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && exists(/databases/$(database)/documents/places/$(placeId))
+          && request.resource.data.keys().hasOnly(['authorId', 'authorName', 'createdAt', 'jpeg'])
+          && request.resource.data.keys().hasAll(['authorId', 'authorName', 'createdAt', 'jpeg'])
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.authorName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.jpeg is bytes
+          && request.resource.data.jpeg.size() > 0
+          && request.resource.data.jpeg.size() <= 150000;
+        allow delete: if signedIn() && resource.data.authorId == request.auth.uid;
+        allow update: if false;
+      }
     }
 
-    // ---------- reviews ----------
+
     function validScore(v) {
       return v is int && v >= 1 && v <= 5;
     }
 
-    // Avaliação mínima (F14): cada eixo é opcional — null = não avaliado,
-    // nunca zero. A chave continua sempre presente (hasAll) e ao menos um
-    // eixo precisa ter nota.
+
+
+
     function validAxis(v) {
       return v == null || validScore(v);
     }
@@ -345,7 +524,7 @@ service cloud.firestore {
     function validAxes(data) {
       return validAxis(data.food)
         && validAxis(data.ambience)
-        && validAxis(data['service']) // 'service' é palavra reservada nas Rules
+        && validAxis(data['service'])
         && (data.food != null || data.ambience != null || data['service'] != null);
     }
 
@@ -353,29 +532,29 @@ service cloud.firestore {
       return v == null || v in ['sozinho', 'casal', 'amigos', 'familia', 'trabalho'];
     }
 
-    // Comentário opcional do autor: chave sempre presente, null quando não há.
-    // Vazio é negado (o cliente grava null); imutável como a avaliação.
+
+
     function validComment(v) {
       return v == null || (v is string && v.size() >= 1 && v.size() <= 280);
     }
 
-    // Chaves obrigatórias (as 10 de antes do G1).
+
     function reviewRequiredKeys() {
       return ['authorId', 'authorName', 'placeId', 'placeName',
               'food', 'ambience', 'service', 'companion', 'comment', 'createdAt'];
     }
 
-    // Permitidas: as 10 + `hasPhoto` (G1) + `priceBand` (F27). Janela de
-    // transição: clientes antigos ainda gravam sem `hasPhoto` (= false) e
-    // sem `priceBand` (= não informado).
+
+
+
     function reviewKeys() {
-      return reviewRequiredKeys().concat(['hasPhoto', 'priceBand']);
+      return reviewRequiredKeys().concat(['hasPhoto', 'priceBand', 'tags', 'silent']);
     }
 
-    // Faixa de preço por pessoa (F27), opcional em avaliações e visitas:
-    // ausente (build antigo), null (não informada) ou int de 1 a 5.
-    // MESMOS limites de `PriceBand` em app/lib/domain/price_band.dart (teste
-    // de paridade lê este arquivo).
+
+
+
+
     function validPriceBand(data) {
       return !('priceBand' in data)
         || data.priceBand == null
@@ -386,10 +565,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/reviewPhotos/$(reviewId);
     }
 
-    // Foto opcional (G1): `hasPhoto` ausente = false; presente, é bool. Se
-    // true, o doc da foto com o mesmo id precisa existir ao fim do mesmo batch
-    // (as Rules da foto garantem o resto: mesmo autor, review nova, JPEG de
-    // até 150.000 bytes).
+
+
+
+
     function validHasPhoto(data, reviewId) {
       return !('hasPhoto' in data)
         || (data.hasPhoto is bool
@@ -403,28 +582,31 @@ service cloud.firestore {
     function validReview(data, reviewId) {
       let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
       let placePath = /databases/$(database)/documents/places/$(data.placeId);
-      // F03: uma leitura só da trava (estado ao fim do batch).
+
       let lock = getAfter(lockPath(request.auth.uid, data.placeId));
       return data.keys().hasOnly(reviewKeys())
         && data.keys().hasAll(reviewRequiredKeys())
         && data.authorId == request.auth.uid
+        && notBusinessOwner(data.placeId)
         && data.authorName == profile.data.displayName
         && data.placeId is string
-        // `After`: o local pode nascer no mesmo batch da avaliação (G2).
+
         && existsAfter(placePath)
         && data.placeName == getAfter(placePath).data.name
+        && (!('tags' in data) || validFoodTags(data.tags))
         && validAxes(data)
         && validCompanion(data.companion)
         && validComment(data.comment)
         && validHasPhoto(data, reviewId)
+        && (!('silent' in data) || data.silent is bool)
         && validPriceBand(data)
-        // F03: a trava `users/{uid}/reviewLocks/{placeId}` é criada ou
-        // renovada no MESMO batch, apontando para esta avaliação (as Rules da
-        // trava exigem o intervalo de 30 dias desde a anterior).
+
+
+
         && lock != null
         && lock.data.lastAt == request.time
         && lock.data.reviewId == reviewId
-        // F04: a entrada de auditoria nasce no mesmo batch.
+
         && existsAfter(auditPath('reviews', reviewId))
         && data.createdAt == request.time;
     }
@@ -432,23 +614,23 @@ service cloud.firestore {
     match /reviews/{reviewId} {
       allow read: if signedIn();
       allow create: if signedIn() && validReview(request.resource.data, reviewId);
-      // Imutável: nem o autor edita ou exclui.
+
       allow update, delete: if false;
     }
 
-    // ---------- visits (F15: "Voltei aqui") ----------
-    // Ida leve ao local: sem notas, companhia opcional, período derivado do
-    // `createdAt` (F02). Nunca anônima (autor e nome do perfil validados
-    // como na review), imutável e limitada a 1 a cada 12 h por usuário e
-    // local pela trava `users/{uid}/visitLocks/{placeId}` do mesmo batch.
+
+
+
+
+
     function visitKeys() {
       return ['authorId', 'authorName', 'placeId', 'placeName', 'companion', 'createdAt'];
     }
 
-    // Permitidas: as 6 obrigatórias + `priceBand` opcional (F27; builds
-    // antigos gravam sem a chave).
+
+
     function visitAllowedKeys() {
-      return visitKeys().concat(['priceBand']);
+      return visitKeys().concat(['priceBand', 'silent']);
     }
 
     function visitLockPath(uid, placeId) {
@@ -462,17 +644,19 @@ service cloud.firestore {
       return data.keys().hasOnly(visitAllowedKeys())
         && data.keys().hasAll(visitKeys())
         && data.authorId == request.auth.uid
+        && notBusinessOwner(data.placeId)
         && data.authorName == profile.data.displayName
         && data.placeId is string
-        // `After`: o local pode nascer no mesmo batch da visita (G2).
+
         && existsAfter(placePath)
         && data.placeName == getAfter(placePath).data.name
         && validCompanion(data.companion)
+        && (!('silent' in data) || data.silent is bool)
         && validPriceBand(data)
         && lock != null
         && lock.data.lastAt == request.time
         && lock.data.visitId == visitId
-        // F04: a entrada de auditoria nasce no mesmo batch.
+
         && existsAfter(auditPath('visits', visitId))
         && data.createdAt == request.time;
     }
@@ -483,13 +667,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ---------- openReports (F20: "Está aberto agora?") ----------
-    // Fato relatado por quem está no local: `open` (Sim/Não). Nunca anônimo
-    // (autor e nome do perfil validados como na visita), imutável,
-    // `createdAt` do servidor, local existente (pode nascer no mesmo batch,
-    // G2) e limitado a 1 a cada 30 min por usuário e local pela trava
-    // `users/{uid}/openReportLocks/{placeId}` do mesmo batch. A proximidade
-    // (até 150 m) é checada no app: a localização nunca é enviada.
+
+
+
+
+
+
+
     function openReportKeys() {
       return ['authorId', 'authorName', 'placeId', 'open', 'createdAt'];
     }
@@ -504,15 +688,16 @@ service cloud.firestore {
       return data.keys().hasOnly(openReportKeys())
         && data.keys().hasAll(openReportKeys())
         && data.authorId == request.auth.uid
+        && notBusinessOwner(data.placeId)
         && data.authorName == profile.data.displayName
         && data.placeId is string
-        // `After`: o local pode nascer no mesmo batch do relato (G2).
+
         && existsAfter(/databases/$(database)/documents/places/$(data.placeId))
         && data.open is bool
         && lock != null
         && lock.data.lastAt == request.time
         && lock.data.reportId == reportId
-        // F04: a entrada de auditoria nasce no mesmo batch.
+
         && existsAfter(auditPath('openReports', reportId))
         && data.createdAt == request.time;
     }
@@ -523,13 +708,97 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ---------- auditLog (F04) ----------
-    // Quem criou cada avaliação, visita e relato. Uma entrada por doc, id
-    // determinístico `{coleção}-{docId}` (o retry de um batch que não foi
-    // gravado reusa o mesmo id). Só nasce no MESMO batch que cria o doc
-    // auditado (novo, do mesmo autor e local), e o create desses docs exige
-    // a entrada. Ninguém lê nem altera pelo app. Docs anteriores ao F04
-    // ficam sem entrada (sem backfill).
+    function queueReportKeys() {
+      return ['authorId', 'authorName', 'placeId', 'minutes', 'createdAt'];
+    }
+
+    function queueReportLockPath(uid, placeId) {
+      return /databases/$(database)/documents/users/$(uid)/queueReportLocks/$(placeId);
+    }
+
+    function validQueueReport(data, reportId) {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let lock = getAfter(queueReportLockPath(request.auth.uid, data.placeId));
+      return data.keys().hasOnly(queueReportKeys())
+        && data.keys().hasAll(queueReportKeys())
+        && data.authorId == request.auth.uid
+        && notBusinessOwner(data.placeId)
+        && data.authorName == profile.data.displayName
+        && data.placeId is string
+
+        && existsAfter(/databases/$(database)/documents/places/$(data.placeId))
+        && data.minutes is int && data.minutes >= 0 && data.minutes <= 180
+        && lock != null
+        && lock.data.lastAt == request.time
+        && lock.data.reportId == reportId
+
+        && existsAfter(auditPath('queueReports', reportId))
+        && data.createdAt == request.time;
+    }
+
+    match /queueReports/{reportId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validQueueReport(request.resource.data, reportId);
+      allow update, delete: if false;
+    }
+
+
+    match /placePresentations/{placeId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && exists(/databases/$(database)/documents/places/$(placeId))
+        && get(/databases/$(database)/documents/placeOwners/$(placeId)).data.uid == request.auth.uid
+        && request.resource.data.keys().hasAll(['description', 'hours', 'updatedBy', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['description', 'hours', 'updatedBy', 'updatedAt'])
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 1000
+        && request.resource.data.hours is string
+        && request.resource.data.hours.size() <= 500
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /ownerReplies/{reviewId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['authorId', 'authorName', 'placeId', 'reviewId', 'text', 'createdAt'])
+        && request.resource.data.keys().hasAll(['authorId', 'authorName', 'placeId', 'reviewId', 'text', 'createdAt'])
+        && request.resource.data.reviewId == reviewId
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.authorName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+        && request.resource.data.placeId == get(/databases/$(database)/documents/reviews/$(reviewId)).data.placeId
+        && get(/databases/$(database)/documents/placeOwners/$(request.resource.data.placeId)).data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text == request.resource.data.text.trim()
+        && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 1000
+        && request.resource.data.createdAt == request.time
+        && existsAfter(auditPath('ownerReplies', reviewId));
+      allow update, delete: if false;
+    }
+
+
+    match /config/features {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+    match /sponsoredSlots/{slotId} {
+      allow read: if signedIn()
+        && get(/databases/$(database)/documents/config/features).data.sponsorshipEnabled == true
+        && resource.data.keys().hasOnly(['placeId', 'startsAt', 'endsAt'])
+        && resource.data.startsAt <= request.time && resource.data.endsAt > request.time
+        && exists(/databases/$(database)/documents/placeOwners/$(resource.data.placeId))
+        && exists(/databases/$(database)/documents/places/$(resource.data.placeId));
+      allow write: if false;
+    }
+
+
+
+
+
+
+
+
     function auditKeys() {
       return ['actorUid', 'action', 'collection', 'docId', 'placeId', 'at'];
     }
@@ -543,14 +812,14 @@ service cloud.firestore {
       let target = getAfter(targetPath);
       return data.keys().hasOnly(auditKeys())
         && data.keys().hasAll(auditKeys())
-        && data.collection in ['reviews', 'visits', 'openReports']
+        && data.collection in ['reviews', 'visits', 'openReports', 'queueReports', 'ownerReplies']
         && data.docId is string
         && auditId == data.collection + '-' + data.docId
         && data.action == 'create'
         && data.actorUid == request.auth.uid
         && data.placeId is string
         && data.at == request.time
-        // O alvo é novo: nasce neste batch, do mesmo autor e local.
+
         && !exists(targetPath)
         && target != null
         && target.data.authorId == request.auth.uid
@@ -562,11 +831,11 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
-    // ---------- reviewPhotos (G1) ----------
-    // Foto de quem avaliou, gravada como bytes no Firestore (plano Spark, sem
-    // Storage). O app recodifica em JPEG <= 1080 px (sem EXIF) antes de enviar.
-    // Imutável e ligada à avaliação: só nasce no mesmo batch que cria a review
-    // do mesmo id, pelo mesmo autor, com `hasPhoto: true`.
+
+
+
+
+
     function photoKeys() {
       return ['authorId', 'jpeg', 'createdAt'];
     }
@@ -580,11 +849,11 @@ service cloud.firestore {
         && request.resource.data.jpeg is bytes
         && request.resource.data.jpeg.size() >= 1
         && request.resource.data.jpeg.size() <= 150000
-        // Começa com o marcador JPEG (FF D8 FF). A comparação via toBase64()
-        // com "/9j/" negava JPEG válido no emulador; via hex funciona.
+
+
         && request.resource.data.jpeg.toHexString().lower()[0:6] == 'ffd8ff'
         && request.resource.data.createdAt == request.time
-        // A review não existia antes: é criada neste mesmo batch.
+
         && !exists(/databases/$(database)/documents/reviews/$(reviewId))
         && getAfter(/databases/$(database)/documents/reviews/$(reviewId)).data.authorId == request.auth.uid
         && getAfter(/databases/$(database)/documents/reviews/$(reviewId)).data.get('hasPhoto', false) == true;

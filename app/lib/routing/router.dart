@@ -1,3 +1,15 @@
+import '../data/repositories/profile_stats_repository.dart';
+import '../data/repositories/privacy_repository.dart';
+import '../ui/privacy/privacy_view.dart';
+import '../ui/settings/settings_view.dart';
+import '../ui/profile/profile_edit_view.dart';
+import '../ui/profile/account_security_view.dart';
+import '../ui/sponsored/sponsored_view.dart';
+import '../ui/owner/owner_reviews_view.dart';
+import '../ui/admin/admin_access_view.dart';
+import '../ui/admin/admin_ownership_view.dart';
+import '../ui/admin/admin_ownership_view_model.dart';
+import '../ui/admin/admin_access.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -37,9 +49,12 @@ import '../ui/saved/saved_places_store.dart';
 import '../ui/saved/saved_view.dart';
 import '../ui/saved/saved_view_model.dart';
 import 'routes.dart';
+import '../data/repositories/owner_repository.dart';
+import '../data/repositories/food_tag_repository.dart';
+import '../ui/dietary/dietary_store.dart';
+import '../ui/dietary/dietary_view.dart';
+import '../ui/owner/owner_view.dart';
 
-/// Decide para onde redirecionar conforme o estado de autenticação.
-/// Função pura para ser testável.
 String? authRedirect({
   required bool isInitialized,
   required bool isSignedIn,
@@ -53,14 +68,13 @@ String? authRedirect({
   return null;
 }
 
-/// "Está aberto agora?" (F20) do detalhe; `null` sem o repositório de
-/// relatos (ex.: testes que não o fornecem).
 OpenNowViewModel? _openNowFor(BuildContext context, String placeId) {
   final reports = context.read<OpenReportRepository?>();
   if (reports == null) return null;
   return OpenNowViewModel(
     placeId: placeId,
     openReportRepository: reports,
+    ownerRepository: context.read<OwnerRepository?>(),
     authRepository: context.read(),
     userRepository: context.read(),
     locationService: context.read<LocationService?>(),
@@ -80,6 +94,75 @@ GoRouter buildRouter(AuthRepository auth) {
     ),
     routes: [
       GoRoute(
+        path: Routes.settings,
+        builder: (context, state) => const SettingsView(),
+      ),
+      GoRoute(
+        path: Routes.editProfile,
+        builder: (_, _) => const ProfileEditView(),
+      ),
+      GoRoute(
+        path: Routes.accountSecurity,
+        builder: (_, _) => const AccountSecurityView(),
+      ),
+      GoRoute(
+        path: '/modo-silencioso',
+        builder: (context, state) => const PrivacyView(),
+      ),
+      GoRoute(
+        path: '/patrocinado',
+        builder: (context, state) => const SponsoredView(),
+      ),
+      GoRoute(
+        path: '/meus-estabelecimentos/:placeId/avaliacoes',
+        builder: (context, state) =>
+            OwnerReviewsView(placeId: state.pathParameters['placeId']!),
+      ),
+      GoRoute(
+        path: Routes.admin,
+        builder: (context, state) => ListenableBuilder(
+          listenable: context.read<AdminAccess>(),
+          builder: (context, _) => Scaffold(
+            appBar: AppBar(title: const Text('Administração')),
+            body: context.read<AdminAccess>().enabled
+                ? ListTile(
+                    title: const Text('Solicitações de titularidade'),
+                    onTap: () => context.push(Routes.adminRequests),
+                  )
+                : AdminAccessView(access: context.read<AdminAccess>()),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: Routes.adminRequests,
+        builder: (context, state) => ViewModelHost<AdminOwnershipViewModel>(
+          create: (context) =>
+              AdminOwnershipViewModel(context.read(), context.read()),
+          builder: (context, vm) => AdminOwnershipView(viewModel: vm),
+        ),
+      ),
+      GoRoute(
+        path: Routes.adminRequestPattern,
+        builder: (context, state) => ViewModelHost<AdminOwnershipViewModel>(
+          key: ValueKey(state.uri.path),
+          create: (context) => AdminOwnershipViewModel(
+            context.read(),
+            context.read(),
+            uid: state.pathParameters['uid'],
+            placeId: state.pathParameters['placeId'],
+          ),
+          builder: (context, vm) => AdminOwnershipView(viewModel: vm),
+        ),
+      ),
+      GoRoute(
+        path: '/perfil-alimentar',
+        builder: (context, state) => const DietaryView(),
+      ),
+      GoRoute(
+        path: '/meus-estabelecimentos',
+        builder: (context, state) => const OwnerView(),
+      ),
+      GoRoute(
         path: Routes.splash,
         builder: (context, state) =>
             const Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -98,9 +181,7 @@ GoRouter buildRouter(AuthRepository auth) {
           builder: (context, vm) => AuthView(isSignUp: true, viewModel: vm),
         ),
       ),
-      // Telas principais com a barra inferior (Amigos · Perto · Quero ir ·
-      // Pessoas).
-      // Cada aba guarda o próprio estado (IndexedStack).
+
       StatefulShellRoute(
         builder: (context, state, shell) => AppShell(navigationShell: shell),
         navigatorContainerBuilder: (context, shell, children) => AppBranchStack(
@@ -118,6 +199,8 @@ GoRouter buildRouter(AuthRepository auth) {
                     userRepository: context.read(),
                     reviewRepository: context.read(),
                     placeRepository: context.read(),
+                    dietary: context.read<DietaryStore?>(),
+                    foodTagRepository: context.read<FoodTagRepository?>(),
                     followEvents: context.read<FollowEvents>(),
                     visitRepository: context.read<VisitRepository>(),
                   ),
@@ -126,8 +209,7 @@ GoRouter buildRouter(AuthRepository auth) {
               ),
             ],
           ),
-          // "Perto" (F10): criado só na 1ª visita à aba (branch sem preload),
-          // então a permissão é pedida no contexto dela.
+
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -181,11 +263,35 @@ GoRouter buildRouter(AuthRepository auth) {
               ),
             ],
           ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/perfil',
+                builder: (context, state) {
+                  final uid = context.watch<AuthRepository>().currentUserId;
+                  if (uid == null) return const SizedBox.shrink();
+                  return ViewModelHost<ProfileViewModel>(
+                    key: ValueKey('person-$uid'),
+                    create: (context) => ProfileViewModel(
+                      placeRepository: context.read<PlaceRepository?>(),
+                      statsRepository: context.read<ProfileStatsRepository?>(),
+                      uid: uid,
+                      authRepository: context.read(),
+                      userRepository: context.read(),
+                      reviewRepository: context.read(),
+                      followEvents: context.read<FollowEvents>(),
+                      visitRepository: context.read<VisitRepository>(),
+                      listsRepository: context.read<ListsRepository?>(),
+                    ),
+                    builder: (context, vm) => ProfileView(viewModel: vm),
+                  );
+                },
+              ),
+            ],
+          ),
         ],
       ),
-      // Fora do shell: cobre a barra inferior. Abre só com o id (link direto,
-      // reload na web, aba "Quero ir"); `extra` (FeedItem/Place) só adianta
-      // a primeira pintura.
+
       GoRoute(
         path: Routes.placeDetailPattern,
         builder: (context, state) {
@@ -195,6 +301,7 @@ GoRouter buildRouter(AuthRepository auth) {
             create: (context) => PlaceDetailViewModel(
               placeId: placeId,
               initial: state.extra,
+              foodTagRepository: context.read<FoodTagRepository?>(),
               authRepository: context.read(),
               userRepository: context.read(),
               placeRepository: context.read(),
@@ -208,9 +315,7 @@ GoRouter buildRouter(AuthRepository auth) {
           );
         },
       ),
-      // Lista visível de uma pessoa (F13), com "Copiar lista". Rota de topo
-      // própria: o go_router casa o caminho inteiro, então ela e o perfil
-      // (/pessoa/:uid) não se confundem, em qualquer ordem.
+
       GoRoute(
         path: Routes.personListPattern,
         builder: (context, state) {
@@ -232,7 +337,7 @@ GoRouter buildRouter(AuthRepository auth) {
           );
         },
       ),
-      // Perfil simples de uma pessoa (F06), fora do shell como o detalhe.
+
       GoRoute(
         path: Routes.personPattern,
         builder: (context, state) {
@@ -240,6 +345,8 @@ GoRouter buildRouter(AuthRepository auth) {
           return ViewModelHost<ProfileViewModel>(
             key: ValueKey('person-$uid'),
             create: (context) => ProfileViewModel(
+              placeRepository: context.read<PlaceRepository?>(),
+              statsRepository: context.read<ProfileStatsRepository?>(),
               uid: uid,
               authRepository: context.read(),
               userRepository: context.read(),
@@ -264,12 +371,14 @@ GoRouter buildRouter(AuthRepository auth) {
         routes: [
           GoRoute(
             path: ':placeId',
-            // Sem o Place (ex.: deep link / reload na web) volta para a escolha.
+
             redirect: (context, state) =>
                 state.extra is Place ? null : Routes.pickPlace,
             builder: (context, state) => ViewModelHost<ReviewViewModel>(
               create: (context) => ReviewViewModel(
                 place: state.extra! as Place,
+                privacyRepository: context.read<PrivacyRepository?>(),
+                ownerRepository: context.read<OwnerRepository?>(),
                 authRepository: context.read(),
                 userRepository: context.read(),
                 reviewRepository: context.read(),

@@ -10,41 +10,10 @@ import '../saved/saved_places_store.dart';
 
 enum ListsStatus { idle, loading, ready, error }
 
-/// Resultado do "Desfazer" de uma remoção do "Quero ir".
-enum RestoreResult {
-  ok,
+enum RestoreResult { ok, savedFailed, someListsFailed }
 
-  /// Não voltou ao "Quero ir" (nem às listas).
-  savedFailed,
-
-  /// Voltou ao "Quero ir", mas não a todas as listas.
-  someListsFailed,
-}
-
-/// Lista recém-criada (otimista) e o Future da escrita (`false` = falhou e
-/// a lista sumiu).
 typedef ListCreation = ({String id, Future<bool> done});
 
-/// Fonte única das listas nomeadas (F12) do usuário logado, coerente com o
-/// [SavedPlacesStore].
-///
-/// A invariante "lista ⊂ Quero ir" é garantida em três camadas:
-/// - pôr um local numa lista salva o local antes (a escrita da lista só sai
-///   depois do salvamento confirmado);
-/// - remover do "Quero ir" tira o local de todas as listas no mesmo batch
-///   (este store assume o `remover` do [SavedPlacesStore]);
-/// - **reconciliação**: com salvos e listas prontos (e a cada recarga), todo
-///   membro de lista que não está salvo, nem com escrita pendente, sai com
-///   `arrayRemove` em segundo plano. Isso cobre as corridas (escritas que
-///   terminam depois de uma remoção, remoção sem listas carregadas, outro
-///   aparelho).
-///
-/// Contagens e filtros só consideram locais salvos.
-///
-/// Tudo é otimista: o estado confirmado ([_server]) recebe sobreposições
-/// (criação, renomeação, exclusão, membros) que somem quando a escrita
-/// termina — com sucesso viram estado confirmado, com falha são descartadas
-/// (reversão). Escritas da mesma lista são serializadas, na ordem dos toques.
 class ListsStore extends ChangeNotifier {
   ListsStore({
     required AuthRepository authRepository,
@@ -68,8 +37,6 @@ class ListsStore extends ChangeNotifier {
   final SavedPlacesStore _saved;
   final DateTime Function() _clock;
 
-  /// Quanto recarga e remoção esperam escritas em voo / a leitura das
-  /// listas (offline elas não terminam e nada pode travar).
   final Duration _waitTimeout;
 
   String? _uid;
@@ -82,34 +49,22 @@ class ListsStore extends ChangeNotifier {
   bool get isLoading => _status == ListsStatus.loading;
   bool get hasError => _status == ListsStatus.error;
 
-  /// Último estado confirmado pelo servidor.
   final Map<String, PlaceList> _server = {};
 
-  /// Criadas no app, ainda sem confirmação.
   final Map<String, PlaceList> _creating = {};
 
-  /// Renomeação pendente por lista.
   final Map<String, ({String name, String? emoji, int token})> _meta = {};
 
-  /// "Visível para quem me segue" pendente por lista (F13).
   final Map<String, ({bool visible, int token})> _visibility = {};
 
-  /// Lista que a aba "Quero ir" deve selecionar ao abrir (ex.: o "Ver" da
-  /// SnackBar de "Lista copiada").
   String? _focusRequest;
 
-  /// Exclusão pendente.
   final Set<String> _deleting = {};
 
-  /// Membro desejado (pendente) por lista → local.
   final Map<String, Map<String, ({bool member, int token})>> _members = {};
 
-  /// Última escrita enfileirada por lista (serialização).
   final Map<String, Future<bool>> _chains = {};
 
-  /// Local salvo por uma marcação/criação de lista ainda não confirmada →
-  /// token. Se todas as que dependem dele falharem (e ele não estiver em
-  /// lista nenhuma), o salvamento é desfeito.
   final Map<String, int> _autoSaved = {};
 
   int _seq = 0;
@@ -117,10 +72,6 @@ class ListsStore extends ChangeNotifier {
   bool _reconcileScheduled = false;
   bool _disposed = false;
 
-  // ---------------------------------------------------------------- leitura
-
-  /// Listas exibidas (com as mudanças otimistas), da mais antiga para a mais
-  /// nova.
   List<PlaceList> get lists {
     final out = <PlaceList>[
       for (final l in _server.values)
@@ -170,30 +121,24 @@ class ListsStore extends ChangeNotifier {
     );
   }
 
-  /// Pede que a aba "Quero ir" selecione [listId] (consumido uma vez por
-  /// [takeFocusRequest]).
   void focusList(String listId) {
     _focusRequest = listId;
     _notify();
   }
 
-  /// Lista a selecionar na aba, se alguém pediu (uma vez só).
   String? takeFocusRequest() {
     final id = _focusRequest;
     _focusRequest = null;
     return id;
   }
 
-  /// Locais da lista que estão no "Quero ir".
   Set<String> savedPlaceIdsOf(PlaceList list) => {
     for (final id in list.placeIds)
       if (_saved.isSaved(id)) id,
   };
 
-  /// Quantos locais salvos a lista tem.
   int countOf(PlaceList list) => savedPlaceIdsOf(list).length;
 
-  /// Listas (exibidas) que contêm [placeId].
   List<PlaceList> listsContaining(String placeId) => [
     for (final l in lists)
       if (l.contains(placeId)) l,
@@ -201,7 +146,6 @@ class ListsStore extends ChangeNotifier {
 
   bool get canCreate => isReady && lists.length < PlaceList.maxLists;
 
-  /// Já existe lista com esse nome (sem diferenciar caixa nem acento)?
   bool isNameTaken(String rawName, {String? exceptId}) {
     final key = PlaceList.nameKey(rawName);
     return lists.any(
@@ -209,18 +153,13 @@ class ListsStore extends ChangeNotifier {
     );
   }
 
-  // ---------------------------------------------------------------- carga
-
   void _onSavedChanged() {
-    // Local que saiu do "Quero ir": marcações pendentes dele são canceladas
-    // (não salvam de novo o que a pessoa acabou de remover) e ele deixa de
-    // contar como "salvo por uma lista".
     _members.removeWhere((_, m) {
       m.removeWhere((placeId, o) => o.member && !_saved.isSaved(placeId));
       return m.isEmpty;
     });
     _autoSaved.removeWhere((placeId, _) => !_saved.isSaved(placeId));
-    // Depois do toque em curso (o worker da escrita ainda vai se registrar).
+
     _scheduleReconcile();
     _notify();
   }
@@ -248,8 +187,6 @@ class ListsStore extends ChangeNotifier {
     }
   }
 
-  /// Carrega as listas (também é o "Tentar de novo"). Chamadas simultâneas
-  /// compartilham a mesma leitura.
   Future<void> reload() {
     final uid = _uid;
     if (uid == null) return Future.value();
@@ -262,8 +199,6 @@ class ListsStore extends ChangeNotifier {
       _notify();
     }
     try {
-      // Escritas em voo primeiro (a leitura já reflete o que elas fizeram),
-      // com limite: offline elas não terminam.
       if (_chains.isNotEmpty) {
         await Future.wait(
           _chains.values.toList(),
@@ -282,7 +217,6 @@ class ListsStore extends ChangeNotifier {
     }
   }
 
-  /// Lê as listas do servidor (com limite de tempo) e reconcilia.
   Future<void> _fetch(String uid, int generation) async {
     final loaded = await _repo.listLists(uid).timeout(_waitTimeout);
     if (generation != _generation) return;
@@ -290,8 +224,7 @@ class ListsStore extends ChangeNotifier {
       ..clear()
       ..addAll({for (final l in loaded) l.id: l});
     _status = ListsStatus.ready;
-    // Já no carregamento: antes de a pessoa conseguir salvar de novo um
-    // local que saiu do "Quero ir", ele já não aparece na lista.
+
     _reconcile();
   }
 
@@ -304,8 +237,6 @@ class ListsStore extends ChangeNotifier {
     });
   }
 
-  /// Tira das listas (em segundo plano) quem não está no "Quero ir" nem tem
-  /// escrita de salvo pendente.
   void _reconcile() {
     if (!isReady || !_saved.isReady) return;
     for (final list in [..._server.values]) {
@@ -319,17 +250,12 @@ class ListsStore extends ChangeNotifier {
     }
   }
 
-  /// `arrayRemove` de um membro que não está no "Quero ir" (se ainda não há
-  /// escrita pendente desse membro).
   void _dropGhost(String listId, String placeId) {
     if (_members[listId]?.containsKey(placeId) ?? false) return;
     if (listById(listId) == null) return;
     unawaited(_setMembership(listId, placeId, false));
   }
 
-  // ---------------------------------------------------------------- escrita
-
-  /// Enfileira [op] depois das escritas anteriores da mesma lista.
   Future<bool> _enqueue(String listId, Future<bool> Function() op) {
     final prev = _chains[listId];
     final next = prev == null ? op() : prev.then((_) => op());
@@ -340,22 +266,17 @@ class ListsStore extends ChangeNotifier {
     return next;
   }
 
-  /// Salva [placeId] já (otimista) por conta de uma lista; devolve o Future
-  /// do salvamento e o token de "salvo por lista" (null se já estava salvo).
   ({Future<bool> done, int? token}) _saveFor(String placeId) {
     int? token;
     if (!_saved.isSaved(placeId)) {
       token = ++_seq;
       _autoSaved[placeId] = token;
     } else {
-      // Já salvo por outra lista pendente: participa da mesma decisão.
       token = _autoSaved[placeId];
     }
     return (done: _saved.setSaved(placeId, true), token: token);
   }
 
-  /// Uma marcação/criação que salvou [placeId] falhou: se o salvamento ainda
-  /// é "dela" e o local não está (nem vai estar) em lista nenhuma, desfaz.
   void _undoAutoSave(String placeId, int? token) {
     if (token == null || _autoSaved[placeId] != token) return;
     if (!_saved.isSaved(placeId) || listsContaining(placeId).isNotEmpty) {
@@ -365,9 +286,6 @@ class ListsStore extends ChangeNotifier {
     unawaited(_saved.setSaved(placeId, false));
   }
 
-  /// Cria a lista já (otimista). Com [withPlace], ela nasce com o local, que
-  /// é salvo no "Quero ir" antes. `null` se não pode criar (limite, nome
-  /// inválido ou repetido, listas não carregadas).
   ListCreation? create(String rawName, {String? emoji, String? withPlace}) {
     final uid = _uid;
     if (uid == null ||
@@ -378,7 +296,7 @@ class ListsStore extends ChangeNotifier {
       return null;
     }
     final generation = _generation;
-    // Salva já (otimista); a lista só é gravada depois da confirmação.
+
     final save = withPlace == null ? null : _saveFor(withPlace);
     final list = PlaceList(
       id: _repo.newListId(uid),
@@ -394,7 +312,7 @@ class ListsStore extends ChangeNotifier {
         var placeIds = const <String>[];
         if (withPlace != null && save != null) {
           if (!await save.done) throw StateError('não salvo: $withPlace');
-          // Removido do "Quero ir" enquanto isso: a lista nasce vazia.
+
           if (_saved.isSaved(withPlace)) placeIds = [withPlace];
         }
         if (generation != _generation) return false;
@@ -409,7 +327,7 @@ class ListsStore extends ChangeNotifier {
         _server[list.id] = list.copyWith(placeIds: placeIds);
         _creating.remove(list.id);
         if (withPlace != null) _autoSaved.remove(withPlace);
-        // Saiu do "Quero ir" com a criação em voo: tira da lista.
+
         if (withPlace != null &&
             placeIds.isNotEmpty &&
             !_saved.isSaved(withPlace)) {
@@ -431,19 +349,10 @@ class ListsStore extends ChangeNotifier {
     return (id: list.id, done: done);
   }
 
-  /// Copia a lista [source] de [author] (F13): snapshot com crédito, mesmo
-  /// emoji e nome (ou "`nome` (de `Autora`)" se já existir). Os locais são
-  /// salvos no "Quero ir" antes e só os confirmados entram na lista
-  /// (lista ⊂ Quero ir). Se a lista não puder ser gravada, desfaz os
-  /// salvamentos que a cópia fez. Registra a cópia (contador da autora,
-  /// uma por pessoa); falha do registro não desfaz a cópia.
-  ///
-  /// `null` se não pode copiar agora (limite de listas, listas não
-  /// carregadas, sem login). A lista aparece já (otimista).
   ListCreation? copyFrom(PlaceList source, UserProfile author) {
     final uid = _uid;
     final authorUid = author.uid;
-    // Exatamente o nome do perfil: as Rules conferem o crédito com ele.
+
     final authorName = author.displayName;
     if (uid == null || uid == authorUid || !canCreate) return null;
     final generation = _generation;
@@ -461,7 +370,7 @@ class ListsStore extends ChangeNotifier {
       name: authorName,
       listId: source.id,
     );
-    // Salva já (otimista); a lista só é gravada com os confirmados.
+
     final saves = {for (final id in placeIds) id: _saveFor(id)};
     final list = PlaceList(
       id: _repo.newListId(uid),
@@ -501,7 +410,7 @@ class ListsStore extends ChangeNotifier {
           if (_autoSaved[id] == saves[id]!.token) _autoSaved.remove(id);
         }
         _notify();
-        unawaited(_recordCopy(source.id, authorUid, uid));
+        unawaited(_recordCopy(source.id, authorUid, uid, list.id));
         return true;
       } on Object {
         if (generation != _generation) return false;
@@ -519,31 +428,30 @@ class ListsStore extends ChangeNotifier {
     return (id: list.id, done: done);
   }
 
-  /// Contador de cópias da autora: só a 1ª cópia de cada pessoa conta. O
-  /// registro vai direto (sem ler antes): a 2ª cópia é negada pelas Rules e
-  /// o repositório a trata como "já registrada".
-  Future<void> _recordCopy(String listId, String ownerUid, String uid) async {
+  Future<void> _recordCopy(
+    String listId,
+    String ownerUid,
+    String uid,
+    String copiedListId,
+  ) async {
     try {
       await _repo.recordCopy(
         ownerUid: ownerUid,
         listId: listId,
         copierUid: uid,
+        copiedListId: copiedListId,
       );
     } on Object catch (e) {
-      // A cópia já está feita; só o contador da autora fica sem esta.
       debugPrint('Registro de cópia indisponível: $e');
     }
   }
 
-  /// Quantas pessoas copiaram a lista [listId] do usuário (F13, N32).
   Future<int> copyCount(String listId) {
     final uid = _uid;
     if (uid == null) return Future.value(0);
     return _repo.copyCount(ownerUid: uid, listId: listId);
   }
 
-  /// "Visível para quem me segue" (F13), otimista: falha reverte e
-  /// completa com `false`.
   Future<bool> setVisible(String listId, bool visible) {
     final uid = _uid;
     final current = listById(listId);
@@ -574,14 +482,9 @@ class ListsStore extends ChangeNotifier {
     });
   }
 
-  /// Põe/tira [placeId] da lista (otimista). Pôr salva o local antes.
-  /// Completa com `false` se falhou (estado revertido) ou não é possível
-  /// (lista cheia, inexistente, listas não carregadas).
   Future<bool> setMembership(String listId, String placeId, bool member) =>
       _setMembership(listId, placeId, member);
 
-  /// [force]: não checa a lista cheia (repor no "Desfazer" um membro que já
-  /// estava lá; as Rules ainda limitam a 200).
   Future<bool> _setMembership(
     String listId,
     String placeId,
@@ -595,7 +498,7 @@ class ListsStore extends ChangeNotifier {
       return Future.value(false);
     }
     final generation = _generation;
-    // Salva já (otimista); o membro só é gravado depois da confirmação.
+
     final save = member ? _saveFor(placeId) : null;
     final token = ++_seq;
     _members.putIfAbsent(listId, () => {})[placeId] = (
@@ -606,7 +509,6 @@ class ListsStore extends ChangeNotifier {
     bool current() => _members[listId]?[placeId]?.token == token;
     return _enqueue(listId, () async {
       try {
-        // Superada por outro toque ou cancelada (saiu do "Quero ir").
         if (generation != _generation) return false;
         if (!current()) return true;
         if (save != null) {
@@ -630,7 +532,7 @@ class ListsStore extends ChangeNotifier {
         _clearMember(listId, placeId, token);
         if (member) {
           _autoSaved.remove(placeId);
-          // Saiu do "Quero ir" com a escrita em voo: tira da lista.
+
           if (!_saved.isSaved(placeId)) _dropGhost(listId, placeId);
         }
         _notify();
@@ -652,8 +554,6 @@ class ListsStore extends ChangeNotifier {
     if (m.isEmpty) _members.remove(listId);
   }
 
-  /// Renomeia / troca o emoji (mesmas validações da criação). Sem mudança,
-  /// não escreve.
   Future<bool> rename(String listId, String rawName, {String? emoji}) {
     final uid = _uid;
     final current = listById(listId);
@@ -699,7 +599,6 @@ class ListsStore extends ChangeNotifier {
     });
   }
 
-  /// Exclui a lista (otimista). Os locais continuam no "Quero ir".
   Future<bool> delete(String listId) {
     final uid = _uid;
     if (uid == null || !isReady || listById(listId) == null) {
@@ -725,8 +624,6 @@ class ListsStore extends ChangeNotifier {
         _meta.remove(listId);
         _visibility.remove(listId);
       } else {
-        // A lista volta: sem quem saiu do "Quero ir" enquanto isso (o batch
-        // de remoção a pulou por estar sendo excluída).
         for (final placeId in [...?_server[listId]?.placeIds]) {
           if (!_saved.isSaved(placeId)) _dropGhost(listId, placeId);
         }
@@ -736,8 +633,6 @@ class ListsStore extends ChangeNotifier {
     });
   }
 
-  /// "Desfazer" de uma remoção do "Quero ir": salva de novo e repõe nas
-  /// listas em que o local estava (sem checar se a lista ficou cheia).
   Future<RestoreResult> restore(
     String placeId,
     Iterable<String> listIds,
@@ -756,13 +651,9 @@ class ListsStore extends ChangeNotifier {
         : RestoreResult.someListsFailed;
   }
 
-  /// `remover` do [SavedPlacesStore]: apaga o salvo e tira o local de todas
-  /// as listas num único batch.
   Future<void> _removeEverywhere(String uid, String placeId) async {
     final generation = _generation;
     if (!isReady) {
-      // Sem saber em que listas o local está: remove só o salvo. A
-      // reconciliação tira das listas quando elas carregarem.
       await _saved.removeOnly(uid, placeId);
       unawaited(reload());
       return;
@@ -775,8 +666,6 @@ class ListsStore extends ChangeNotifier {
         listIds: listIds,
       );
     } on Object {
-      // Lista apagada em outro aparelho (update de doc ausente falha o
-      // batch): relê as listas e tenta uma vez sem as que sumiram.
       if (listIds.isEmpty || generation != _generation) rethrow;
       try {
         await _fetch(uid, generation);
@@ -806,8 +695,6 @@ class ListsStore extends ChangeNotifier {
     _notify();
   }
 
-  /// Listas confirmadas que têm (ou vão ter) [placeId]. Exclusão pendente
-  /// fica de fora: a lista vai sumir (e o update falharia o batch).
   List<String> _listsWith(String placeId) => [
     for (final l in _server.values)
       if (!_deleting.contains(l.id) &&

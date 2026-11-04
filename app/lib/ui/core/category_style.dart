@@ -1,15 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'stable_hash.dart';
-import 'theme.dart';
 
 final _bar = RegExp(r'\b(bar|bares|pub|pubs)\b');
 
-/// Ícone da categoria de um local (fallback da foto e lista do seletor). As
-/// categorias seguem o vocabulário do import do OSM ("Bar", "Pizzaria"...),
-/// mas a busca é por palavra-chave para tolerar texto livre; a ordem dos
-/// testes importa: a primeira palavra-chave encontrada vence.
-/// "bar"/"pub" só casam como palavra inteira ("Barraca", "República" não).
 IconData categoryIcon(String category) {
   final c = _normalize(category);
   if (c.contains('mercado') || c.contains('feira')) return Icons.storefront;
@@ -34,13 +28,12 @@ IconData categoryIcon(String category) {
 }
 
 const _gradientPairs = [
-  [NaAreaColors.coral, NaAreaColors.laranja],
-  [NaAreaColors.laranja, NaAreaColors.sol],
-  [NaAreaColors.azulMar, NaAreaColors.coral],
-  [NaAreaColors.coralEscuro, NaAreaColors.azulMar],
+  [Color(0xFF173C34), Color(0xFF315F4D)],
+  [Color(0xFF4B5D37), Color(0xFF718358)],
+  [Color(0xFF3C4931), Color(0xFF825522)],
+  [Color(0xFF1D2B24), Color(0xFF526A50)],
 ];
 
-/// Gradiente do fallback da foto, estável por categoria (paleta pôr-do-sol).
 LinearGradient categoryGradient(String category) {
   final pair =
       _gradientPairs[stableHash(_normalize(category)) % _gradientPairs.length];

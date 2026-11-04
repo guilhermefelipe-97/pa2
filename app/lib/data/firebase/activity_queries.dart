@@ -4,12 +4,57 @@ import '../../domain/models/place_activity.dart';
 import '../activity_batch.dart';
 import '../chunk.dart';
 
-/// Idas (avaliações ou visitas) de [authorIds] em [collection], mais
-/// recentes primeiro: `authorId in` em lotes de [whereInLimit], cada lote com
-/// as suas `min(limit, perBatchLimit)` mais recentes, juntados por
-/// [mergeAuthorBatches] (corte consistente entre lotes cheios). Docs fora do
-/// schema ([fromDoc] devolve `null`) são ignorados, mas o `createdAt` deles
-/// conta para o corte.
+Future<ActivityBatch<T>> fetchPublicByAuthors<T extends PlaceActivity>(
+  CollectionReference<Map<String, dynamic>> collection,
+  List<String> authors, {
+  required int perBatchLimit,
+  required T? Function(QueryDocumentSnapshot<Map<String, dynamic>>) fromDoc,
+}) async {
+  final batches = <RawBatch<T>>[];
+  for (final ids in chunked(authors.toSet().toList(), whereInLimit)) {
+    final query = collection
+        .where('authorId', whereIn: ids)
+        .orderBy('createdAt', descending: true);
+    QueryDocumentSnapshot<Map<String, dynamic>>? cursor;
+    final public = <T>[];
+    var exhausted = false;
+    DateTime? boundary;
+    while (!exhausted) {
+      final page =
+          await (cursor == null ? query : query.startAfterDocument(cursor))
+              .limit(100)
+              .get(const GetOptions(source: Source.server))
+              .timeout(const Duration(seconds: 15));
+      for (final doc in page.docs) {
+        final item = fromDoc(doc);
+        if (item != null && !item.silent) {
+          if (boundary != null && item.createdAt.isBefore(boundary)) {
+            exhausted = true;
+            break;
+          }
+          public.add(item);
+          if (public.length == perBatchLimit) boundary = item.createdAt;
+        }
+        final timestamp = doc.data()['createdAt'];
+        if (boundary != null &&
+            timestamp is Timestamp &&
+            timestamp.toDate().isBefore(boundary)) {
+          exhausted = true;
+          break;
+        }
+      }
+      exhausted = exhausted || page.docs.length < 100;
+      if (page.docs.isNotEmpty) cursor = page.docs.last;
+    }
+    batches.add((
+      items: public,
+      createdAts: public.map((a) => a.createdAt).toList(),
+      docCount: public.length,
+    ));
+  }
+  return mergeAuthorBatches(batches, batchLimit: perBatchLimit);
+}
+
 Future<ActivityBatch<T>> fetchLatestByAuthors<T extends PlaceActivity>(
   CollectionReference<Map<String, dynamic>> collection,
   List<String> authorIds, {
@@ -49,9 +94,6 @@ Future<ActivityBatch<T>> fetchLatestByAuthors<T extends PlaceActivity>(
   );
 }
 
-/// Idas de [authorIds] no local [placeId], mais recentes primeiro. Filtra no
-/// servidor (`placeId ==` + `authorId in`, lotes de [whereInLimit]): não lê
-/// idas de terceiros e não perde as mais antigas.
 Future<List<T>> fetchForPlace<T extends PlaceActivity>(
   CollectionReference<Map<String, dynamic>> collection,
   String placeId,

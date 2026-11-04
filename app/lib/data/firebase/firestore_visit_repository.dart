@@ -8,12 +8,14 @@ import '../../domain/models/place.dart';
 import '../../domain/models/visit.dart';
 import '../../domain/price_band.dart';
 import '../activity_batch.dart';
+import '../repositories/public_activity_repository.dart';
 import '../repositories/visit_repository.dart';
 import 'activity_queries.dart' as queries;
 import 'audit_log.dart';
 import 'place_doc.dart';
 
-class FirestoreVisitRepository implements VisitRepository {
+class FirestoreVisitRepository
+    implements VisitRepository, PublicActivityRepository<Visit> {
   FirestoreVisitRepository(
     this._db, {
     this.perBatchLimit = defaultPerBatchLimit,
@@ -23,24 +25,18 @@ class FirestoreVisitRepository implements VisitRepository {
 
   final FirebaseFirestore _db;
 
-  /// Envia o batch (nos testes, simula ack perdido ou resposta que não
-  /// chega).
   final Future<void> Function(WriteBatch batch) _commitBatch;
 
   static const Duration defaultCommitTimeout = Duration(seconds: 15);
 
-  /// Sem resposta do commit neste prazo: trata como ack perdido (relê para
-  /// saber se a visita foi gravada) em vez de deixar o sheet girando.
   final Duration commitTimeout;
 
   static const int defaultPerBatchLimit = 100;
 
-  /// Limite por lote na consulta por autores.
   final int perBatchLimit;
 
   static const String visitsCollection = 'visits';
 
-  /// Subcoleção das travas do F15: `users/{uid}/visitLocks/{placeId}`.
   static const String visitLocksCollection = 'visitLocks';
 
   CollectionReference<Map<String, dynamic>> get _visits =>
@@ -57,7 +53,6 @@ class FirestoreVisitRepository implements VisitRepository {
 
   @override
   Future<DateTime?> visitLockOf(String uid, String placeId) async {
-    // Do servidor: a trava muda fora deste aparelho (outro aparelho, corrida).
     final snap = await _lockRef(
       uid,
       placeId,
@@ -74,7 +69,7 @@ class FirestoreVisitRepository implements VisitRepository {
     if (newPlace != null && newPlace.id != visit.placeId) {
       throw ArgumentError.value(newPlace.id, 'newPlace', 'outro local');
     }
-    // Id gerado no cliente: a trava aponta para ele.
+
     final ref = _visits.doc();
     final placeRef = newPlace != null && newPlace.discovered
         ? _db.collection(placesCollection).doc(newPlace.id)
@@ -83,12 +78,12 @@ class FirestoreVisitRepository implements VisitRepository {
     var createPlace = false;
     if (placeRef != null) {
       try {
-        final existing = await placeRef.get();
+        final existing = await placeRef.get().timeout(
+          const Duration(seconds: 10),
+        );
         createPlace = !existing.exists;
         placeName = _storedName(existing) ?? placeName;
       } on Object {
-        // Sem ler, tenta criar: se já existir, o batch falha e o ramo de
-        // corrida abaixo resolve.
         createPlace = true;
       }
     }
@@ -96,16 +91,14 @@ class FirestoreVisitRepository implements VisitRepository {
       await _commit(ref, visit, placeName, createPlace ? newPlace : null);
       return (placeCreated: createPlace);
     } on Object catch (error, stack) {
-      // Ack perdido (ou sem resposta em [commitTimeout]): o batch pode ter
-      // sido gravado. Reenviar com o mesmo id seria negado; o certo é
-      // conferir se esta visita existe.
       if (await _written(ref, visit)) return (placeCreated: createPlace);
       if (!createPlace) Error.throwWithStackTrace(error, stack);
-      // Corrida: o local nasceu entre a leitura e o commit. Com o doc lá,
-      // grava sem ele, com o nome que está gravado.
+
       final DocumentSnapshot<Map<String, dynamic>> existing;
       try {
-        existing = await placeRef!.get(const GetOptions(source: Source.server));
+        existing = await placeRef!
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 10));
       } on Object {
         Error.throwWithStackTrace(error, stack);
       }
@@ -122,9 +115,6 @@ class FirestoreVisitRepository implements VisitRepository {
     }
   }
 
-  /// A visita [ref] foi gravada? Lê o doc no servidor; se a leitura não
-  /// decide (falhou), lê a trava: ela só aponta para esta tentativa
-  /// (`visitId == ref.id`) se o batch inteiro foi gravado.
   Future<bool> _written(
     DocumentReference<Map<String, dynamic>> ref,
     NewVisit visit,
@@ -151,7 +141,10 @@ class FirestoreVisitRepository implements VisitRepository {
     DocumentReference<Map<String, dynamic>> ref,
   ) async {
     try {
-      return (await ref.get(const GetOptions(source: Source.server))).exists;
+      return (await ref
+              .get(const GetOptions(source: Source.server))
+              .timeout(const Duration(seconds: 10)))
+          .exists;
     } on Object {
       return null;
     }
@@ -165,16 +158,14 @@ class FirestoreVisitRepository implements VisitRepository {
   ) {
     final batch = _db.batch();
     if (createPlace != null) {
-      // Mesmo batch: as Rules da visita exigem o local ao fim dele.
       batch.set(
         _db.collection(placesCollection).doc(createPlace.id),
         newPlaceData(createPlace, uid: visit.authorId),
       );
     }
-    // Schema exato (7 chaves) validado pelas Rules. Sem notas; o período do
-    // dia é derivado do createdAt, sempre do servidor. `priceBand` (F27):
-    // 1–5 ou null quando não informado.
+
     batch.set(ref, {
+      'silent': visit.silent,
       'authorId': visit.authorId,
       'authorName': visit.authorName,
       'placeId': visit.placeId,
@@ -183,7 +174,7 @@ class FirestoreVisitRepository implements VisitRepository {
       'priceBand': visit.priceBand?.value,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    // F04: entrada de auditoria no mesmo batch (as Rules exigem o par).
+
     addAuditEntry(
       batch,
       _db,
@@ -192,8 +183,7 @@ class FirestoreVisitRepository implements VisitRepository {
       actorUid: visit.authorId,
       placeId: visit.placeId,
     );
-    // Trava criada/renovada no mesmo batch, apontando para esta visita.
-    // Dentro de 12 h as Rules negam a trava e a visita juntas.
+
     batch.set(_lockRef(visit.authorId, visit.placeId), {
       'lastAt': FieldValue.serverTimestamp(),
       'visitId': ref.id,
@@ -201,6 +191,15 @@ class FirestoreVisitRepository implements VisitRepository {
     });
     return _commitBatch(batch).timeout(commitTimeout);
   }
+
+  @override
+  Future<ActivityBatch<Visit>> fetchPublicByAuthors(List<String> authors) =>
+      queries.fetchPublicByAuthors(
+        _visits,
+        authors,
+        perBatchLimit: perBatchLimit,
+        fromDoc: _fromDoc,
+      );
 
   @override
   Future<ActivityBatch<Visit>> fetchVisitsByAuthors(
@@ -220,7 +219,6 @@ class FirestoreVisitRepository implements VisitRepository {
     List<String> authorIds,
   ) => queries.fetchForPlace(_visits, placeId, authorIds, fromDoc: _fromDoc);
 
-  /// Documento fora do schema: `null` (ignorado em vez de derrubar o feed).
   static Visit? _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data();
     final ts = d['createdAt'];
@@ -229,7 +227,8 @@ class FirestoreVisitRepository implements VisitRepository {
     final placeId = d['placeId'];
     final placeName = d['placeName'];
     final companion = d['companion'];
-    if (ts is! Timestamp ||
+    if ((d.containsKey('silent') && d['silent'] is! bool) ||
+        ts is! Timestamp ||
         authorId is! String ||
         authorName is! String ||
         placeId is! String ||
@@ -244,6 +243,7 @@ class FirestoreVisitRepository implements VisitRepository {
       return null;
     }
     return Visit(
+      silent: d['silent'] == true,
       id: doc.id,
       authorId: authorId,
       authorName: authorName,

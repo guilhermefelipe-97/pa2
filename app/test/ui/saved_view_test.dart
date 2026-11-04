@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import '../support/builders.dart';
 import '../support/fakes.dart';
 
-final _now = DateTime.utc(2026, 9, 28, 15); // 12h em Natal
+final _now = DateTime.utc(2026, 9, 28, 15);
 
 final _catalog = [
   place(
@@ -72,9 +72,9 @@ Future<_Setup> _pump(WidgetTester tester, _Setup s) async {
 }
 
 FakeSavedRepository _threeSaved() => FakeSavedRepository()
-  ..seed('me', 'a', DateTime.utc(2026, 9, 28, 13)) // há 2 h
-  ..seed('me', 'b', DateTime.utc(2026, 9, 27, 15)) // ontem
-  ..seed('me', 'c', DateTime.utc(2026, 9, 1, 15)); // 01/09
+  ..seed('me', 'a', DateTime.utc(2026, 9, 28, 13))
+  ..seed('me', 'b', DateTime.utc(2026, 9, 27, 15))
+  ..seed('me', 'c', DateTime.utc(2026, 9, 1, 15));
 
 void main() {
   group('savedAgo', () {
@@ -99,9 +99,9 @@ void main() {
     ];
     expect(names, ['Mangai', 'Beco da Lama', 'Camarões']);
     expect(find.text('Tirol · Restaurante'), findsOneWidget);
-    expect(find.text('salvo há 2 h'), findsOneWidget);
-    expect(find.text('salvo ontem'), findsOneWidget);
-    expect(find.text('salvo em 01/09'), findsOneWidget);
+    expect(find.byTooltip('salvo há 2 h'), findsOneWidget);
+    expect(find.byTooltip('salvo ontem'), findsOneWidget);
+    expect(find.byTooltip('salvo em 01/09'), findsOneWidget);
     expect(find.byKey(const Key('place-photo-fallback')), findsNWidgets(3));
   });
 
@@ -176,7 +176,7 @@ void main() {
     await tester.pumpAndSettle();
     final first = tester.widget<SavedCard>(find.byType(SavedCard).first);
     expect(first.item.place.id, 'a');
-    expect(find.text('salvo agora'), findsOneWidget);
+    expect(find.byTooltip('salvo agora'), findsOneWidget);
     expect(s.repo.listCalls, listCalls);
   });
 
@@ -219,11 +219,10 @@ void main() {
       );
       final listCalls = repo.listCalls;
 
-      // O local entrou no catálogo e outro aparelho salvou mais um.
       s.places.places.add(place(id: 'novo', name: 'Recém-importado'));
       repo.seed('me', 'a', DateTime.utc(2026, 9, 28, 13));
       await tester.fling(
-        find.byType(SingleChildScrollView),
+        find.byType(SingleChildScrollView).last,
         const Offset(0, 400),
         1000,
       );

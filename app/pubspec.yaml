@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.5.0+8
 
 environment:
   sdk: ^3.10.1
@@ -46,6 +46,8 @@ dependencies:
   http: ^1.6.0
   # Corte de nome por grafema (emoji com ZWJ ou tom de pele inteiros, F13).
   characters: ^1.4.0
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
 
 dev_dependencies:
   flutter_test:
@@ -75,6 +77,31 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/icon/stitch-source.png
+  fonts:
+    - family: Epilogue
+      fonts:
+        - asset: assets/fonts/Epilogue-400.ttf
+          weight: 400
+        - asset: assets/fonts/Epilogue-500.ttf
+          weight: 500
+        - asset: assets/fonts/Epilogue-600.ttf
+          weight: 600
+        - asset: assets/fonts/Epilogue-700.ttf
+          weight: 700
+    - family: Plus Jakarta Sans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-400.ttf
+          weight: 400
+        - asset: assets/fonts/PlusJakartaSans-500.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-600.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-700.ttf
+          weight: 700
+
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -107,18 +134,19 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
 
-# Ícone do app: gerado por tools/gerar_icone.py (Pillow). Para regenerar:
-#   python ../tools/gerar_icone.py && dart run flutter_launcher_icons
+# Ícone aprovado: assets/icon/naarea-pin.png. Para regenerar os launchers:
+#   dart run flutter_launcher_icons
 flutter_launcher_icons:
-  image_path: "assets/icon/icon.png"
+  image_path: "assets/icon/naarea-pin.png"
   android: true
-  adaptive_icon_background: "assets/icon/icon_background.png"
-  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+  adaptive_icon_background: "#FDF6E6"
+  adaptive_icon_foreground: "assets/icon/naarea-pin-foreground.png"
   min_sdk_android: 21
   ios: true
   remove_alpha_ios: true
   web:
     generate: true
-    image_path: "assets/icon/icon.png"
-    background_color: "#FFF4E6"
-    theme_color: "#D9482B"
+    image_path: "assets/icon/naarea-pin.png"
+    background_color: "#FDF6E6"
+    theme_color: "#000000"
+

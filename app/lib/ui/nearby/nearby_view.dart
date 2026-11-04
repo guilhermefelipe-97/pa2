@@ -14,22 +14,21 @@ import '../feed/widgets/place_photo.dart';
 import '../feed/widgets/price_chip.dart';
 import '../feed/widgets/trust_sources.dart' show RecurrenceLine;
 import '../open/open_status_line.dart';
+import '../sponsored/sponsored_view.dart';
 import 'nearby_view_model.dart';
+import 'nearby_map.dart';
+import 'nearby_skeleton.dart';
 
-/// Categoria e bairro do local (o que houver).
 List<String> _placeDetails(Place place) => [
   if (place.category.trim().isNotEmpty) place.category.trim(),
   if (place.neighborhood.trim().isNotEmpty) place.neighborhood.trim(),
 ];
 
-/// "120 m · Restaurante · Ponta Negra".
 String nearbySubtitle(NearbyItem item) => [
   formatDistance(item.distanceMeters),
   ..._placeDetails(item.place),
 ].join(' · ');
 
-/// O que o leitor de tela diz de um item: "Mangai, a 120 metros,
-/// Restaurante, Ponta Negra, está no Quero ir, Ana foi aqui".
 String nearbySemanticsLabel(
   NearbyItem item, {
   required bool saved,
@@ -45,14 +44,12 @@ String nearbySemanticsLabel(
   if (item.price != null) priceChipSemantics(item.price!),
 ].join(', ');
 
-/// Linha que explica a sugestão.
 String suggestionReasonLabel(NearbySuggestion s) => switch (s.reason) {
   SuggestionReason.friend => s.item.friendsLabel!,
   SuggestionReason.saved => 'Está no seu Quero ir',
   SuggestionReason.nearest => 'O mais perto de você',
 };
 
-/// Aba "Perto" (F10).
 class NearbyView extends StatefulWidget {
   const NearbyView({super.key, required this.viewModel});
 
@@ -74,14 +71,14 @@ class NearbyView extends StatefulWidget {
   static const serviceOffMessage = 'Ative a localização do aparelho';
   static const locationErrorMessage =
       'Não foi possível descobrir onde você está.';
-  static const loadErrorMessage = 'Não foi possível buscar lugares por perto';
+  static const loadErrorMessage = 'Sem conexão no momento';
   static const outOfAreaMessage = 'O NaÁrea funciona só no Brasil por enquanto';
   static const partialMessage =
       'Mostrando só lugares já conhecidos — não foi possível buscar todos agora';
   static const cappedMessage = 'Mostrando os 50 mais próximos';
 
   static String emptyMessage(NearbyRadius r) => 'Nada a ${r.label}';
-  static const openFilterLabel = 'Aberto agora (confirmado)';
+  static const openFilterLabel = 'Aberto agora';
   static const openUnavailableMessage =
       'Não foi possível ver quem confirmou que está aberto';
   static String openEmptyMessage(NearbyRadius r) =>
@@ -95,6 +92,15 @@ class NearbyView extends StatefulWidget {
 
 class _NearbyViewState extends State<NearbyView> {
   bool? _active;
+  String _query = '';
+  bool _mapMode = false;
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   NearbyViewModel get _vm => widget.viewModel;
 
@@ -107,7 +113,7 @@ class _NearbyViewState extends State<NearbyView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Seguir alguém em outra tela muda o "foi aqui": recarrega ao voltar.
+
     final active = ActiveTab.maybeOf(context);
     if (active == true && _active == false) _vm.reloadIfStale();
     _active = active;
@@ -122,20 +128,41 @@ class _NearbyViewState extends State<NearbyView> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 64 * MediaQuery.textScalerOf(context).scale(1),
         titleSpacing: 20,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
             Text(
-              'Perto',
+              'NaÁrea',
               style: theme.textTheme.headlineSmall?.copyWith(
                 color: theme.colorScheme.primary,
               ),
             ),
-            Text(
-              'Onde comer agora, perto de você',
-              style: theme.textTheme.bodySmall,
-            ),
+            if (MediaQuery.textScalerOf(context).scale(1) <= 1.3)
+              const SizedBox(width: 10),
+            if (MediaQuery.textScalerOf(context).scale(1) <= 1.3)
+              Flexible(
+                child: ListenableBuilder(
+                  listenable: _vm,
+                  builder: (context, _) => ActionChip(
+                    avatar: const Icon(Icons.near_me_outlined, size: 14),
+                    onPressed: _vm.position == null
+                        ? _vm.useMyLocation
+                        : _vm.refresh,
+                    label: Text(
+                      _vm.position == null
+                          ? 'Localização'
+                          : _vm.items.isNotEmpty &&
+                                _vm.items.first.place.neighborhood.isNotEmpty
+                          ? 'Perto de ${_vm.items.first.place.neighborhood}'
+                          : 'GPS ativo',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -196,6 +223,98 @@ class _NearbyViewState extends State<NearbyView> {
       case NearbyPhase.loadError:
         return Column(
           children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact =
+                    constraints.maxWidth >= 360 &&
+                    MediaQuery.textScalerOf(context).scale(1) <= 1.2;
+                final search = Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: TextField(
+                    key: const Key('nearby-search'),
+                    controller: _search,
+                    onChanged: (value) =>
+                        setState(() => _query = value.trim().toLowerCase()),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar lugares...',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _query.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Limpar busca',
+                              onPressed: () {
+                                _search.clear();
+                                setState(() => _query = '');
+                              },
+                              icon: const Icon(Icons.close),
+                            ),
+                    ),
+                  ),
+                );
+                final selector = Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: SegmentedButton<bool>(
+                      style: ButtonStyle(
+                        side: const WidgetStatePropertyAll(BorderSide.none),
+                        shape: const WidgetStatePropertyAll(StadiumBorder()),
+                        backgroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? Colors.white
+                              : Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHigh,
+                        ),
+                        foregroundColor: WidgetStatePropertyAll(
+                          Theme.of(context).colorScheme.onSurface,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        padding: const WidgetStatePropertyAll(
+                          EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        textStyle: WidgetStatePropertyAll(
+                          Theme.of(context).textTheme.labelSmall,
+                        ),
+                        iconSize: const WidgetStatePropertyAll(16),
+                      ),
+                      key: const Key('nearby-display-mode'),
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                          value: false,
+                          icon: Icon(Icons.view_list_outlined),
+                          label: Text('Lista'),
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          icon: Icon(Icons.map_outlined),
+                          label: Text('Mapa'),
+                        ),
+                      ],
+                      selected: {_mapMode},
+                      onSelectionChanged: (value) {
+                        FocusScope.of(context).unfocus();
+                        setState(() => _mapMode = value.single);
+                      },
+                    ),
+                  ),
+                );
+                return compact
+                    ? Row(
+                        children: [
+                          Expanded(child: search),
+                          selector,
+                        ],
+                      )
+                    : Column(children: [search, selector]);
+              },
+            ),
             RadiusChips(viewModel: vm),
             if (vm.hasOpenFilter && vm.openReadFailed)
               Padding(
@@ -232,15 +351,7 @@ class _NearbyViewState extends State<NearbyView> {
   Widget _results(BuildContext context) {
     final vm = _vm;
     if (vm.phase == NearbyPhase.locating || vm.phase == NearbyPhase.loading) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          Padding(
-            padding: EdgeInsets.all(48),
-            child: Center(child: CircularProgressIndicator()),
-          ),
-        ],
-      );
+      return const NearbySkeleton();
     }
     if (vm.phase == NearbyPhase.loadError) {
       return _Message(
@@ -250,12 +361,42 @@ class _NearbyViewState extends State<NearbyView> {
             : NearbyView.loadErrorMessage,
         actionLabel: NearbyView.retryLabel,
         onAction: vm.retry,
+        text: vm.rateLimited
+            ? null
+            : 'Verifique sua conexão Wi-Fi ou dados móveis para descobrir novidades e recomendações do NaÁrea.',
+        secondaryLabel: vm.rateLimited ? null : 'Acessar lista “Quero ir”',
+        onSecondary: vm.rateLimited ? null : () => context.go(Routes.saved),
       );
     }
-    final items = vm.visibleItems;
+    final items = vm.visibleItems
+        .where(
+          (item) =>
+              _query.isEmpty ||
+              [
+                item.place.name,
+                item.place.category,
+                item.place.neighborhood,
+              ].any((text) => text.toLowerCase().contains(_query)),
+        )
+        .toList();
+    if (items.isEmpty && _query.isNotEmpty) {
+      return _Message(
+        icon: Icons.search_off,
+        title: 'Nenhum local encontrado',
+        text:
+            'Não encontramos experiências para “${_search.text.trim()}”. Experimente ampliar a busca, navegar por áreas vizinhas ou redefinir seus filtros.',
+        actionLabel: 'Limpar filtros aplicados',
+        onAction: () {
+          _search.clear();
+          vm.setOpenOnly(false);
+          setState(() => _query = '');
+        },
+      );
+    }
     if (items.isEmpty && vm.openOnly && vm.items.isNotEmpty) {
       return _Message(
         key: const Key('nearby-open-empty'),
+        leading: const SponsoredSection(),
         icon: Icons.storefront,
         title: NearbyView.openEmptyMessage(vm.radius),
         actionLabel: NearbyView.showAllLabel,
@@ -263,10 +404,9 @@ class _NearbyViewState extends State<NearbyView> {
       );
     }
     if (items.isEmpty && vm.partial) {
-      // Sem a descoberta ao vivo e sem nada conhecido por perto: não dá para
-      // dizer "nada a 300 m".
       return _Message(
         key: const Key('nearby-partial-empty'),
+        leading: const SponsoredSection(),
         icon: Icons.cloud_off,
         title: NearbyView.partialMessage,
         actionLabel: NearbyView.retryLabel,
@@ -277,12 +417,14 @@ class _NearbyViewState extends State<NearbyView> {
       if (vm.outOfArea) {
         return const _Message(
           icon: Icons.travel_explore,
+          leading: SponsoredSection(),
           title: NearbyView.outOfAreaMessage,
         );
       }
       final wider = vm.radius.wider;
       return _Message(
         key: const Key('nearby-empty'),
+        leading: const SponsoredSection(),
         icon: Icons.search_off,
         title: NearbyView.emptyMessage(vm.radius),
         actionLabel: wider == null ? null : NearbyView.widenLabel(wider),
@@ -290,13 +432,35 @@ class _NearbyViewState extends State<NearbyView> {
       );
     }
     final suggestion = vm.suggestion;
+    if (_mapMode && vm.position != null) {
+      return NearbyMap(
+        key: ValueKey('${vm.position}|${vm.radius}|$_query|${vm.openOnly}'),
+        position: vm.position!,
+        items: items,
+        radius: vm.radius.meters,
+        onOpen: _open,
+        onShowList: () => setState(() => _mapMode = false),
+      );
+    }
     final header = <Widget>[
+      SponsoredSection(position: vm.position),
       if (vm.partial) PartialNotice(onRetry: vm.retry),
-      if (suggestion != null)
-        SuggestionCard(
-          suggestion: suggestion,
-          onOpen: () => _open(suggestion.item.place),
+      Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 16),
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 16,
+          runSpacing: 4,
+          children: [
+            Text(
+              'Lugares por perto',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            Text('Por distância', style: Theme.of(context).textTheme.bodySmall),
+          ],
         ),
+      ),
     ];
     final footer = <Widget>[
       if (vm.capped)
@@ -308,7 +472,7 @@ class _NearbyViewState extends State<NearbyView> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
-      // Dados do OpenStreetMap na tela (Photon ou seed): crédito ODbL no fim.
+
       if (items.any((i) => i.place.hasOsmData))
         const OsmCredit(padding: EdgeInsets.only(top: 4)),
     ];
@@ -330,6 +494,9 @@ class _NearbyViewState extends State<NearbyView> {
           openStatus: vm.openStatusOf(item.place.id),
           now: vm.now(),
           currentUserId: vm.currentUserId,
+          suggestionReason: suggestion?.item.place.id == item.place.id
+              ? suggestionReasonLabel(suggestion!)
+              : null,
           onTap: () => _open(item.place),
         );
       },
@@ -337,7 +504,6 @@ class _NearbyViewState extends State<NearbyView> {
   }
 }
 
-/// Chips 300 m · 1 km · 3 km.
 class RadiusChips extends StatelessWidget {
   const RadiusChips({super.key, required this.viewModel});
 
@@ -346,14 +512,17 @@ class RadiusChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 56),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
+      constraints: const BoxConstraints(
+        minHeight: 56,
+        minWidth: double.infinity,
+      ),
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Row(
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 0,
           children: [
             for (final r in NearbyRadius.values) ...[
-              if (r.index > 0) const SizedBox(width: 8),
               Semantics(
                 label: 'Raio de ${r.label}',
                 excludeSemantics: true,
@@ -361,6 +530,9 @@ class RadiusChips extends StatelessWidget {
                 button: true,
                 onTap: () => viewModel.selectRadius(r),
                 child: ChoiceChip(
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  showCheckmark: false,
+                  visualDensity: VisualDensity.compact,
                   key: Key('radius-${r.meters.round()}'),
                   label: Text(r.label),
                   selected: viewModel.radius == r,
@@ -368,13 +540,33 @@ class RadiusChips extends StatelessWidget {
                 ),
               ),
             ],
-            // F20: só os confirmados abertos nas últimas 3 h.
+
             if (viewModel.hasOpenFilter) ...[
-              const SizedBox(width: 8),
               FilterChip(
+                labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                showCheckmark: false,
+                visualDensity: VisualDensity.compact,
                 key: const Key('nearby-open-filter'),
-                avatar: const Icon(Icons.storefront, size: 18),
-                label: const Text(NearbyView.openFilterLabel),
+                avatar: Icon(
+                  Icons.storefront,
+                  size: 18,
+                  color: viewModel.openOnly
+                      ? Theme.of(context).colorScheme.onPrimary
+                      : Theme.of(context).colorScheme.onSurface,
+                ),
+                label: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.sizeOf(context).width - 110,
+                  ),
+                  child: Text(
+                    NearbyView.openFilterLabel,
+                    style: TextStyle(
+                      color: viewModel.openOnly
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ),
                 selected: viewModel.openOnly,
                 onSelected: viewModel.openReadFailed
                     ? null
@@ -388,7 +580,6 @@ class RadiusChips extends StatelessWidget {
   }
 }
 
-/// Card "Sugestão": decide pela pessoa, com "Ver lugar" a 1 toque.
 class SuggestionCard extends StatelessWidget {
   const SuggestionCard({
     super.key,
@@ -467,15 +658,24 @@ class SuggestionCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            FilledButton(
-              key: const Key('nearby-suggestion-open'),
-              onPressed: onOpen,
-              child: Semantics(
-                label: 'Ver lugar: ${place.name}',
-                excludeSemantics: true,
-                child: const Text('Ver lugar'),
+            if (MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
+                MediaQuery.sizeOf(context).width < 360)
+              IconButton.filled(
+                key: const Key('nearby-suggestion-open'),
+                tooltip: 'Ver lugar: ${place.name}',
+                onPressed: onOpen,
+                icon: const Icon(Icons.chevron_right),
+              )
+            else
+              FilledButton(
+                key: const Key('nearby-suggestion-open'),
+                onPressed: onOpen,
+                child: Semantics(
+                  label: 'Ver lugar: ${place.name}',
+                  excludeSemantics: true,
+                  child: const Text('Ver lugar'),
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -483,8 +683,6 @@ class SuggestionCard extends StatelessWidget {
   }
 }
 
-/// Item da lista: foto, nome, distância · categoria, "Ana foi aqui" e o
-/// marcador "Quero ir".
 class NearbyTile extends StatelessWidget {
   const NearbyTile({
     super.key,
@@ -494,19 +692,18 @@ class NearbyTile extends StatelessWidget {
     this.now,
     this.currentUserId,
     this.onTap,
+    this.suggestionReason,
   });
 
   final NearbyItem item;
   final bool saved;
 
-  /// "Aberto · confirmado por Ana há 20 min" (F20); `null` sem relato
-  /// recente.
   final OpenStatus? openStatus;
 
-  /// Hora de referência do [openStatus] (padrão: agora).
   final DateTime? now;
   final String? currentUserId;
   final VoidCallback? onTap;
+  final String? suggestionReason;
 
   @override
   Widget build(BuildContext context) {
@@ -518,123 +715,156 @@ class NearbyTile extends StatelessWidget {
     final open = openStatus;
     final at = now ?? DateTime.now();
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Row(
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        key: suggestionReason == null ? null : const Key('nearby-suggestion'),
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Semantics(
-              button: true,
-              label: nearbySemanticsLabel(
-                item,
-                saved: saved,
-                openStatus: open == null
-                    ? null
-                    : openStatusSemantics(
-                        open,
-                        at,
-                        currentUserId: currentUserId,
-                      ),
-              ),
-              hint: 'Abre o lugar',
-              excludeSemantics: true,
-              child: InkWell(
-                onTap: onTap,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 80,
-                      height: 80,
-                      child: Hero(
-                        tag: 'place-photo-${place.id}',
-                        child: PlacePhoto(place: place, iconSize: 28),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              place.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium,
+          Semantics(
+            button: true,
+            label: nearbySemanticsLabel(
+              item,
+              saved: saved,
+              openStatus: open == null
+                  ? null
+                  : openStatusSemantics(open, at, currentUserId: currentUserId),
+            ),
+            hint: 'Abre o lugar',
+            excludeSemantics: true,
+            child: InkWell(
+              key: suggestionReason == null
+                  ? null
+                  : const Key('nearby-suggestion-open'),
+              onTap: onTap,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Stack(
+                        children: [
+                          AspectRatio(
+                            aspectRatio: 2,
+                            child: Hero(
+                              tag: 'place-photo-${place.id}',
+                              child: PlacePhoto(place: place),
                             ),
-                            Text(
-                              nearbySubtitle(item),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: scheme.tertiary,
+                          ),
+                          Positioned(
+                            top: 10,
+                            left: 10,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: scheme.surface,
+                                borderRadius: BorderRadius.circular(24),
                               ),
-                            ),
-                            // F20: aberto agora, com quem confirmou.
-                            if (open != null)
-                              Padding(
-                                key: const Key('nearby-open-status'),
-                                padding: const EdgeInsets.only(top: 2),
-                                child: OpenStatusLine(
-                                  status: open,
-                                  now: at,
-                                  currentUserId: currentUserId,
-                                  dense: true,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
                                 ),
-                              ),
-                            if (friends != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
                                 child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      Icons.people,
-                                      size: 16,
+                                      Icons.near_me_outlined,
+                                      size: 14,
                                       color: scheme.primary,
                                     ),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        friends,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              color: scheme.primary,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                      ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      formatDistance(item.distanceMeters),
+                                      style: theme.textTheme.labelMedium,
                                     ),
                                   ],
                                 ),
                               ),
-                            // F15: recorrência de um amigo ali.
-                            if (recurrence != null)
-                              Padding(
-                                key: const Key('nearby-recurrence'),
-                                padding: const EdgeInsets.only(top: 2),
-                                child: RecurrenceLine(label: recurrence),
-                              ),
-                            // F27: preço relatado pelos amigos.
-                            if (item.price != null)
-                              Padding(
-                                key: const Key('nearby-price'),
-                                padding: const EdgeInsets.only(top: 2),
-                                child: PriceChip(
-                                  summary: item.price!,
-                                  dense: true,
-                                ),
-                              ),
-                          ],
-                        ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (suggestionReason != null)
+                          Text(
+                            'Sugestão',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: scheme.primary,
+                            ),
+                          ),
+                        Text(place.name, style: theme.textTheme.titleMedium),
+                        Text(
+                          nearbySubtitle(item),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          SaveButton(placeId: place.id),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (open != null)
+                  Padding(
+                    key: const Key('nearby-open-status'),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: OpenStatusLine(
+                      status: open,
+                      now: at,
+                      currentUserId: currentUserId,
+                      dense: true,
+                    ),
+                  ),
+                if (suggestionReason != null && suggestionReason != friends)
+                  Text(suggestionReason!, style: theme.textTheme.bodySmall),
+                if (recurrence != null)
+                  Padding(
+                    key: const Key('nearby-recurrence'),
+                    padding: const EdgeInsets.only(top: 4),
+                    child: RecurrenceLine(label: recurrence),
+                  ),
+                if (item.price != null)
+                  Padding(
+                    key: const Key('nearby-price'),
+                    padding: const EdgeInsets.only(top: 8),
+                    child: PriceChip(summary: item.price!, dense: true),
+                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        friends ?? '',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SaveButton(
+                      placeId: place.id,
+                      showLabel: true,
+                      prominent: true,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -651,6 +881,7 @@ class _Message extends StatelessWidget {
     this.onAction,
     this.secondaryLabel,
     this.onSecondary,
+    this.leading,
   });
 
   final IconData icon;
@@ -660,6 +891,7 @@ class _Message extends StatelessWidget {
   final VoidCallback? onAction;
   final String? secondaryLabel;
   final VoidCallback? onSecondary;
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -677,16 +909,17 @@ class _Message extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
+              ?leading,
               CircleAvatar(
                 radius: 44,
-                backgroundColor: scheme.primaryContainer,
-                child: Icon(icon, size: 44, color: scheme.primary),
+                backgroundColor: scheme.surfaceContainerLow,
+                child: Icon(icon, size: 36, color: scheme.secondary),
               ),
               const SizedBox(height: 16),
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium,
+                style: theme.textTheme.titleLarge,
               ),
               if (text != null) ...[
                 const SizedBox(height: 8),
@@ -715,8 +948,6 @@ class _Message extends StatelessWidget {
   }
 }
 
-/// Aviso discreto: a descoberta ao vivo falhou e a lista tem só os lugares
-/// já conhecidos (gravados).
 class PartialNotice extends StatelessWidget {
   const PartialNotice({super.key, required this.onRetry});
 

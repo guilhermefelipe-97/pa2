@@ -1,3 +1,6 @@
+import '../core/place_location_chip.dart';
+import 'saved_place_rating.dart';
+import '../lists/list_category.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +9,7 @@ import '../../domain/models/place_list.dart';
 import '../../domain/relative_time.dart';
 import '../../routing/routes.dart';
 import '../core/messages.dart';
+import '../core/editorial.dart';
 import '../core/save_button.dart';
 import '../decision/decision_sheet.dart';
 import '../feed/widgets/feed_card.dart' show placeSubtitle;
@@ -15,7 +19,6 @@ import '../lists/list_dialogs.dart';
 import '../lists/lists_store.dart';
 import 'saved_view_model.dart';
 
-/// "salvo há 2 h", "salvo ontem", "salvo em 20/09".
 String savedAgo(DateTime savedAt, DateTime now) {
   final rel = relativeTime(savedAt, now);
   final isDate =
@@ -23,7 +26,6 @@ String savedAgo(DateTime savedAt, DateTime now) {
   return isDate ? 'salvo em $rel' : 'salvo $rel';
 }
 
-/// Aba "Quero ir" (F11).
 class SavedView extends StatelessWidget {
   const SavedView({super.key, required this.viewModel});
 
@@ -31,7 +33,6 @@ class SavedView extends StatelessWidget {
 
   static const privateCaption = 'Só você vê esta lista';
 
-  /// Lista ativa com "Visível para quem me segue" (F13).
   static const visibleCaption = 'Quem te segue vê esta lista';
 
   @override
@@ -39,67 +40,146 @@ class SavedView extends StatelessWidget {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 64 * MediaQuery.textScalerOf(context).scale(1),
         titleSpacing: 20,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
             Text(
-              'Quero ir',
+              'NaÁrea',
               style: theme.textTheme.headlineSmall?.copyWith(
                 color: theme.colorScheme.primary,
               ),
             ),
-            ListenableBuilder(
-              listenable: viewModel,
-              builder: (context, _) => Text(
-                viewModel.isSelectedListVisible
-                    ? SavedView.visibleCaption
-                    : SavedView.privateCaption,
-                key: const Key('saved-caption'),
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
+            const SizedBox(width: 8),
+            const Flexible(child: PlaceLocationChip(shortLabel: true)),
           ],
         ),
         actions: [
-          ListenableBuilder(
-            listenable: viewModel,
-            builder: (context, _) {
-              final items = viewModel.items;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: TextButton.icon(
-                  key: const Key('saved-decide'),
-                  // Sem salvos no chip ativo: nada a decidir.
-                  onPressed: items.isEmpty
-                      ? null
-                      : () => showDecisionSheet(context, candidates: items),
-                  icon: const Icon(Icons.casino_outlined),
-                  label: const Text(decideLabel),
-                ),
-              );
-            },
-          ),
+          if (MediaQuery.textScalerOf(context).scale(1) <= 1.3)
+            ListenableBuilder(
+              listenable: viewModel,
+              builder: (context, _) {
+                final items = viewModel.items;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: TextButton(
+                    key: const Key('saved-decide'),
+
+                    onPressed: items.isEmpty
+                        ? null
+                        : () => showDecisionSheet(context, candidates: items),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: const Tooltip(
+                      message: decideLabel,
+                      child: Icon(Icons.casino_outlined, size: 20),
+                    ),
+                  ),
+                );
+              },
+            ),
         ],
       ),
       body: ListenableBuilder(
         listenable: viewModel,
         builder: (context, _) {
           if (viewModel.isLoading) {
-            return const Center(child: CircularProgressIndicator());
+            return const EditorialLoading();
           }
-          // Puxar para atualizar em todos os estados (lista, vazio, erro).
+
           final refreshable = RefreshIndicator(
             onRefresh: viewModel.refresh,
             child: _body(context),
           );
-          final chips = viewModel.lists.isNotEmpty;
           final listsFailed = viewModel.listsFailed;
-          if (!chips && !listsFailed) return refreshable;
           return Column(
             children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 2,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Quero ir',
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontFamily: 'Epilogue',
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '(${viewModel.items.length} ${viewModel.items.length == 1 ? 'salvo' : 'salvos'})',
+                            key: const Key('saved-count'),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (context.watch<ListsStore?>() case final lists?)
+                      SizedBox(
+                        width: 118,
+                        child: FilledButton.tonalIcon(
+                          key: const Key('saved-new-list'),
+                          onPressed: lists.canCreate
+                              ? () => showCreateListDialog(context, lists)
+                              : null,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.colorScheme.surfaceContainer,
+                            foregroundColor: theme.colorScheme.secondary,
+                            minimumSize: const Size(48, 40),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            textStyle: theme.textTheme.labelMedium,
+                          ),
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const FittedBox(
+                            child: Text('Nova lista', maxLines: 1),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (MediaQuery.textScalerOf(context).scale(1) > 1.3)
+                TextButton.icon(
+                  key: const Key('saved-decide'),
+                  onPressed: viewModel.items.isEmpty
+                      ? null
+                      : () => showDecisionSheet(
+                          context,
+                          candidates: viewModel.items,
+                        ),
+                  icon: const Icon(Icons.casino_outlined),
+                  label: const Text(decideLabel),
+                ),
               if (listsFailed) _ListsErrorBanner(onRetry: viewModel.retryLists),
-              if (chips) ListChips(viewModel: viewModel),
+              ListChips(viewModel: viewModel),
+              if (viewModel.selectedList != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                  child: Text(
+                    viewModel.isSelectedListVisible
+                        ? SavedView.visibleCaption
+                        : SavedView.privateCaption,
+                    key: const Key('saved-caption'),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
               Expanded(child: refreshable),
             ],
           );
@@ -120,7 +200,6 @@ class SavedView extends StatelessWidget {
       );
     }
     if (vm.isListLoading && items.isEmpty) {
-      // Locais da lista ainda sem dados do catálogo.
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: const [
@@ -165,11 +244,13 @@ class SavedView extends StatelessWidget {
             ],
           );
         }
-        final item = items[i - (banner ? 1 : 0)];
+        final offset = banner ? 1 : 0;
+        final item = items[i - offset];
         return SavedCard(
           key: ValueKey('saved-${item.place.id}'),
           item: item,
           now: now,
+          revision: vm.revision,
           onTap: () => context.push(
             Routes.placeDetail(item.place.id),
             extra: item.place,
@@ -180,16 +261,16 @@ class SavedView extends StatelessWidget {
   }
 }
 
-/// Card compacto de um salvo: foto (ou fallback), nome, bairro · categoria e
-/// há quanto tempo foi salvo.
 class SavedCard extends StatelessWidget {
   const SavedCard({
     super.key,
     required this.item,
     required this.now,
     this.onTap,
+    this.revision = 0,
   });
 
+  final int revision;
   final SavedItem item;
   final DateTime now;
   final VoidCallback? onTap;
@@ -200,73 +281,90 @@ class SavedCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final place = item.place;
     final subtitle = placeSubtitle(place.neighborhood, place.category);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Semantics(
-              button: true,
-              label: 'Abrir ${place.name}',
-              child: InkWell(
-                onTap: onTap,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 96,
-                      height: 96,
-                      child: Hero(
-                        tag: 'place-photo-${place.id}',
-                        child: PlacePhoto(place: place, iconSize: 32),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              place.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium,
+    return Tooltip(
+      message: savedAgo(item.savedAt, now),
+      child: Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                button: true,
+                label: 'Abrir ${place.name}',
+                child: InkWell(
+                  onTap: onTap,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(7),
+                          child: SizedBox(
+                            width: 52,
+                            height: 52,
+                            child: Hero(
+                              tag: 'place-photo-${place.id}',
+                              child: PlacePhoto(place: place, iconSize: 26),
                             ),
-                            if (subtitle.isNotEmpty)
-                              Text(
-                                subtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: scheme.tertiary,
-                                ),
-                              ),
-                            const SizedBox(height: 4),
-                            Text(
-                              savedAgo(item.savedAt, now),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      place.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                  ),
+                                  SavedPlaceRating(
+                                    key: ValueKey(
+                                      'rating-${place.id}-$revision',
+                                    ),
+                                    placeId: place.id,
+                                  ),
+                                ],
+                              ),
+                              if (subtitle.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  subtitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontSize: 11,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-          SaveButton(placeId: place.id),
-          _CardMenu(placeId: place.id, placeName: place.name),
-        ],
+            SaveButton(placeId: place.id),
+            _CardMenu(placeId: place.id, placeName: place.name),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Menu do card salvo: "Adicionar a lista" e "Remover do Quero ir".
 class _CardMenu extends StatelessWidget {
   const _CardMenu({required this.placeId, required this.placeName});
 
@@ -280,6 +378,11 @@ class _CardMenu extends StatelessWidget {
     return PopupMenuButton<String>(
       key: Key('saved-menu-$placeId'),
       tooltip: 'Mais opções para $placeName',
+      icon: Icon(
+        Icons.chevron_right,
+        color: Theme.of(context).colorScheme.secondary,
+        size: 20,
+      ),
       onSelected: (value) {
         switch (value) {
           case 'add':
@@ -289,7 +392,6 @@ class _CardMenu extends StatelessWidget {
         }
       },
       itemBuilder: (context) => [
-        // Lido ao abrir o menu: o card não precisa reconstruir com as listas.
         if (context.read<ListsStore?>() != null)
           const PopupMenuItem(
             value: 'add',
@@ -310,8 +412,6 @@ class _CardMenu extends StatelessWidget {
   }
 }
 
-/// Chips do topo da aba: "Todos" + uma por lista, com contagem. O chip da
-/// lista ativa abre o menu Renomear/Excluir.
 class ListChips extends StatelessWidget {
   const ListChips({super.key, required this.viewModel});
 
@@ -321,7 +421,7 @@ class ListChips extends StatelessWidget {
   Widget build(BuildContext context) {
     final vm = viewModel;
     final selected = vm.selectedList;
-    // Altura mínima, não fixa: com fonte grande o chip cresce sem cortar.
+
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 56),
       child: SingleChildScrollView(
@@ -331,7 +431,15 @@ class ListChips extends StatelessWidget {
           children: [
             ChoiceChip(
               key: const Key('list-chip-all'),
-              label: Text('Todos · ${vm.savedCount}'),
+              avatar: Icon(
+                Icons.bookmarks_outlined,
+                size: 16,
+                color: selected == null
+                    ? Theme.of(context).colorScheme.onPrimary
+                    : null,
+              ),
+              showCheckmark: false,
+              label: Text('Todos os salvos · ${vm.savedCount}'),
               selected: selected == null,
               onSelected: (_) => vm.selectList(null),
             ),
@@ -342,7 +450,13 @@ class ListChips extends StatelessWidget {
               else
                 ChoiceChip(
                   key: Key('list-chip-${list.id}'),
-                  label: Text('${list.label} · ${vm.countOf(list)}'),
+                  avatar: Icon(
+                    listCategoryIcon(list.emoji),
+                    size: 16,
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                  showCheckmark: false,
+                  label: Text('${list.name} · ${vm.countOf(list)}'),
                   selected: false,
                   onSelected: (_) => vm.selectList(list.id),
                 ),
@@ -365,8 +479,14 @@ class _ActiveListChip extends StatefulWidget {
 }
 
 class _ActiveListChipState extends State<_ActiveListChip> {
-  /// "Copiada N vezes" (F13, N32), lido ao abrir o menu; `null` = ainda não
-  /// leu ou falhou (oculto).
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Scrollable.ensureVisible(context, alignment: .5);
+    });
+  }
+
   int? _copies;
   int _countSeq = 0;
 
@@ -376,8 +496,7 @@ class _ActiveListChipState extends State<_ActiveListChip> {
   @override
   void didUpdateWidget(_ActiveListChip oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Outra lista: o contador lido era da anterior (e uma leitura em voo
-    // dela é descartada).
+
     if (oldWidget.list.id != widget.list.id) {
       _copies = null;
       _countSeq++;
@@ -407,12 +526,11 @@ class _ActiveListChipState extends State<_ActiveListChip> {
     viewModel.selectList(null);
     if (!await lists.delete(list.id)) {
       _fail(messenger);
-      // A lista voltou: volta a selecioná-la (se a pessoa não escolheu outra).
+
       if (viewModel.selectedList == null) viewModel.selectList(list.id);
     }
   }
 
-  /// "Visível para quem me segue" (otimista): falha reverte e avisa.
   Future<void> _toggleVisible(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     if (!await viewModel.setSelectedListVisible(!list.visible)) {
@@ -456,7 +574,7 @@ class _ActiveListChipState extends State<_ActiveListChip> {
           MenuItemButton(
             key: const Key('list-copies'),
             leadingIcon: const Icon(Icons.content_copy_outlined),
-            // Informativo: só a contagem.
+
             onPressed: null,
             child: Text(copiesLabel(copies)),
           ),
@@ -469,21 +587,28 @@ class _ActiveListChipState extends State<_ActiveListChip> {
       builder: (context, controller, _) {
         void toggle() =>
             controller.isOpen ? controller.close() : controller.open();
-        // Botão de menu para leitores de tela.
+
         return Semantics(
           container: true,
           button: true,
           selected: true,
-          label: 'Opções da lista ${list.label}',
+          label: 'Opções da lista ${list.name}',
           hint: 'Abre Renomear, Visível para quem me segue e Excluir',
           onTap: toggle,
           excludeSemantics: true,
           child: ChoiceChip(
             key: Key('list-chip-${list.id}'),
+            showCheckmark: false,
             label: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('${list.label} · ${viewModel.countOf(list)}'),
+                Icon(
+                  listCategoryIcon(list.emoji),
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onPrimary,
+                ),
+                const SizedBox(width: 6),
+                Text('${list.name} · ${viewModel.countOf(list)}'),
                 const Icon(Icons.arrow_drop_down, size: 18),
               ],
             ),
@@ -496,10 +621,8 @@ class _ActiveListChipState extends State<_ActiveListChip> {
   }
 }
 
-/// Item do menu da lista (F13).
 const visibleToFollowersLabel = 'Visível para quem me segue';
 
-/// "Copiada 1 vez", "Copiada 3 vezes".
 String copiesLabel(int n) => n == 1 ? 'Copiada 1 vez' : 'Copiada $n vezes';
 
 class _Message extends StatelessWidget {
@@ -532,7 +655,7 @@ class _Message extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 44,
-                backgroundColor: scheme.primaryContainer,
+                backgroundColor: scheme.surfaceContainerLow,
                 child: Icon(icon, size: 44, color: scheme.primary),
               ),
               const SizedBox(height: 16),
@@ -551,8 +674,6 @@ class _Message extends StatelessWidget {
   }
 }
 
-/// Erro ao carregar as listas: discreto, acima dos cards (o "Quero ir"
-/// continua funcionando).
 class _ListsErrorBanner extends StatelessWidget {
   const _ListsErrorBanner({required this.onRetry});
 

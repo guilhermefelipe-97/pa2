@@ -38,14 +38,12 @@ Finder _tab(String label) => find.descendant(
   matching: find.text(label),
 );
 
-/// [me] (uid "me") segue Ana e Bia.
 FakeUserRepository _users(String me) => FakeUserRepository()
   ..addUser('me', me)
   ..addUser('ana', 'Ana')
   ..addUser('bia', 'Bia')
   ..followingByUser['me'] = {'ana', 'bia'};
 
-/// Ana e Bia informaram R$ 30–60 no Mangai.
 FakeReviewRepository _reviews({String placeId = 'mangai'}) =>
     FakeReviewRepository()
       ..stored.addAll([
@@ -76,8 +74,6 @@ ReviewViewModel _reviewVm(FakeReviewRepository reviews) => ReviewViewModel(
   compress: (b) async => b,
 );
 
-/// Semântica sem os chips do seletor: o nó do [finder] está dentro do nó
-/// do grupo [group]?
 bool _isInside(WidgetTester tester, Finder finder, Finder group) {
   final groupNode = tester.getSemantics(group);
   SemanticsNode? node = tester.getSemantics(finder);
@@ -95,7 +91,6 @@ ChoiceChip _chip(WidgetTester tester, int value) => tester.widget<ChoiceChip>(
   ),
 );
 
-/// Abre o detalhe e rola até [key].
 Future<void> _scrollTo(WidgetTester tester, Key key) async {
   final target = find.byKey(key);
   await tester.scrollUntilVisible(
@@ -104,6 +99,7 @@ Future<void> _scrollTo(WidgetTester tester, Key key) async {
     scrollable: find.byType(Scrollable).first,
   );
   await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
   await tester.pumpAndSettle();
 }
 
@@ -309,8 +305,13 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
       await tester.pump();
       final chip = find.byKey(const Key('price-band-3'));
-      await tester.scrollUntilVisible(chip, 200);
+      await tester.scrollUntilVisible(
+        chip,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.ensureVisible(chip);
+      await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       await tester.tap(chip);
       await tester.pump();
@@ -329,6 +330,12 @@ void main() {
         clock: () => _today,
       );
       app.router.go(Routes.placeDetail('mangai'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('place-visit')),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('place-visit')));
       await tester.pumpAndSettle();
@@ -382,8 +389,7 @@ void main() {
       final visits = FakeVisitRepository()
         ..clock = (() => _today)
         ..lock('me', 'mangai', _today.subtract(const Duration(hours: 2)));
-      // O "Voltei aqui" do detalhe fica desabilitado com a trava: monta o
-      // sheet direto, como depois de um toque dado antes da trava chegar.
+
       final vm = VisitViewModel(
         place: _mangai,
         authRepository: FakeAuthRepository(uid: 'me'),
@@ -411,6 +417,7 @@ void main() {
       final visits = await openSheet(tester);
       final confirm = find.byKey(const Key('visit-confirm'));
       await tester.ensureVisible(confirm);
+      await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       final rect = tester.getRect(confirm);
       expect(rect.bottom, lessThanOrEqualTo(568));
@@ -441,7 +448,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      // O card é um botão com rótulo agregado: o preço entra nele.
+
       final label = tester.getSemantics(chip).label;
       expect(label, contains('Abrir Mangai'));
       expect(label, contains('De 30 a 60 reais por pessoa, 2 relatos'));
@@ -505,13 +512,14 @@ void main() {
       final more = find.byKey(const Key('place-price-people-more'));
       await tester.ensureVisible(more);
       await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
       await tester.tap(more);
       await tester.pump();
       await tester.tap(more);
       await tester.pump();
       expect(find.text('4 pessoas'), findsOneWidget);
       expect(find.text('Para 4 pessoas: R\$ 120–240'), findsOneWidget);
-      // Uma região só, que fala quantidade e estimativa juntas.
+
       expect(
         tester.getSemantics(find.byKey(const Key('place-price-split-live'))),
         containsSemantics(
@@ -855,8 +863,7 @@ void main() {
       expect(vm.phase, NearbyPhase.ready);
       final byId = {for (final i in vm.items) i.place.id: i};
       final price = byId['perto240']!.price!;
-      // Bia: a visita de 1 h atrás (60–100) substitui a avaliação de 3 dias
-      // (30–60); Ana: 30–60. Mediana com empate: a mais baixa.
+
       expect(price.count, 2);
       expect(price.typical, PriceBand.from30To60);
       expect(byId['perto80']!.price, isNull, reason: 'relato de 400 dias');

@@ -23,8 +23,6 @@ const _mangai = Place(
   city: 'Natal',
 );
 
-/// 12/10/2030 às 20h em Natal: longe do relógio real, para nenhum teste
-/// passar por acaso com `DateTime.now()`.
 final _today = DateTime.utc(2030, 10, 12, 23);
 
 const _blockedText =
@@ -32,7 +30,6 @@ const _blockedText =
     'Pode avaliar de novo a partir de 11/11 às 20h.';
 const _againText = 'Pode avaliar de novo a partir de 11/11 às 20h';
 
-/// Futuro que nunca completa (leitura da trava pendurada).
 Future<DateTime?> _never() => Completer<DateTime?>().future;
 
 void main() {
@@ -131,7 +128,7 @@ void main() {
       () async {
         final vm = make();
         await vm.checkLock();
-        reviews.lock('toni', 'mangai', _today); // outro envio passou antes
+        reviews.lock('toni', 'mangai', _today);
         vm.setFood(4);
         expect(await vm.submit(), isFalse);
         expect(vm.isBlocked, isTrue);
@@ -353,7 +350,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const Key('axis-food-4')));
       await tester.pump();
-      // Outro aparelho avaliou enquanto o formulário estava aberto.
+
       reviews.lock('toni', 'mangai', _today);
       await tester.scrollUntilVisible(
         find.byKey(const Key('review-submit')),
@@ -384,7 +381,12 @@ void main() {
       expect(find.text('Nenhum amigo avaliou ainda'), findsNothing);
       expect(find.byKey(const Key('place-review-locked')), findsOneWidget);
       expect(find.text(_againText), findsOneWidget);
-      expect(find.byKey(const Key('place-review')), findsNothing);
+      expect(
+        tester
+            .widget<ButtonStyleButton>(find.byKey(const Key('place-review')))
+            .onPressed,
+        isNull,
+      );
     });
 
     testWidgets(
@@ -426,7 +428,6 @@ void main() {
         app.router.go(Routes.placeDetail('mangai'));
         await tester.pumpAndSettle();
 
-        // 1ª avaliação pelo app.
         await tester.tap(find.byKey(const Key('place-review')));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('axis-food-4')));
@@ -440,12 +441,15 @@ void main() {
         await tester.pumpAndSettle();
         expect(reviews.created, hasLength(1));
 
-        // De volta ao detalhe: o CTA "Avaliar de novo" vira texto.
         expect(find.byType(PlaceDetailView), findsOneWidget);
-        expect(find.byKey(const Key('place-review')), findsNothing);
+        expect(
+          tester
+              .widget<ButtonStyleButton>(find.byKey(const Key('place-review')))
+              .onPressed,
+          isNull,
+        );
         expect(find.text(_againText), findsOneWidget);
 
-        // Mesmo abrindo a avaliação direto, não há formulário de notas.
         app.router.push(Routes.reviewFor('mangai'), extra: _mangai);
         await tester.pumpAndSettle();
         expect(find.byType(ReviewView), findsOneWidget);

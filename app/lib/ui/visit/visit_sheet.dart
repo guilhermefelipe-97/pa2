@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../data/repositories/privacy_repository.dart';
+import '../privacy/silent_field.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/place_repository.dart';
+import '../../data/repositories/owner_repository.dart';
 import '../../data/repositories/visit_repository.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/models/place.dart';
@@ -11,28 +14,23 @@ import '../core/app_clock.dart';
 import '../core/price_band_picker.dart';
 import 'visit_view_model.dart';
 
-/// Rótulo do botão que abre o fluxo (detalhe).
 const String visitActionLabel = 'Voltei aqui';
 
-/// Abre o "Voltei aqui" (F15) para [place]: companhia opcional e Confirmar.
-/// Devolve `true` quando a visita foi registrada (quem chama mostra
-/// "Visita registrada" e recarrega).
-///
-/// Durante o envio o sheet não fecha (toque fora, arrastar ou voltar): a
-/// visita pode ser gravada depois de a tela sumir, e o usuário não saberia.
 Future<bool> showVisitSheet(
   BuildContext context, {
   required Place place,
 }) async {
   final vm = VisitViewModel(
     place: place,
+    privacyRepository: context.read<PrivacyRepository?>(),
+    ownerRepository: context.read<OwnerRepository?>(),
     authRepository: context.read(),
     userRepository: context.read(),
     visitRepository: context.read<VisitRepository>(),
     placeRepository: context.read<PlaceRepository?>(),
     clock: context.read<AppClock?>()?.now,
   );
-  // Antes de abrir: o Confirmar só libera depois de conferir a trava.
+
   unawaited(vm.checkLock());
   final navigator = Navigator.of(context);
   final route = VisitSheetRoute(
@@ -46,15 +44,11 @@ Future<bool> showVisitSheet(
     ).scrimOnTapHint(MaterialLocalizations.of(context).bottomSheetLabel),
   );
   final registered = await navigator.push(route);
-  // Descarta o ViewModel só depois da animação de saída (o sheet ainda o
-  // escuta enquanto desce).
+
   route.completed.whenComplete(vm.dispose);
   return registered == true;
 }
 
-/// Bottom sheet modal do "Voltei aqui": toque fora e arrastar só fecham
-/// quando não há envio em andamento ([VisitViewModel.canClose]). O voltar do
-/// sistema é barrado pelo `PopScope` do [VisitSheet].
 class VisitSheetRoute extends ModalBottomSheetRoute<bool> {
   VisitSheetRoute({
     required this.viewModel,
@@ -62,8 +56,7 @@ class VisitSheetRoute extends ModalBottomSheetRoute<bool> {
     super.barrierLabel,
   }) : super(
          isScrollControlled: true,
-         // A alça é desenhada pelo próprio sheet: a do Material continua
-         // arrastável mesmo com `enableDrag` falso.
+
          showDragHandle: false,
          builder: (context) => VisitSheet(viewModel: viewModel),
        ) {
@@ -77,7 +70,7 @@ class VisitSheetRoute extends ModalBottomSheetRoute<bool> {
   void _onChange() {
     if (viewModel.canClose == _lastCanClose) return;
     _lastCanClose = viewModel.canClose;
-    // Reconstrói a barreira com o novo `barrierDismissible`.
+
     if (isActive) changedInternalState();
   }
 
@@ -93,7 +86,6 @@ class VisitSheetRoute extends ModalBottomSheetRoute<bool> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) => ListenableBuilder(
-    // O `_ModalBottomSheet` lê [enableDrag] ao ser construído.
     listenable: viewModel,
     builder: (context, _) =>
         super.buildPage(context, animation, secondaryAnimation),
@@ -106,7 +98,6 @@ class VisitSheetRoute extends ModalBottomSheetRoute<bool> {
   }
 }
 
-/// Conteúdo do sheet (o ViewModel é do [VisitSheetRoute]).
 class VisitSheet extends StatefulWidget {
   const VisitSheet({super.key, required this.viewModel});
 
@@ -118,6 +109,7 @@ class VisitSheet extends StatefulWidget {
 
 class _VisitSheetState extends State<VisitSheet> {
   VisitViewModel get _vm => widget.viewModel;
+  double _handleDrag = 0;
 
   Future<void> _confirm() async {
     final ok = await _vm.submit();
@@ -129,13 +121,9 @@ class _VisitSheetState extends State<VisitSheet> {
     final theme = Theme.of(context);
     return ListenableBuilder(
       listenable: _vm,
-      builder: (context, child) => PopScope(
-        // Voltar do sistema não fecha durante o envio.
-        canPop: _vm.canClose,
-        child: child!,
-      ),
-      // Área segura (barra do sistema) e teclado/insets: o Confirmar nunca
-      // fica escondido; o conteúdo rola em telas baixas (ex.: 320×568).
+      builder: (context, child) =>
+          PopScope(canPop: _vm.canClose, child: child!),
+
       child: SafeArea(
         child: Padding(
           padding: EdgeInsets.fromLTRB(
@@ -151,26 +139,42 @@ class _VisitSheetState extends State<VisitSheet> {
               final muted = theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               );
-              // Rolável: com o preço (F27) o conteúdo pode passar da
-              // altura de telas pequenas.
+
               return SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Alça só visual (o arrastar é o do sheet, desligado durante
-                    // o envio).
-                    Center(
-                      child: Container(
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onVerticalDragStart: vm.canClose
+                          ? (_) => _handleDrag = 0
+                          : null,
+                      onVerticalDragUpdate: vm.canClose
+                          ? (details) => _handleDrag += details.delta.dy
+                          : null,
+                      onVerticalDragEnd: vm.canClose
+                          ? (details) {
+                              if (_handleDrag > 60 ||
+                                  (details.primaryVelocity ?? 0) > 700) {
+                                Navigator.of(context).pop(false);
+                              }
+                            }
+                          : null,
+                      child: SizedBox(
                         key: const Key('visit-handle'),
-                        margin: const EdgeInsets.symmetric(vertical: 16),
-                        width: 32,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.onSurfaceVariant.withValues(
-                            alpha: vm.canClose ? 0.4 : 0.12,
+                        height: 36,
+                        width: double.infinity,
+                        child: Center(
+                          child: Container(
+                            width: 32,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.onSurfaceVariant
+                                  .withValues(alpha: vm.canClose ? 0.4 : 0.12),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
-                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ),
@@ -204,6 +208,17 @@ class _VisitSheetState extends State<VisitSheet> {
                       ],
                     ),
                     const SizedBox(height: 16),
+                    if (vm.privacyUnavailable)
+                      TextButton(
+                        onPressed: vm.isSubmitting ? null : vm.checkLock,
+                        child: const Text(
+                          'Preferência indisponível. Tentar novamente',
+                        ),
+                      ),
+                    SilentField(
+                      value: vm.silent,
+                      onChanged: vm.isSubmitting ? null : vm.setSilent,
+                    ),
                     PriceBandPicker(
                       value: vm.priceBand,
                       onChanged: vm.setPriceBand,

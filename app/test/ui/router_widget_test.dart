@@ -25,7 +25,6 @@ const _mangai = Place(
   city: 'Natal',
 );
 
-/// Segue "a" (Ana), que avaliou o Mangai.
 ({FakeUserRepository users, FakeReviewRepository reviews}) _anaFoiNoMangai() {
   final users = FakeUserRepository()
     ..addUser('me', 'Eu')
@@ -43,16 +42,14 @@ const _mangai = Place(
   return (users: users, reviews: reviews);
 }
 
-/// Na aba Pessoas: busca [name] e toca em Seguir.
 Future<void> _followInPeople(WidgetTester tester, String name) async {
   await tester.enterText(find.byKey(const Key('people-search')), name);
-  await tester.pump(const Duration(milliseconds: 350)); // debounce
+  await tester.pump(const Duration(milliseconds: 350));
   await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(FilledButton, 'Seguir'));
   await tester.pumpAndSettle();
 }
 
-/// Nome do autor num tile de avaliação do detalhe (abre o perfil).
 Finder _authorInTile(String name) =>
     find.descendant(of: find.byType(ReviewTile), matching: find.text(name));
 
@@ -126,9 +123,13 @@ void main() {
       },
     );
 
-    testWidgets('"Sair" fica no menu do feed', (tester) async {
+    testWidgets('"Sair" fica na central de configurações', (tester) async {
       final app = await pumpApp(tester);
-      await tester.tap(find.byKey(const Key('feed-menu')));
+      await tester.tap(_tab('Perfil'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Configurações'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('Sair'), 250);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sair'));
       await tester.pumpAndSettle();
@@ -192,6 +193,12 @@ void main() {
 
         expect(find.byType(PlaceDetailView), findsOneWidget);
         expect(find.text('Mangai'), findsWidgets);
+        await tester.scrollUntilVisible(
+          find.text('Ana'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
         expect(find.text('Ana'), findsOneWidget);
         expect(find.text('1 avaliação de amigo'), findsOneWidget);
       },
@@ -239,6 +246,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(PlaceDetailView), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Ana'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Ana'), findsOneWidget);
     });
 
@@ -258,8 +271,14 @@ void main() {
 
       await tester.tap(find.text('Mangai'));
       await tester.pumpAndSettle();
-      // push não reflete na URI do go_router (optionURLReflectsImperativeAPIs).
+
       expect(find.byType(PlaceDetailView), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Ana'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Ana'), findsOneWidget);
     });
   });
@@ -308,7 +327,7 @@ void main() {
         await tester.tap(find.byKey(const Key('place-review')));
         await tester.pumpAndSettle();
         expect(find.byType(ReviewView), findsOneWidget);
-        // Simula o envio: a avaliação existe e a tela volta com `true`.
+
         app.reviews.stored.add(
           review(
             authorId: 'me',
@@ -322,7 +341,7 @@ void main() {
 
         expect(find.byType(PlaceDetailView), findsOneWidget);
         expect(find.text('Você'), findsOneWidget);
-        expect(find.text('Avaliar de novo'), findsOneWidget);
+        expect(find.text('Avaliar'), findsOneWidget);
       },
     );
   });
@@ -353,6 +372,8 @@ void main() {
         );
         final listCallsBefore = saved.listCalls;
 
+        await tester.ensureVisible(find.byKey(const Key('save-mangai')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('save-mangai')));
         await tester.pump();
         expect(find.text('Salvo em Quero ir'), findsOneWidget);
@@ -398,6 +419,12 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(PlaceDetailView), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.text('Ana'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
         expect(find.text('Ana'), findsOneWidget);
         final marker = find.descendant(
           of: find.byType(PlaceDetailView),
@@ -413,14 +440,15 @@ void main() {
 
     testWidgets('app reaberto: os salvos continuam na aba', (tester) async {
       final saved = FakeSavedRepository();
-      // Sessão 1: salva pelo detalhe.
+
       final app1 = await pumpApp(tester, places: [_mangai], saved: saved);
       app1.router.go(Routes.placeDetail('mangai'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('save-mangai')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('save-mangai')));
       await tester.pumpAndSettle();
 
-      // Sessão 2: app novo, mesmo "servidor".
       await tester.pumpWidget(const SizedBox());
       final app2 = await pumpApp(tester, places: [_mangai], saved: saved);
       app2.router.go(Routes.saved);
@@ -456,6 +484,8 @@ void main() {
           clock: () => DateTime.utc(2026, 9, 28, 15),
         );
 
+        await tester.ensureVisible(find.byKey(const Key('save-mangai')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('save-mangai')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 750));
@@ -485,7 +515,7 @@ void main() {
         expect(
           find.descendant(
             of: chip,
-            matching: find.text('🎉 Sábado com as meninas · 1'),
+            matching: find.text('Sábado com as meninas · 1'),
           ),
           findsOneWidget,
         );
@@ -519,7 +549,7 @@ void main() {
           city: 'Natal',
         ),
       ];
-      // Sessão 1: salva os dois e põe o Mangai numa lista nova.
+
       final app1 = await pumpApp(
         tester,
         places: places,
@@ -531,7 +561,6 @@ void main() {
       await store.create('Sábado', withPlace: 'mangai')!.done;
       await tester.pumpAndSettle();
 
-      // Sessão 2: app novo, mesmo "servidor".
       await tester.pumpWidget(const SizedBox());
       final app2 = await pumpApp(
         tester,
@@ -552,7 +581,6 @@ void main() {
   });
 
   group('F06: fonte de confiança e perfil', () {
-    // Celular alto: o card inteiro (e o bloco "Quem foi") fica na tela.
     setUp(() {
       final view =
           TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
@@ -581,8 +609,8 @@ void main() {
       (tester) async {
         await pumpAna(tester);
         expect(
-          find.descendant(of: anaCard(), matching: find.text('você segue')),
-          findsOneWidget,
+          tester.widget<Semantics>(anaCard()).properties.label,
+          contains('você segue'),
         );
 
         await tester.tap(
@@ -692,7 +720,7 @@ void main() {
         app.router.push(Routes.person('a'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Mangai')); // avaliação dela: detalhe
+        await tester.tap(find.text('Mangai'));
         await tester.pumpAndSettle();
         expect(find.byType(PlaceDetailView), findsOneWidget);
         await tester.tap(_authorInTile('Ana'));
@@ -720,7 +748,7 @@ void main() {
       final before = app.reviews.fetchCalls.length;
       await tester.tap(anaCard());
       await tester.pumpAndSettle();
-      // o perfil lê as avaliações dela (1 leitura)
+
       expect(app.reviews.fetchCalls.length, before + 1);
 
       await tester.pageBack();
@@ -802,7 +830,7 @@ void main() {
         await tester.tap(_authorInTile('Você'));
         await tester.pumpAndSettle();
         expect(find.byType(ProfileView), findsOneWidget);
-        expect(find.text('Você'), findsWidgets);
+        expect(find.text('Eu'), findsWidgets);
         expect(find.byKey(const Key('profile-follow')), findsNothing);
         expect(find.text('Mangai'), findsOneWidget);
       },
@@ -828,17 +856,20 @@ void main() {
         );
         expect(find.byType(FeedView), findsOneWidget);
 
-        await tester.tap(find.byKey(const Key('feed-me')));
+        await tester.tap(_tab('Perfil'));
         await tester.pumpAndSettle();
         expect(find.byType(ProfileView), findsOneWidget);
         expect(
-          find.descendant(of: find.byType(AppBar), matching: find.text('Você')),
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text('Perfil do usuário'),
+          ),
           findsOneWidget,
         );
         expect(find.byKey(const Key('profile-follow')), findsNothing);
         expect(find.text('Mangai'), findsOneWidget);
 
-        await tester.pageBack();
+        await tester.tap(_tab('Amigos'));
         await tester.pumpAndSettle();
         expect(find.byType(FeedView), findsOneWidget);
         expect(

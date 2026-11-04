@@ -1,19 +1,21 @@
+import '../feed/widgets/place_photo.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../privacy/silent_field.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/services/photo_picker.dart';
 import '../../domain/models/companion.dart';
 import '../../domain/models/review.dart';
+import '../../domain/food_tags.dart';
 import '../core/price_band_picker.dart';
 import '../feed/widgets/axis_scores.dart' show noScoresLabel;
 import '../visit/visit_sheet.dart';
 import '../visit/visit_view_model.dart';
 import 'review_view_model.dart';
 
-/// Dica abaixo do Enviar enquanto nenhum eixo tem nota (F14).
 const String noAxisHint = 'Toque numa estrela de pelo menos um eixo';
 
 class ReviewView extends StatefulWidget {
@@ -31,10 +33,9 @@ class _ReviewViewState extends State<ReviewView> {
   @override
   void initState() {
     super.initState();
-    // F03: avaliou há menos de 30 dias → explica em vez do formulário.
+
     viewModel.checkLock();
-    // Android: foto tirada antes de o sistema encerrar o app (no-op nas
-    // outras plataformas).
+
     viewModel.recoverLostPhoto();
   }
 
@@ -43,9 +44,6 @@ class _ReviewViewState extends State<ReviewView> {
     if (ok && context.mounted) context.pop(true);
   }
 
-  /// F15: bloqueado pelo F03, a alternativa é registrar a visita (mesmo
-  /// fluxo do detalhe). Registrada, avisa e volta com `false` (nenhuma
-  /// avaliação nova, mas quem abriu recarrega para mostrar a visita).
   Future<void> _registerVisit(BuildContext context) async {
     final registered = await showVisitSheet(context, place: viewModel.place);
     if (!registered || !context.mounted) return;
@@ -59,7 +57,77 @@ class _ReviewViewState extends State<ReviewView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(viewModel.place.name)),
+      appBar: AppBar(title: const Text('Nova experiência')),
+      bottomNavigationBar: ListenableBuilder(
+        listenable: viewModel,
+        builder: (context, _) {
+          final vm = viewModel;
+          if (vm.isCheckingLock || vm.isBlocked) return const SizedBox.shrink();
+          final values = [
+            vm.food,
+            vm.ambience,
+            vm.service,
+          ].whereType<int>().toList();
+          final average = values.isEmpty
+              ? '—'
+              : (values.reduce((a, b) => a + b) / values.length)
+                    .toStringAsFixed(1)
+                    .replaceAll('.', ',');
+          final score = Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('MÉDIA GERAL', style: theme.textTheme.labelSmall),
+              Text(
+                '$average / 5',
+                key: const Key('review-overall'),
+                style: theme.textTheme.titleLarge,
+              ),
+            ],
+          );
+          final button = FilledButton.icon(
+            key: const Key('review-submit'),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.tertiaryContainer,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: vm.canSubmit ? () => _submit(context) : null,
+            icon: vm.isSubmitting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.send_outlined, size: 18),
+            label: Text(vm.isSubmitting ? 'Publicando…' : 'Publicar avaliação'),
+          );
+          return SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: MediaQuery.textScalerOf(context).scale(1) > 1.3
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        score,
+                        const SizedBox(height: 8),
+                        SizedBox(width: double.infinity, child: button),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        score,
+                        const SizedBox(width: 16),
+                        Expanded(child: button),
+                      ],
+                    ),
+            ),
+          );
+        },
+      ),
       body: ListenableBuilder(
         listenable: viewModel,
         builder: (context, _) {
@@ -68,6 +136,14 @@ class _ReviewViewState extends State<ReviewView> {
             return const Center(
               key: Key('review-lock-checking'),
               child: CircularProgressIndicator(),
+            );
+          }
+          if (vm.isOwnBusiness) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(vm.blockedMessage!),
+              ),
             );
           }
           if (vm.isBlocked) {
@@ -79,15 +155,70 @@ class _ReviewViewState extends State<ReviewView> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text(
-                '${vm.place.category} · ${vm.place.neighborhood}',
-                style: theme.textTheme.bodyMedium,
+              Card(
+                color: theme.colorScheme.surfaceContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: PlacePhoto(place: vm.place, iconSize: 24),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'AVALIANDO VISITA',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.secondary,
+                              ),
+                            ),
+                            Text(
+                              vm.place.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium,
+                            ),
+                            Text(
+                              [
+                                vm.place.neighborhood,
+                                vm.place.city,
+                                vm.place.category,
+                              ].where((v) => v.trim().isNotEmpty).join(' • '),
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 24),
+              Text(
+                'Como foi sua experiência?',
+                style: theme.textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Atribua notas aos eixos vividos. Se algum aspecto não se aplicou à sua visita, você pode deixá-lo sem nota.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 20),
               _AxisPicker(
                 axisKey: 'food',
                 emoji: '🍽️',
                 label: 'Comida',
+                title: 'Comida & Bebida',
+                description: 'Qualidade dos pratos, bebidas e ingredientes.',
                 value: vm.food,
                 onChanged: vm.setFood,
                 onClear: vm.clearFood,
@@ -97,6 +228,9 @@ class _ReviewViewState extends State<ReviewView> {
                 axisKey: 'ambience',
                 emoji: '✨',
                 label: 'Ambiente',
+                title: 'Ambiente & Atmosfera',
+                description:
+                    'Conforto acústico, temperatura, iluminação e estética.',
                 value: vm.ambience,
                 onChanged: vm.setAmbience,
                 onClear: vm.clearAmbience,
@@ -106,28 +240,51 @@ class _ReviewViewState extends State<ReviewView> {
                 axisKey: 'service',
                 emoji: '🤝',
                 label: 'Atendimento',
+                title: 'Atendimento',
+                description: 'Cordialidade, agilidade e atenção da equipe.',
                 value: vm.service,
                 onChanged: vm.setService,
                 onClear: vm.clearService,
                 enabled: !vm.isSubmitting,
               ),
-              // Junto dos eixos; anunciada quando aparece/some (liveRegion).
               Semantics(
                 liveRegion: true,
                 child: vm.hasValidAxes
                     ? const SizedBox.shrink()
                     : Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.only(bottom: 16),
                         child: Text(
                           noAxisHint,
                           key: const Key('review-axis-hint'),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                          style: theme.textTheme.bodySmall,
                         ),
                       ),
               ),
-              const SizedBox(height: 16),
+              Text('Comentário autêntico', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('review-comment'),
+                enabled: !vm.isSubmitting,
+                onChanged: vm.setComment,
+                minLines: 4,
+                maxLines: 6,
+                maxLength: Review.maxCommentLength,
+                inputFormatters: const [
+                  Utf16LengthLimitingFormatter(Review.maxCommentLength),
+                ],
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  hintText:
+                      'Conte os destaques, o que pedir ou dicas para quem vai visitar...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              _PhotoField(viewModel: vm),
+              const SizedBox(height: 24),
               Text(
                 'Com quem você foi? (opcional)',
                 style: theme.textTheme.titleMedium,
@@ -135,7 +292,7 @@ class _ReviewViewState extends State<ReviewView> {
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
-                runSpacing: 8,
+                runSpacing: 4,
                 children: [
                   for (final c in Companion.values)
                     ChoiceChip(
@@ -147,62 +304,65 @@ class _ReviewViewState extends State<ReviewView> {
                     ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
+              Text(
+                'Destaques rápidos (opcional)',
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final tag in foodTags)
+                    FilterChip(
+                      label: Text(
+                        tag,
+                        style: TextStyle(
+                          color: vm.tags.contains(tag)
+                              ? theme.colorScheme.onPrimary
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      selected: vm.tags.contains(tag),
+                      onSelected: vm.isSubmitting
+                          ? null
+                          : (_) => vm.toggleTag(tag),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 24),
               PriceBandPicker(
                 value: vm.priceBand,
                 onChanged: vm.setPriceBand,
                 enabled: !vm.isSubmitting,
               ),
               const SizedBox(height: 24),
-              TextField(
-                key: const Key('review-comment'),
-                enabled: !vm.isSubmitting,
-                onChanged: vm.setComment,
-                minLines: 2,
-                maxLines: 5,
-                maxLength: Review.maxCommentLength,
-                // O maxLength do Flutter conta grafemas; as Rules contam
-                // unidades UTF-16. Este formatter garante a conta das Rules.
-                inputFormatters: const [
-                  Utf16LengthLimitingFormatter(Review.maxCommentLength),
-                ],
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Conta pra galera como foi (opcional)',
-                  hintText: 'Ex.: camarão no ponto, fila grande no sábado',
-                  alignLabelWithHint: true,
-                  border: OutlineInputBorder(),
+              if (vm.privacyUnavailable)
+                TextButton(
+                  onPressed: vm.isSubmitting ? null : vm.checkLock,
+                  child: const Text(
+                    'Preferência indisponível. Tentar novamente',
+                  ),
                 ),
+              SilentField(
+                value: vm.silent,
+                onChanged: vm.isSubmitting ? null : vm.setSilent,
+                expandedDescription: true,
               ),
-              const SizedBox(height: 8),
-              _PhotoField(viewModel: vm),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Text(
                 'O período do dia é registrado automaticamente pelo horário do envio.',
                 style: theme.textTheme.bodySmall,
               ),
-              if (vm.errorMessage != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  vm.errorMessage!,
-                  style: TextStyle(color: theme.colorScheme.error),
+              if (vm.errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Text(
+                    vm.errorMessage!,
+                    style: TextStyle(color: theme.colorScheme.error),
+                  ),
                 ),
-              ],
-              const SizedBox(height: 24),
-              FilledButton(
-                key: const Key('review-submit'),
-                onPressed: vm.canSubmit ? () => _submit(context) : null,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: vm.isSubmitting
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Enviar'),
-                ),
-              ),
             ],
           );
         },
@@ -211,9 +371,6 @@ class _ReviewViewState extends State<ReviewView> {
   }
 }
 
-/// F03: o usuário avaliou o local há menos de 30 dias. Sem formulário de
-/// notas: a explicação com as datas e, como alternativa, "Registrar visita"
-/// (F15: voltar conta como recorrência, sem nota).
 class _BlockedReview extends StatelessWidget {
   const _BlockedReview({required this.message, required this.onRegisterVisit});
 
@@ -266,8 +423,6 @@ class _BlockedReview extends StatelessWidget {
   }
 }
 
-/// Foto opcional (G1): adicionar pela câmera ou galeria; tocar na prévia
-/// oferece trocar ou remover.
 class _PhotoField extends StatelessWidget {
   const _PhotoField({required this.viewModel});
 
@@ -410,11 +565,34 @@ class _PhotoField extends StatelessWidget {
     } else {
       content = Align(
         alignment: Alignment.centerLeft,
-        child: OutlinedButton.icon(
-          key: const Key('photo-add'),
-          onPressed: busy ? null : () => _add(context),
-          icon: const Icon(Icons.add_a_photo_outlined),
-          label: const Text('Adicionar foto'),
+        child: SizedBox(
+          width: 112,
+          height: 96 * MediaQuery.textScalerOf(context).scale(1),
+          child: OutlinedButton(
+            key: const Key('photo-add'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.all(8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              side: BorderSide(color: scheme.outlineVariant),
+              backgroundColor: scheme.surfaceContainer,
+            ),
+            onPressed: busy ? null : () => _add(context),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.add_a_photo_outlined),
+                SizedBox(height: 8),
+                Text(
+                  'Adicionar',
+                  semanticsLabel: 'Adicionar foto',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }
@@ -422,7 +600,15 @@ class _PhotoField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Foto (opcional)', style: theme.textTheme.titleMedium),
+        Text(
+          'Foto da sua visita (opcional)',
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Mostre o pedido, comanda, ambiente ou aquele detalhe especial.',
+          style: theme.textTheme.bodySmall,
+        ),
         const SizedBox(height: 8),
         content,
         if (vm.photoMessage != null) ...[
@@ -438,23 +624,24 @@ class _PhotoField extends StatelessWidget {
   }
 }
 
-/// Um eixo da avaliação rápida (F14): 5 estrelas grandes, um toque escolhe
-/// a nota; "Limpar" volta a não avaliado. Eixo vazio é ausência, nunca zero.
 class _AxisPicker extends StatelessWidget {
   const _AxisPicker({
     required this.axisKey,
     required this.emoji,
     required this.label,
+    required this.title,
+    required this.description,
     required this.value,
     required this.onChanged,
     required this.onClear,
     this.enabled = true,
   });
 
-  /// Base das keys: `axis-<axisKey>-<n>` e `axis-<axisKey>-clear`.
   final String axisKey;
   final String emoji;
   final String label;
+  final String title;
+  final String description;
   final int? value;
   final ValueChanged<int> onChanged;
   final VoidCallback onClear;
@@ -463,7 +650,6 @@ class _AxisPicker extends StatelessWidget {
   static const double maxStarSize = 44;
   static const double starPadding = 4;
 
-  /// Opacidade das estrelas durante o envio.
   static const double disabledOpacity = 0.38;
 
   @override
@@ -471,103 +657,128 @@ class _AxisPicker extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final current = value;
-    // Azul-mar fechado do tema: contraste AA sobre a areia da superfície.
-    final filled = scheme.tertiary;
+
+    final filled = scheme.secondary;
     final opacity = enabled ? 1.0 : disabledOpacity;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '$emoji $label',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ),
-                Flexible(
-                  child: Text(
-                    current == null ? noScoresLabel : '$current de 5',
-                    textAlign: TextAlign.end,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontSize: 16,
+                      ),
                     ),
                   ),
-                ),
-                // Reserva o espaço do Limpar mesmo oculto: o cabeçalho não
-                // pula ao escolher a primeira nota.
-                Visibility(
-                  visible: current != null,
-                  maintainSize: true,
-                  maintainAnimation: true,
-                  maintainState: true,
-                  child: TextButton(
-                    key: Key('axis-$axisKey-clear'),
-                    onPressed: enabled && current != null ? onClear : null,
-                    child: Text('Limpar', semanticsLabel: 'Limpar $label'),
+                  SizedBox(
+                    width: 72,
+                    child: Text(
+                      current == null ? 'Sem nota' : '$current de 5',
+                      semanticsLabel: current == null
+                          ? noScoresLabel
+                          : '$current de 5',
+                      textAlign: TextAlign.end,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+
+                  Visibility(
+                    visible: current != null,
+                    maintainSize: true,
+                    maintainAnimation: true,
+                    maintainState: true,
+                    child: IconButton(
+                      key: Key('axis-$axisKey-clear'),
+                      tooltip: 'Limpar $label',
+                      onPressed: enabled && current != null ? onClear : null,
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final iconSize = math.max(
-                0.0,
-                math.min(
-                  maxStarSize,
-                  constraints.maxWidth / 5 - 2 * starPadding,
-                ),
-              );
-              return Row(
-                children: [
-                  for (var i = 1; i <= 5; i++)
-                    Expanded(
-                      child: Semantics(
-                        button: true,
-                        enabled: enabled,
-                        selected: current == i,
-                        label: '$label $i de 5',
-                        onTap: enabled ? () => onChanged(i) : null,
-                        excludeSemantics: true,
-                        child: Center(
-                          child: IconButton(
-                            key: Key('axis-$axisKey-$i'),
-                            iconSize: iconSize,
-                            padding: const EdgeInsets.all(starPadding),
-                            constraints: const BoxConstraints(),
-                            onPressed: enabled ? () => onChanged(i) : null,
-                            icon: Opacity(
-                              opacity: opacity,
-                              child: Icon(
-                                current != null && i <= current
-                                    ? Icons.star_rounded
-                                    : Icons.star_outline_rounded,
-                                color: current != null && i <= current
-                                    ? filled
-                                    : scheme.outline,
+            Text(
+              description,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final iconSize = math.max(
+                  0.0,
+                  math.min(
+                    maxStarSize,
+                    constraints.maxWidth / 5 - 4 * starPadding,
+                  ),
+                );
+                return Row(
+                  children: [
+                    for (var i = 1; i <= 5; i++)
+                      Expanded(
+                        child: Semantics(
+                          button: true,
+                          enabled: enabled,
+                          selected: current == i,
+                          label: '$label $i de 5',
+                          onTap: enabled ? () => onChanged(i) : null,
+                          excludeSemantics: true,
+                          child: Center(
+                            child: IconButton(
+                              key: Key('axis-$axisKey-$i'),
+                              iconSize: iconSize,
+                              padding: const EdgeInsets.all(starPadding),
+                              constraints: const BoxConstraints(),
+                              onPressed: enabled ? () => onChanged(i) : null,
+                              icon: Opacity(
+                                opacity: opacity,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: current != null && i <= current
+                                        ? filled
+                                        : scheme.surfaceContainer,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(
+                                      current != null && i <= current
+                                          ? Icons.star_rounded
+                                          : Icons.star_outline_rounded,
+                                      color: current != null && i <= current
+                                          ? Colors.white
+                                          : scheme.outline,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                ],
-              );
-            },
-          ),
-        ],
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Limita o texto a [maxLength] unidades UTF-16 (`String.length`), a mesma
-/// conta do `size()` das Security Rules. Não corta um emoji ao meio.
 class Utf16LengthLimitingFormatter extends TextInputFormatter {
   const Utf16LengthLimitingFormatter(this.maxLength);
 
@@ -582,7 +793,7 @@ class Utf16LengthLimitingFormatter extends TextInputFormatter {
     if (text.length <= maxLength) return newValue;
     var cut = maxLength;
     final last = text.codeUnitAt(cut - 1);
-    if (last >= 0xD800 && last <= 0xDBFF) cut--; // high surrogate sem par
+    if (last >= 0xD800 && last <= 0xDBFF) cut--;
     final truncated = text.substring(0, cut);
     return TextEditingValue(
       text: truncated,

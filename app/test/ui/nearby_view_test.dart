@@ -43,12 +43,90 @@ Future<TestApp> _openNearby(
     reviews: reviews,
     visits: visits,
   );
+
+  app.places.nearbyCalls.clear();
   await tester.tap(_tab('Perto'));
   await tester.pumpAndSettle();
   return app;
 }
 
 void main() {
+  testWidgets('Lista e Mapa preservam locais e marcador abre ficha', (
+    tester,
+  ) async {
+    final app = await _openNearby(
+      tester,
+      places: [_places.first],
+      location: FakeLocationService(position: pontaNegra, granted: true),
+    );
+    final calls = app.places.nearbyCalls.length;
+    await tester.tap(find.text('Mapa'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('nearby-map')), findsOneWidget);
+    expect(find.byKey(const ValueKey('map-place-perto80')), findsOneWidget);
+    expect(app.places.nearbyCalls.length, calls);
+    await tester.tap(find.byKey(const ValueKey('map-place-perto80')));
+    await tester.pumpAndSettle();
+    expect(find.byType(PlaceDetailView), findsOneWidget);
+    app.router.pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Lista'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('nearby-perto80')), findsOneWidget);
+    expect(find.byKey(const Key('nearby-map')), findsNothing);
+  });
+  testWidgets(
+    'Perto em 320dp com fonte ampliada mantém filtros e cards acessíveis',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 740);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final app = await pumpApp(
+        tester,
+        places: _places,
+        textScale: 2,
+        openReports: FakeOpenReportRepository(),
+        location: FakeLocationService(position: pontaNegra, granted: true),
+      );
+      app.router.go(Routes.nearby);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('nearby-perto80')),
+        200,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('nearby-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets('busca filtra locais próximos e limpar recupera a lista', (
+    tester,
+  ) async {
+    await _openNearby(
+      tester,
+      places: _places,
+      location: FakeLocationService(position: pontaNegra, granted: true),
+    );
+    await tester.enterText(
+      find.byKey(const Key('nearby-search')),
+      'Tapiocaria',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Tapiocaria 80'), findsOneWidget);
+    expect(find.text('Camarões 240'), findsNothing);
+    await tester.enterText(
+      find.byKey(const Key('nearby-search')),
+      'inexistente',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Nenhum local encontrado'), findsOneWidget);
+    await tester.tap(find.text('Limpar filtros aplicados'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('nearby-list')), findsOneWidget);
+  });
   testWidgets('abas Amigos · Perto · Quero ir · Pessoas; Perto em 2º', (
     tester,
   ) async {
@@ -57,8 +135,8 @@ void main() {
         .widgetList<NavigationDestination>(find.byType(NavigationDestination))
         .map((d) => d.label)
         .toList();
-    expect(labels, ['Amigos', 'Perto', 'Quero ir', 'Pessoas']);
-    // A aba só é montada (e a permissão só é vista) quando visitada.
+    expect(labels, ['Amigos', 'Perto', 'Quero ir', 'Pessoas', 'Perfil']);
+
     expect(app.location.hasPermissionCalls, 0);
 
     await tester.tap(_tab('Perto'));
@@ -115,6 +193,14 @@ void main() {
         location: FakeLocationService(position: pontaNegra, granted: true),
       );
       final card = find.byKey(const Key('nearby-suggestion'));
+      await tester.scrollUntilVisible(
+        card,
+        200,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('nearby-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       expect(card, findsOneWidget);
       expect(
         find.descendant(of: card, matching: find.text('Camarões 240')),
@@ -124,7 +210,15 @@ void main() {
         find.descendant(of: card, matching: find.text('Ana foi aqui')),
         findsOneWidget,
       );
-      // Na lista, o item também mostra quem foi.
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('nearby-perto240')),
+        250,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('nearby-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('nearby-perto240')),
@@ -133,6 +227,19 @@ void main() {
         findsOneWidget,
       );
 
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('nearby-suggestion')),
+        -250,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('nearby-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('nearby-suggestion-open')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('nearby-suggestion-open')));
       await tester.pumpAndSettle();
       expect(find.byType(PlaceDetailView), findsOneWidget);
@@ -175,12 +282,20 @@ void main() {
       visits: visits,
       location: FakeLocationService(position: pontaNegra, granted: true),
     );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('nearby-perto240')),
+      250,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('nearby-list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
     final item = find.byKey(const ValueKey('nearby-perto240'));
     expect(
       find.descendant(of: item, matching: find.text('Ana voltou 2 vezes')),
       findsOneWidget,
     );
-    // Ícone decorativo ao lado do texto.
+
     expect(
       find.descendant(of: item, matching: find.text('🔁')),
       findsOneWidget,
@@ -205,7 +320,7 @@ void main() {
     expect(find.text('Longe 700'), findsWidgets);
     expect(find.text('700 m · Restaurante · Ponta Negra'), findsWidgets);
     expect(app.places.nearbyCalls, hasLength(2));
-    // A sugestão foi recalculada (o único local).
+
     expect(find.byKey(const Key('nearby-suggestion')), findsOneWidget);
   });
 
@@ -284,6 +399,7 @@ void main() {
         location: FakeLocationService(position: pontaNegra, granted: true),
       );
       app.places.nearbyPartial = true;
+      app.places.nearbyCalls.clear();
       await tester.tap(_tab('Perto'));
       await tester.pumpAndSettle();
       expect(find.text(NearbyView.partialMessage), findsOneWidget);
@@ -460,7 +576,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Bar do Zé'), findsWidgets);
       expect(find.text('120 m · Bar · Sé'), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('osm-credit')),
+        250,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('nearby-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       expect(find.byKey(const Key('osm-credit')), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('save-osm-n123')).last);
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('save-osm-n123')).last);
       await tester.pumpAndSettle();

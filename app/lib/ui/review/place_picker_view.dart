@@ -3,11 +3,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/repositories/place_repository.dart' show placeSearchLimit;
 import '../../domain/models/place.dart';
+import '../../domain/geo.dart';
 import '../../routing/routes.dart';
-import '../core/category_style.dart';
 import '../core/osm_credit.dart';
 import '../core/save_button.dart';
 import '../feed/widgets/feed_card.dart' show placeSubtitle;
+import '../feed/widgets/place_photo.dart';
 import 'place_picker_view_model.dart';
 
 class PlacePickerView extends StatefulWidget {
@@ -26,7 +27,6 @@ class _PlacePickerViewState extends State<PlacePickerView> {
     widget.viewModel.load();
   }
 
-  /// Guarda contra toque duplo: só uma avaliação por vez.
   bool _opening = false;
 
   Future<void> _pick(Place p) async {
@@ -44,18 +44,20 @@ class _PlacePickerViewState extends State<PlacePickerView> {
   Widget build(BuildContext context) {
     final vm = widget.viewModel;
     return Scaffold(
-      appBar: AppBar(title: const Text('Onde você foi?')),
+      appBar: AppBar(title: const Text('Onde Você Foi?')),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
             child: TextField(
               key: const Key('place-search'),
               textInputAction: TextInputAction.search,
               decoration: const InputDecoration(
-                hintText: 'Buscar local pelo nome',
+                hintText: 'Buscar restaurante, café, bar...',
                 prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(16)),
+                ),
               ),
               onChanged: vm.setQuery,
             ),
@@ -104,9 +106,9 @@ class _PlacePickerViewState extends State<PlacePickerView> {
     if (vm.isShowingSuggestions && places.isEmpty) {
       return const _EmptyMessage(title: 'Digite o nome do local para buscar');
     }
-    final categories = vm.categories;
     final capped = vm.isResultCapped;
     return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 16),
       itemCount: places.length + 1 + (capped ? 1 : 0),
       itemBuilder: (context, i) {
         if (capped && i == places.length + 1) {
@@ -125,41 +127,122 @@ class _PlacePickerViewState extends State<PlacePickerView> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (categories.length > 1)
-                SizedBox(
-                  height: 48,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    children: [
-                      for (final c in categories)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                            label: Text(c),
-                            selected: vm.selectedCategory == c,
-                            onSelected: (_) => vm.selectCategory(c),
-                          ),
-                        ),
-                    ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  vm.near == null
+                      ? 'GPS indisponível • Busca por nome'
+                      : 'GPS ativo • Lugares próximos na busca',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.secondary,
                   ),
                 ),
-              if (vm.isShowingSuggestions && places.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Text('Sugestões', style: theme.textTheme.labelLarge),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 0,
+                  children: [
+                    FilterChip(
+                      label: Text(
+                        'Todos',
+                        style: TextStyle(
+                          color: vm.selectedCategory == null
+                              ? theme.colorScheme.onPrimary
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      selected: vm.selectedCategory == null,
+                      onSelected: (_) => vm.selectCategory(null),
+                    ),
+                    for (final c in PlacePickerViewModel.filterOptions)
+                      FilterChip(
+                        label: Text(
+                          c,
+                          style: TextStyle(
+                            color: vm.selectedCategory == c
+                                ? theme.colorScheme.onPrimary
+                                : theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        selected: vm.selectedCategory == c,
+                        onSelected: (_) => vm.selectCategory(c),
+                      ),
+                  ],
                 ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                child: Row(
+                  children: [
+                    Icon(
+                      vm.near == null ? Icons.search : Icons.near_me_outlined,
+                      size: 16,
+                      color: theme.colorScheme.secondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        vm.isShowingSuggestions
+                            ? 'Locais sugeridos'
+                            : 'Resultados da busca',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    ),
+                    Text(
+                      '${places.length} ${places.length == 1 ? 'local' : 'locais'}',
+                      style: theme.textTheme.labelSmall,
+                    ),
+                  ],
+                ),
+              ),
             ],
           );
         }
         final p = places[i - 1];
         final subtitle = placeSubtitle(p.neighborhood, p.category);
-        return ListTile(
-          leading: Icon(categoryIcon(p.category)),
-          title: Text(p.name),
-          subtitle: subtitle.isEmpty ? null : Text(subtitle),
-          trailing: SaveButton(placeId: p.id),
-          onTap: () => _pick(p),
+        return Card(
+          margin: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 54,
+                height: 54,
+                child: PlacePhoto(place: p, iconSize: 24),
+              ),
+            ),
+            title: Text(p.name),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (subtitle.isNotEmpty)
+                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (vm.near != null && p.hasCoordinates)
+                  Text(
+                    formatDistance(
+                      distanceMeters(vm.near!, (lat: p.lat!, lng: p.lng!)),
+                    ),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.secondary,
+                    ),
+                  ),
+              ],
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SaveButton(placeId: p.id),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+            onTap: () => _pick(p),
+          ),
         );
       },
     );
@@ -203,7 +286,6 @@ class _EmptyMessage extends StatelessWidget {
   }
 }
 
-/// Placeholder enquanto a busca responde.
 class _SkeletonList extends StatelessWidget {
   const _SkeletonList();
 

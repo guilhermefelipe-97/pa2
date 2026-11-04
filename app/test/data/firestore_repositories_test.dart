@@ -61,7 +61,6 @@ Future<void> _addReview(
   });
 }
 
-/// Lê os docs por id (getPlaces) — o repositório não tem "listar tudo".
 Future<Map<String, Place>> _allById(FakeFirebaseFirestore db) async {
   final ids = (await db.collection('places').get()).docs.map((d) => d.id);
   return FirestorePlaceRepository(db).getPlaces(ids);
@@ -70,7 +69,6 @@ Future<Map<String, Place>> _allById(FakeFirebaseFirestore db) async {
 Future<List<Place>> _all(FakeFirebaseFirestore db) async =>
     (await _allById(db)).values.toList();
 
-/// Doc de `places` como o seed grava (nameLower + searchTokens).
 Future<void> _seedPlace(
   FakeFirebaseFirestore db,
   String id,
@@ -91,7 +89,7 @@ Future<void> _seedPlace(
 
 void main() {
   group('FirestoreReviewRepository.createReview', () {
-    test('grava exatamente as 12 chaves que as Rules aceitam', () async {
+    test('grava exatamente as 14 chaves que as Rules aceitam', () async {
       final db = FakeFirebaseFirestore();
       await FirestoreReviewRepository(
         db,
@@ -101,6 +99,7 @@ void main() {
       expect(docs, hasLength(1));
       final data = docs.single.data();
       expect(data.keys.toSet(), {
+        'silent',
         'authorId',
         'authorName',
         'placeId',
@@ -112,10 +111,12 @@ void main() {
         'comment',
         'hasPhoto',
         'priceBand',
+        'tags',
         'createdAt',
       });
       expect(data['hasPhoto'], isFalse);
-      // F27: sem faixa escolhida, a chave vai com null.
+      expect(data['tags'], isEmpty);
+
       expect(data['priceBand'], isNull);
       expect(data['authorId'], 'alice');
       expect(data['authorName'], 'Alice');
@@ -123,7 +124,7 @@ void main() {
       expect(data['ambience'], 4);
       expect(data['service'], 3);
       expect(data['companion'], 'amigos');
-      // FieldValue.serverTimestamp() é resolvido pelo fake como Timestamp.
+
       expect(data['createdAt'], isA<Timestamp>());
     });
 
@@ -262,8 +263,7 @@ void main() {
       'conclui com sucesso, sem reenviar',
       () async {
         final db = FakeFirebaseFirestore();
-        // O fake grava o batch em ordem: review e foto entram, a trava (última
-        // escrita) lança — como um commit que chegou ao servidor sem ack.
+
         whenCalling(Invocation.method(#set, null))
             .on(db.doc('users/alice/reviewLocks/mangai'))
             .thenThrow(
@@ -294,7 +294,7 @@ void main() {
         'placeId': 'mangai',
       });
       expect((await repo.reviewLockOf('alice', 'mangai'))!.toUtc(), at);
-      // Por usuário e por local.
+
       expect(await repo.reviewLockOf('bob', 'mangai'), isNull);
       expect(await repo.reviewLockOf('alice', 'camaroes'), isNull);
     });
@@ -313,7 +313,7 @@ void main() {
   group('FirestoreReviewRepository.fetchReviewsByAuthors', () {
     test('limit: só as N mais recentes no total, entre lotes', () async {
       final db = FakeFirebaseFirestore();
-      final authors = List.generate(40, (i) => 'w$i'); // 2 lotes de whereIn
+      final authors = List.generate(40, (i) => 'w$i');
       for (var i = 0; i < authors.length; i++) {
         for (var k = 0; k < 2; k++) {
           await _addReview(
@@ -351,7 +351,6 @@ void main() {
           createdAt: DateTime.utc(2026, 6, 1),
         );
 
-        // ids repetidos na entrada não podem duplicar resultados
         final result = (await FirestoreReviewRepository(
           db,
         ).fetchReviewsByAuthors([...authors, 'u0', 'u64'])).items;
@@ -373,35 +372,39 @@ void main() {
       );
     });
 
-    test('lote cheio corta avaliações mais antigas que o limite dele', () async {
-      final db = FakeFirebaseFirestore();
-      // Lote 1 (u0..u29): u0 tem 5 avaliações recentes (dias 10..14) -> lote cheio com limite 3.
-      for (var d = 10; d <= 14; d++) {
+    test(
+      'lote cheio corta avaliações mais antigas que o limite dele',
+      () async {
+        final db = FakeFirebaseFirestore();
+
+        for (var d = 10; d <= 14; d++) {
+          await _addReview(
+            db,
+            authorId: 'u0',
+            createdAt: DateTime.utc(2026, 9, d),
+          );
+        }
+        final batch1 = List.generate(30, (i) => 'u$i');
+
         await _addReview(
           db,
-          authorId: 'u0',
-          createdAt: DateTime.utc(2026, 9, d),
+          authorId: 'v0',
+          createdAt: DateTime.utc(2026, 9, 1),
         );
-      }
-      final batch1 = List.generate(30, (i) => 'u$i');
-      // Lote 2 (v0): avaliações antigas (dia 1) e recente (dia 13).
-      await _addReview(db, authorId: 'v0', createdAt: DateTime.utc(2026, 9, 1));
-      await _addReview(
-        db,
-        authorId: 'v0',
-        createdAt: DateTime.utc(2026, 9, 13),
-      );
+        await _addReview(
+          db,
+          authorId: 'v0',
+          createdAt: DateTime.utc(2026, 9, 13),
+        );
 
-      final result = (await FirestoreReviewRepository(
-        db,
-        perBatchLimit: 3,
-      ).fetchReviewsByAuthors([...batch1, 'v0'])).items;
+        final result = (await FirestoreReviewRepository(
+          db,
+          perBatchLimit: 3,
+        ).fetchReviewsByAuthors([...batch1, 'v0'])).items;
 
-      // Lote 1 trouxe dias 14, 13, 12 (cheio; mais antigo = 12). Corte = dia 12.
-      // v0 do dia 1 é descartado: o lote 1 pode ter avaliações daquela época
-      // que não vieram.
-      expect(result.map((r) => r.createdAt.toUtc().day), [14, 13, 13, 12]);
-    });
+        expect(result.map((r) => r.createdAt.toUtc().day), [14, 13, 13, 12]);
+      },
+    );
 
     test(
       'lê comment normalizado; doc antigo sem a chave ou tipo errado vira null',
@@ -623,7 +626,7 @@ void main() {
       'doc fora do schema conta para o corte do lote (createdAt bruto)',
       () async {
         final db = FakeFirebaseFirestore();
-        // Lote cheio (limite 2): o mais antigo é um doc inválido do dia 5.
+
         await _addReview(
           db,
           authorId: 'a',
@@ -643,8 +646,7 @@ void main() {
           perBatchLimit: 2,
         ).fetchReviewsByAuthors(['a']);
         expect(result.items, hasLength(1));
-        // Sem o doc inválido, o corte seria o dia 9 e esconderia o buraco
-        // entre 9 e 5; com ele, o corte é o dia 5.
+
         expect(result.cutoff!.toUtc(), DateTime.utc(2026, 9, 5));
       },
     );
@@ -822,12 +824,11 @@ void main() {
       'search: manda ao servidor o termo mais longo; o doc que casa todos aparece mesmo depois do 20º',
       () async {
         final db = FakeFirebaseFirestore();
-        // 70 docs com "de" antes do alvo em nameLower: com o 1º termo ("de")
-        // a página de 60 enche e o alvo fica de fora.
+
         for (var i = 0; i < 70; i++) {
           await _seedPlace(db, 'b$i', 'Bar de ${i.toString().padLeft(2, '0')}');
         }
-        // 25 docs com "camaroes" antes do alvo (o alvo é o 26º).
+
         for (var i = 0; i < 25; i++) {
           await _seedPlace(
             db,
@@ -943,7 +944,6 @@ void main() {
         final byId = await repo.getPlaces(ids);
         expect(byId.keys.toSet(), {for (var i = 0; i < 65; i++) 'p$i'});
 
-        // Cache: apagar no banco não muda o que já foi lido nesta sessão.
         await db.doc('places/p0').delete();
         expect((await repo.getPlaces(['p0']))['p0']!.name, 'Local 0');
         expect(await repo.getPlaces(const []), isEmpty);

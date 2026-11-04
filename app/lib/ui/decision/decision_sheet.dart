@@ -11,12 +11,8 @@ import '../core/app_clock.dart';
 import '../feed/widgets/feed_card.dart' show placeSubtitle;
 import 'decision_view_model.dart';
 
-/// Rótulo do botão do modo decisão (F09) na aba "Quero ir".
 const decideLabel = 'Decidir por mim';
 
-/// Toque 1 do modo decisão: abre a escolha de companhia sobre os
-/// [candidates] (salvos do chip ativo). O toque 2 (companhia) mostra 1
-/// lugar.
 Future<void> showDecisionSheet(
   BuildContext context, {
   required List<DecisionCandidate> candidates,
@@ -46,7 +42,6 @@ Future<void> showDecisionSheet(
   ).whenComplete(vm.dispose);
 }
 
-/// Conteúdo do sheet do modo decisão.
 class DecisionSheet extends StatefulWidget {
   const DecisionSheet({
     super.key,
@@ -65,7 +60,7 @@ class _DecisionSheetState extends State<DecisionSheet> {
   @override
   void initState() {
     super.initState();
-    // Os sinais chegam enquanto a pessoa escolhe a companhia.
+
     widget.viewModel.prepare();
   }
 
@@ -86,7 +81,12 @@ class _DecisionSheetState extends State<DecisionSheet> {
               padding: EdgeInsets.all(32),
               child: Center(child: CircularProgressIndicator()),
             ),
-            DecisionPhase.noneOpen => _NoneOpen(onBack: widget.viewModel.back),
+            DecisionPhase.noneOpen => _NoneOpen(
+              onBack: widget.viewModel.sessionChanged
+                  ? () => Navigator.of(context).pop()
+                  : widget.viewModel.back,
+              message: widget.viewModel.emptyText,
+            ),
             DecisionPhase.result => _Result(
               viewModel: widget.viewModel,
               onOpenPlace: widget.onOpenPlace,
@@ -139,7 +139,8 @@ class _CompanionChoice extends StatelessWidget {
 }
 
 class _NoneOpen extends StatelessWidget {
-  const _NoneOpen({required this.onBack});
+  const _NoneOpen({required this.onBack, required this.message});
+  final String message;
 
   final VoidCallback onBack;
 
@@ -155,7 +156,7 @@ class _NoneOpen extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          DecisionViewModel.noneOpenText,
+          message,
           key: const Key('decide-none-open'),
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.titleMedium,
@@ -197,7 +198,7 @@ class _Result extends StatelessWidget {
           ),
         Text('Que tal', style: theme.textTheme.labelLarge),
         const SizedBox(height: 4),
-        // Anúncio para leitores de tela a cada novo lugar.
+
         Semantics(
           liveRegion: true,
           child: Text(

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/models/place_list.dart';
+import 'list_category.dart';
 
-/// Nome (1–40, aparado, único sem caixa/acento) + emoji opcional de uma
-/// lista. Usado no "Nova lista" do sheet e no diálogo de renomear.
 class ListNameForm extends StatefulWidget {
   const ListNameForm({
     super.key,
@@ -19,7 +18,6 @@ class ListNameForm extends StatefulWidget {
   final String initialName;
   final String? initialEmoji;
 
-  /// Nome já usado por outra lista do usuário?
   final bool Function(String name) isTaken;
   final void Function(String name, String? emoji) onSubmit;
   final VoidCallback? onCancel;
@@ -52,7 +50,7 @@ class _ListNameFormState extends State<ListNameForm> {
 
   bool get _taken {
     if (_trimmed.isEmpty) return false;
-    // Renomear para o mesmo nome (ou só mudar a caixa) não é repetição.
+
     if (PlaceList.nameKey(_trimmed) == PlaceList.nameKey(widget.initialName)) {
       return false;
     }
@@ -87,43 +85,56 @@ class _ListNameFormState extends State<ListNameForm> {
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _submit(),
           decoration: InputDecoration(
-            labelText: 'Nome da lista',
-            hintText: 'Ex.: Sábado com as meninas',
+            labelText: 'Título',
+            hintText: 'Ex.: Cafés para conhecer',
             errorText: error,
             counterText: '$length/${PlaceList.maxNameLength}',
           ),
         ),
         const SizedBox(height: 12),
-        Text('Emoji (opcional)', style: Theme.of(context).textTheme.labelLarge),
+        Text(
+          'Categoria sugerida (opcional)',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
         const SizedBox(height: 4),
         Wrap(
           spacing: 4,
           runSpacing: 4,
           children: [
-            for (final e in listEmojis)
+            for (final category in listCategories)
               ChoiceChip(
-                key: Key('list-emoji-$e'),
-                label: Text(e, style: const TextStyle(fontSize: 18)),
+                key: Key('list-emoji-${category.value}'),
+                label: FittedBox(child: Text(category.label, maxLines: 1)),
+                avatar: Icon(
+                  category.icon,
+                  size: 18,
+                  color: _emoji == category.value
+                      ? Theme.of(context).colorScheme.onPrimary
+                      : Theme.of(context).colorScheme.secondary,
+                ),
                 showCheckmark: false,
-                selected: _emoji == e,
-                onSelected: (on) => setState(() => _emoji = on ? e : null),
+                selected: _emoji == category.value,
+                onSelected: (on) =>
+                    setState(() => _emoji = on ? category.value : null),
               ),
           ],
         ),
         const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        OverflowBar(
+          alignment: MainAxisAlignment.end,
+          spacing: 8,
+          overflowSpacing: 8,
           children: [
             if (widget.onCancel != null)
               TextButton(
                 onPressed: widget.onCancel,
-                child: const Text('Cancelar'),
+                child: const FittedBox(child: Text('Cancelar', maxLines: 1)),
               ),
             const SizedBox(width: 8),
             FilledButton(
               key: const Key('list-name-submit'),
               onPressed: _valid ? _submit : null,
-              child: Text(widget.submitLabel),
+              child: FittedBox(child: Text(widget.submitLabel, maxLines: 1)),
             ),
           ],
         ),

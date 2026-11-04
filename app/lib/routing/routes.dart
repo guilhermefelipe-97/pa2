@@ -1,4 +1,13 @@
 abstract final class Routes {
+  static const settings = '/configuracoes';
+  static const editProfile = '/configuracoes/perfil';
+  static const accountSecurity = '/configuracoes/perfil/conta';
+  static const admin = '/administracao';
+  static const adminRequests = '/administracao/titularidade';
+  static const adminRequestPattern =
+      '/administracao/titularidade/:uid/:placeId';
+  static String adminRequest(String uid, String placeId) =>
+      '/administracao/titularidade/${Uri.encodeComponent(uid)}/${Uri.encodeComponent(placeId)}';
   static const splash = '/splash';
   static const login = '/login';
   static const signUp = '/cadastro';
@@ -11,7 +20,6 @@ abstract final class Routes {
   static const placeDetailPattern = '/local/:placeId';
   static const personPattern = '/pessoa/:uid';
 
-  /// Lista visível de uma pessoa (F13), com "Copiar lista".
   static const personListPattern = '/pessoa/:uid/lista/:listId';
 
   static String reviewFor(String placeId) => '/avaliar/$placeId';

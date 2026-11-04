@@ -4,18 +4,17 @@ import 'package:naarea/domain/feed.dart';
 import 'package:naarea/domain/models/companion.dart';
 import 'package:naarea/domain/models/day_period.dart';
 import 'package:naarea/domain/models/scores.dart';
-import 'package:naarea/ui/feed/widgets/feed_card.dart';
+
 import 'package:naarea/ui/feed/widgets/trust_sources.dart';
 
 import '../support/builders.dart';
 
-final _now = DateTime.utc(2026, 9, 28, 15); // 12h em Natal
+final _now = DateTime.utc(2026, 9, 28, 15);
 
 Widget _host(Widget child) => MaterialApp(
   home: Scaffold(body: SingleChildScrollView(child: child)),
 );
 
-/// Pílula de um eixo (mesmo widget do detalhe): "🍽️ 5".
 Finder _pill(String text, {Finder? within}) => within == null
     ? find.text(text)
     : find.descendant(of: within, matching: find.text(text));
@@ -32,7 +31,7 @@ FeedItem _fourPeople() => groupActivitiesIntoFeed(
       authorId: 'a',
       authorName: 'Ana',
       placeId: 'x',
-      createdAt: DateTime.utc(2026, 9, 28, 14), // há 1 h
+      createdAt: DateTime.utc(2026, 9, 28, 14),
     ),
     review(
       authorId: 'd',
@@ -44,7 +43,7 @@ FeedItem _fourPeople() => groupActivitiesIntoFeed(
       authorId: 'b',
       authorName: 'Bia',
       placeId: 'x',
-      createdAt: DateTime.utc(2026, 9, 26, 15), // há 2 dias
+      createdAt: DateTime.utc(2026, 9, 26, 15),
     ),
   ],
   places: {'x': place(id: 'x', name: 'Mangai')},
@@ -53,7 +52,6 @@ FeedItem _fourPeople() => groupActivitiesIntoFeed(
 void main() {
   group('textos', () {
     test('companhia + período como frase', () {
-      // 22h UTC = 19h em Natal: noite
       final night = DateTime.utc(2026, 9, 27, 22);
       expect(
         visitContext(review(companion: Companion.amigos, createdAt: night)),
@@ -91,7 +89,7 @@ void main() {
           placeId: 'x',
           scores: Scores(food: 5, ambience: 4, service: 5),
           companion: Companion.amigos,
-          createdAt: DateTime.utc(2026, 9, 28, 13), // 10h Natal, há 2 h
+          createdAt: DateTime.utc(2026, 9, 28, 13),
         ),
         review(
           authorId: 'a',
@@ -130,12 +128,12 @@ void main() {
         );
         expect(find.text('Ana'), findsOneWidget);
         expect(find.text('você segue'), findsOneWidget);
-        expect(_pill('🍽️ 5'), findsOneWidget);
-        expect(_pill('✨ 4'), findsOneWidget);
-        expect(_pill('🤝 3'), findsOneWidget);
+        expect(_pill('Comida 5'), findsOneWidget);
+        expect(_pill('Ambiente 4'), findsOneWidget);
+        expect(_pill('Atendimento 3'), findsOneWidget);
         expect(find.text('de manhã'), findsOneWidget);
         expect(find.text('há 2 h'), findsOneWidget);
-        // mesmo widget do detalhe: dica com o nome de cada eixo
+
         expect(find.byTooltip('Comida'), findsOneWidget);
         expect(find.byTooltip('Ambiente'), findsOneWidget);
         expect(find.byTooltip('Atendimento'), findsOneWidget);
@@ -181,7 +179,7 @@ void main() {
     ) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
-        _host(FeedCard(item: _fourPeople(), now: _now, onTap: () {})),
+        _host(TrustSources(item: _fourPeople(), now: _now, onShowAll: () {})),
       );
       final node = tester.getSemantics(
         find.bySemanticsLabel('Ver as 2 outras pessoas'),
@@ -198,7 +196,13 @@ void main() {
       addTearDown(tester.view.reset);
       var opened = 0;
       await tester.pumpWidget(
-        _host(FeedCard(item: _fourPeople(), now: _now, onTap: () => opened++)),
+        _host(
+          TrustSources(
+            item: _fourPeople(),
+            now: _now,
+            onShowAll: () => opened++,
+          ),
+        ),
       );
       await tester.tap(find.text('+2 pessoas'));
       expect(opened, 1);
@@ -219,7 +223,7 @@ void main() {
       ]).single;
       await tester.pumpWidget(_host(TrustSources(item: item, now: _now)));
       expect(find.text('Ana'), findsOneWidget);
-      expect(_pill('🍽️ 5'), findsOneWidget);
+      expect(_pill('Comida 5'), findsOneWidget);
       expect(find.text('no almoço · foi 3 vezes'), findsOneWidget);
     });
 
@@ -293,7 +297,7 @@ void main() {
             child: Scaffold(
               body: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
-                child: FeedCard(
+                child: TrustSources(
                   item: item,
                   now: _now,
                   isFollowing: (_) => true,
@@ -325,10 +329,10 @@ void main() {
         ).single;
         await tester.pumpWidget(
           _host(
-            FeedCard(
+            TrustSources(
               item: item,
               now: _now,
-              onTap: () {},
+              onShowAll: () {},
               isFollowing: (_) => true,
               onOpenPerson: (_) {},
             ),
@@ -341,14 +345,12 @@ void main() {
           ),
         );
         expect(node, containsSemantics(isButton: true, hasTapAction: true));
-        // O card continua um botão "Abrir Mangai" à parte.
-        expect(find.bySemanticsLabel(RegExp('^Abrir Mangai')), findsOneWidget);
         handle.dispose();
       },
     );
   });
 
-  testWidgets('F14: Ana só com comida 4 mostra "🍽️ 4" e fala "comida 4"', (
+  testWidgets('F14: Ana só com comida 4 mostra "Comida 4" e fala "comida 4"', (
     tester,
   ) async {
     final handle = tester.ensureSemantics();
@@ -368,36 +370,39 @@ void main() {
       sourceSemanticsLabel(item.sources.single, following: false, now: _now),
       'Ana, comida 4, de manhã, há 2 horas',
     );
-    await tester.pumpWidget(_host(FeedCard(item: item, now: _now)));
+    await tester.pumpWidget(_host(TrustSources(item: item, now: _now)));
     final row = find.byKey(const ValueKey('trust-source-ana'));
-    expect(_pill('🍽️ 4', within: row), findsOneWidget);
+    expect(_pill('Comida 4', within: row), findsOneWidget);
     expect(find.textContaining('✨'), findsNothing);
     expect(find.textContaining('🤝'), findsNothing);
     handle.dispose();
   });
 
-  testWidgets('AC F14: Bianca só com ambiente 5 aparece no card com "✨ 5" e '
-      'nenhum outro eixo', (tester) async {
-    final item = groupActivitiesIntoFeed(
-      [
-        review(
-          authorId: 'bianca',
-          authorName: 'Bianca',
-          placeId: 'mangai',
-          scores: Scores(ambience: 5),
-          createdAt: DateTime.utc(2026, 9, 28, 13),
-        ),
-      ],
-      places: {'mangai': place(id: 'mangai', name: 'Mangai')},
-    ).single;
-    await tester.pumpWidget(_host(FeedCard(item: item, now: _now)));
-    expect(_pill('✨ 5'), findsOneWidget);
-    expect(find.textContaining('🍽️'), findsNothing);
-    expect(find.textContaining('🤝'), findsNothing);
-  });
+  testWidgets(
+    'AC F14: Bianca só com ambiente 5 aparece no card com "Ambiente 5" e '
+    'nenhum outro eixo',
+    (tester) async {
+      final item = groupActivitiesIntoFeed(
+        [
+          review(
+            authorId: 'bianca',
+            authorName: 'Bianca',
+            placeId: 'mangai',
+            scores: Scores(ambience: 5),
+            createdAt: DateTime.utc(2026, 9, 28, 13),
+          ),
+        ],
+        places: {'mangai': place(id: 'mangai', name: 'Mangai')},
+      ).single;
+      await tester.pumpWidget(_host(TrustSources(item: item, now: _now)));
+      expect(_pill('Ambiente 5'), findsOneWidget);
+      expect(find.textContaining('🍽️'), findsNothing);
+      expect(find.textContaining('🤝'), findsNothing);
+    },
+  );
 
   testWidgets('AC: Bianca segue Ana; o card mostra "Ana" + "você segue" e '
-      '🍽️ 5 de Ana, sem número sem nome', (tester) async {
+      'Comida 5 de Ana, sem número sem nome', (tester) async {
     final item = groupActivitiesIntoFeed(
       [
         review(
@@ -412,7 +417,7 @@ void main() {
     ).single;
     await tester.pumpWidget(
       _host(
-        FeedCard(item: item, now: _now, isFollowing: (uid) => uid == 'ana'),
+        TrustSources(item: item, now: _now, isFollowing: (uid) => uid == 'ana'),
       ),
     );
     final row = find.byKey(const ValueKey('trust-source-ana'));
@@ -424,8 +429,8 @@ void main() {
       find.descendant(of: row, matching: find.text('você segue')),
       findsOneWidget,
     );
-    expect(_pill('🍽️ 5', within: row), findsOneWidget);
-    // Todas as notas do card estão na linha de alguém.
-    expect(find.textContaining('🍽️'), findsOneWidget);
+    expect(_pill('Comida 5', within: row), findsOneWidget);
+
+    expect(find.textContaining('Comida'), findsOneWidget);
   });
 }

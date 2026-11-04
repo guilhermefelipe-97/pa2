@@ -103,7 +103,10 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-onda-4-decisao-curadoria-auditoria.md`
   summary: Modo decisão (F09) usa só a primeira página de `fetchReviewsByAuthors(seguidos)`; avaliações antigas dos lugares salvos ficam fora do ranking.
   evidence: Cada lote de 30 autores traz no máximo 100 avaliações recentes; com seguidos muito ativos, as dos candidatos podem não estar no lote. Precisa de consulta por `placeId in` candidatos × autores ou paginação.
+  status: Resolvido no código local em 02/11/2026, após autorização da usuária. Consulta paginada dos candidatos × seguidos, cancelamento e testes com 205 avaliações empatadas. Ver docs/design/onda4-correcao-historico-copias.md.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-onda-4-decisao-curadoria-auditoria.md`
   summary: Registro em `copies/{copiador}` não exige que exista uma lista com `copiedFromListId` correspondente; seguir e registrar infla "Copiada N vezes" sem copiar.
   evidence: As Rules só checam seguir a dona e a lista visível; amarrar exigiria guardar o id da cópia no doc de `copies` (mudança no formato congelado do spec).
+
+  status: Resolvido no código local em 02/11/2026, após autorização explícita da usuária para mudar o contrato. Recibo com copiedListId validado pelas Rules, migração verificável sem apagar legado e testes de segurança. Publicação e migração em produção continuam pendentes.

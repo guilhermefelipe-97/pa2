@@ -12,13 +12,10 @@ import 'lists_store.dart';
 
 enum PersonListState { loading, ready, notFound, error, signedOut }
 
-/// Resultado de "Copiar lista", mostrado uma vez pela tela.
 sealed class CopyNotice {
   const CopyNotice();
 }
 
-/// Copiou: a nova lista é [listId] ("Ver" abre o chip no Quero ir), com
-/// [copied] dos [total] locais da lista original.
 class CopyDone extends CopyNotice {
   const CopyDone(this.listId, {required this.copied, required this.total});
 
@@ -26,21 +23,15 @@ class CopyDone extends CopyNotice {
   final int copied;
   final int total;
 
-  /// "Lista copiada" ou, se faltaram locais, "Lista copiada (2 de 3
-  /// locais)".
   String get message => copied < total
       ? '${PersonListViewModel.copiedText} ($copied de $total locais)'
       : PersonListViewModel.copiedText;
 }
 
-/// Falhou: os salvamentos feitos pela cópia foram desfeitos.
 class CopyFailed extends CopyNotice {
   const CopyFailed();
 }
 
-/// Lista visível de uma pessoa que o usuário segue (F13):
-/// `/pessoa/:uid/lista/:listId`, com os locais e "Copiar lista". Só abre
-/// para quem segue a dona e com a lista visível (as Rules negam o resto).
 class PersonListViewModel extends SafeChangeNotifier {
   PersonListViewModel({
     required this.ownerUid,
@@ -83,17 +74,14 @@ class PersonListViewModel extends SafeChangeNotifier {
 
   PlaceList? _list;
 
-  /// A lista (do `extra` do perfil até a leitura confirmar).
   PlaceList? get list => _list;
 
   UserProfile? _author;
 
-  /// Nome da autora ("Ana").
   String get authorName => _author?.displayName ?? '';
 
   List<Place> _placesList = const [];
 
-  /// Locais da lista que existem no catálogo, na ordem da lista.
   List<Place> get places => _placesList;
 
   bool _copying = false;
@@ -101,14 +89,12 @@ class PersonListViewModel extends SafeChangeNotifier {
 
   CopyNotice? _notice;
 
-  /// Aviso pendente da cópia (uma vez só).
   CopyNotice? takeNotice() {
     final n = _notice;
     _notice = null;
     return n;
   }
 
-  /// O usuário já tem o máximo de listas: botão desabilitado com aviso.
   bool get limitReached {
     final store = _store;
     return store != null &&
@@ -116,20 +102,15 @@ class PersonListViewModel extends SafeChangeNotifier {
         store.lists.length >= PlaceList.maxLists;
   }
 
-  /// Suas listas ainda carregando: "Copiar lista" espera por elas.
   bool get listsLoading {
     final store = _store;
     return store != null && (store.isIdle || store.isLoading);
   }
 
-  /// Suas listas não carregaram: "Copiar lista" desabilitado com "Tentar de
-  /// novo".
   bool get listsFailed => _store?.hasError ?? false;
 
-  /// "Tentar de novo" das suas listas.
   Future<void> retryLists() => _store?.reload() ?? Future.value();
 
-  /// "Copiar lista" habilitado.
   bool get canCopy {
     final store = _store;
     return store != null &&
@@ -176,8 +157,6 @@ class PersonListViewModel extends SafeChangeNotifier {
       ];
       _state = PersonListState.ready;
     } on ListAccessDeniedException {
-      // Não segue (ou deixou de seguir) a dona: a lista não está disponível
-      // — tentar de novo não adianta.
       if (seq != _seq) return;
       _state = PersonListState.notFound;
     } on Object catch (e) {
@@ -188,36 +167,54 @@ class PersonListViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// "Copiar lista" (snapshot com crédito à autora): só os locais que a
-  /// tela mostrou (os que existem no catálogo).
   Future<void> copy() async {
     final store = _store;
     final list = _list;
-    final author = _author;
-    if (!canCopy || store == null || list == null || author == null) return;
-    final total = {...list.placeIds}.length;
-    final shown = list.copyWith(placeIds: [for (final p in _placesList) p.id]);
-    final creation = store.copyFrom(shown, author);
-    if (creation == null) {
-      _notice = const CopyFailed();
-      notifyListeners();
+    final me = _auth.currentUserId;
+    if (!canCopy ||
+        store == null ||
+        list == null ||
+        _author == null ||
+        me == null) {
       return;
     }
     _copying = true;
     notifyListeners();
-    final ok = await creation.done;
-    _copying = false;
-    _notice = ok
-        ? CopyDone(
-            creation.id,
-            copied: store.listById(creation.id)?.placeIds.length ?? 0,
-            total: total,
-          )
-        : const CopyFailed();
-    notifyListeners();
+    try {
+      final author = await _users
+          .getProfile(ownerUid)
+          .timeout(const Duration(seconds: 10));
+      if (isDisposed || _auth.currentUserId != me) return;
+      if (author == null) throw StateError('Perfil indisponível');
+      _author = author;
+      final total = {...list.placeIds}.length;
+      final shown = list.copyWith(
+        placeIds: [for (final p in _placesList) p.id],
+      );
+      final creation = store.copyFrom(shown, author);
+      if (creation == null) {
+        _notice = const CopyFailed();
+        return;
+      }
+      final ok = await creation.done;
+      if (isDisposed || _auth.currentUserId != me) return;
+      _notice = ok
+          ? CopyDone(
+              creation.id,
+              copied: store.listById(creation.id)?.placeIds.length ?? 0,
+              total: total,
+            )
+          : const CopyFailed();
+    } on Object {
+      if (!isDisposed && _auth.currentUserId == me) {
+        _notice = const CopyFailed();
+      }
+    } finally {
+      _copying = false;
+      notifyListeners();
+    }
   }
 
-  /// "Ver" da SnackBar: a aba "Quero ir" abre com a lista copiada.
   void focusCopied(String newListId) => _store?.focusList(newListId);
 
   @override

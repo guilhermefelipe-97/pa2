@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-
+import 'package:go_router/go_router.dart';
 import '../../../domain/feed.dart';
-import '../../../domain/relative_time.dart';
+import '../../../domain/models/scores.dart';
+import '../../../domain/price_summary.dart';
+import '../../../routing/routes.dart';
 import '../../core/save_button.dart';
+import 'author_avatar.dart';
 import 'place_photo.dart';
-import 'price_chip.dart';
-import 'trust_sources.dart';
+import 'trust_sources.dart' show sourceSemanticsLabel;
 
-/// "Bairro · Categoria", pulando partes vazias.
 String placeSubtitle(String neighborhood, String category) =>
     [neighborhood, category].where((s) => s.trim().isNotEmpty).join(' · ');
 
-/// Autores distintos (id, nome) do mais recente para o mais antigo.
 List<({String id, String name})> distinctAuthors(FeedItem item) {
   final seen = <String>{};
   return [
@@ -20,7 +20,24 @@ List<({String id, String name})> distinctAuthors(FeedItem item) {
   ];
 }
 
-/// Card do feed "Amigos foram aqui".
+double? friendsOverallScore(FeedItem item) {
+  final perPerson = <double>[];
+  for (final source in item.sources) {
+    final scores = source.latestReview?.scores;
+    if (scores == null) continue;
+    final values = [
+      scores.food,
+      scores.ambience,
+      scores.service,
+    ].whereType<int>().toList();
+    if (values.isNotEmpty) {
+      perPerson.add(values.reduce((a, b) => a + b) / values.length);
+    }
+  }
+  if (perPerson.isEmpty) return null;
+  return perPerson.reduce((a, b) => a + b) / perPerson.length;
+}
+
 class FeedCard extends StatelessWidget {
   const FeedCard({
     super.key,
@@ -29,151 +46,300 @@ class FeedCard extends StatelessWidget {
     this.onTap,
     this.isFollowing,
     this.onOpenPerson,
+    this.confirmedTags = const {},
   });
-
   final FeedItem item;
+  final Map<String, int> confirmedTags;
   final DateTime now;
   final VoidCallback? onTap;
-
-  /// Quem o leitor segue (selo "você segue" no bloco "Quem foi").
   final bool Function(String uid)? isFollowing;
-
-  /// Toque numa pessoa do bloco "Quem foi": abre o perfil dela.
   final void Function(TrustSource source)? onOpenPerson;
+
+  void _openAuthor(BuildContext context, String id) {
+    final source = item.sources.firstWhere((s) => s.authorId == id);
+    if (onOpenPerson != null) {
+      onOpenPerson!(source);
+    } else {
+      context.push(Routes.person(id));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final place = item.place;
-    final commented = item.latestComment;
-    final subtitle = placeSubtitle(place.neighborhood, place.category);
+    final authors = distinctAuthors(item);
+    final extra = authors.length - 2;
     final price = item.priceAt(now);
-
+    final overall = friendsOverallScore(item);
+    final comment = item.latestComment;
+    final location = [place.address, place.neighborhood, place.city]
+        .whereType<String>()
+        .where((part) => part.trim().isNotEmpty)
+        .take(2)
+        .join(' · ');
     return Card(
       clipBehavior: Clip.antiAlias,
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Stack(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Container(
+            width: double.infinity,
+            color: scheme.surfaceContainerLow,
+            padding: const EdgeInsets.all(16),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                AuthorAvatarStack(
+                  authors: authors,
+                  ringColor: scheme.surfaceContainerLow,
+                ),
+                for (var i = 0; i < authors.take(2).length; i++) ...[
+                  if (i > 0) Text('e', style: theme.textTheme.bodySmall),
+                  Semantics(
+                    key: ValueKey('trust-source-${authors[i].id}'),
+                    container: true,
+                    button: true,
+                    excludeSemantics: true,
+                    label: sourceSemanticsLabel(
+                      item.sources.firstWhere(
+                        (s) => s.authorId == authors[i].id,
+                      ),
+                      following: isFollowing?.call(authors[i].id) ?? false,
+                      now: now,
+                    ),
+                    onTap: () => _openAuthor(context, authors[i].id),
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 48),
+                        foregroundColor: scheme.onSurface,
+                        textStyle: theme.textTheme.bodySmall,
+                      ),
+                      onPressed: () => _openAuthor(context, authors[i].id),
+                      child: Text(authors[i].name),
+                    ),
+                  ),
+                ],
+                Text(
+                  '${extra > 0 ? 'e mais $extra ' : ''}${authors.length == 1 ? 'visitou' : 'visitaram'}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
           Semantics(
+            container: true,
             button: true,
             label: 'Abrir ${item.placeName}',
+            onTap: onTap,
             child: InkWell(
               onTap: onTap,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Hero(
-                      tag: 'place-photo-${place.id}',
-                      // Foto mais recente de um amigo ali; sem ela, a do
-                      // catálogo; sem nenhuma, o fallback da categoria.
-                      child: PlacePhoto(
-                        place: place,
-                        friendPhoto: item.latestPhoto,
+                  Stack(
+                    children: [
+                      SizedBox(
+                        height:
+                            MediaQuery.sizeOf(context).width.clamp(0, 320) *
+                            0.75,
+                        width: double.infinity,
+                        child: Hero(
+                          tag: 'place-photo-${place.id}',
+                          child: PlacePhoto(
+                            place: place,
+                            friendPhoto: item.latestPhoto,
+                            creditPadding: const EdgeInsets.fromLTRB(
+                              8,
+                              0,
+                              8,
+                              92,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.placeName, style: theme.textTheme.titleLarge),
-                        if (subtitle.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Row(
+                      Positioned(
+                        top: 12,
+                        left: 12,
+                        right: 12,
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Text(
+                              place.category.isEmpty ? 'Local' : place.category,
+                              style: theme.textTheme.labelMedium,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(16, 32, 16, 14),
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.transparent, Color(0xE6000000)],
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(
-                                Icons.place_outlined,
-                                size: 16,
-                                color: scheme.tertiary,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item.placeName,
+                                      style: theme.textTheme.titleLarge
+                                          ?.copyWith(color: Colors.white),
+                                    ),
+                                  ),
+                                  if (overall != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 8),
+                                      child: Tooltip(
+                                        message: 'Nota dos amigos',
+                                        child: Semantics(
+                                          label:
+                                              'Nota dos amigos ${formatAverage(overall)} de 5',
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 9,
+                                              vertical: 5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: scheme.secondary,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.star,
+                                                  color: Colors.white,
+                                                  size: 17,
+                                                ),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  formatAverage(overall),
+                                                  style: theme
+                                                      .textTheme
+                                                      .labelLarge
+                                                      ?.copyWith(
+                                                        color: Colors.white,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  subtitle,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: scheme.tertiary,
+                              if (location.isNotEmpty)
+                                Text(
+                                  location,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.white,
                                   ),
                                 ),
-                              ),
+                              if (price != null)
+                                Semantics(
+                                  key: const Key('feed-price'),
+                                  button: true,
+                                  onTap: onTap,
+                                  label:
+                                      'Abrir ${place.name}, ${priceChipSemantics(price)}',
+                                  excludeSemantics: true,
+                                  child: Text(
+                                    priceChipLabel(price),
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
-                        ],
-                        // F27: quanto os amigos gastaram por pessoa.
-                        if (price != null) ...[
-                          const SizedBox(height: 8),
-                          PriceChip(
-                            key: const Key('feed-price'),
-                            summary: price,
-                          ),
-                        ],
-                        const SizedBox(height: 10),
-                        // Quem foi: cada nota tem dono (sem média no card).
-                        TrustSources(
-                          item: item,
-                          now: now,
-                          isFollowing: isFollowing,
-                          onOpenPerson: onOpenPerson,
-                          onShowAll: onTap,
                         ),
-                        // O comentário citado pode não ser da visita mais
-                        // recente: leva o próprio autor e tempo.
-                        if (commented != null) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                            decoration: BoxDecoration(
-                              color: scheme.surfaceContainerLow,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border(
-                                left: BorderSide(
-                                  color: scheme.secondary,
-                                  width: 3,
-                                ),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '“${commented.comment}”',
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '— ${commented.authorName} · ${relativeTime(commented.createdAt, now)}',
-                                  style: theme.textTheme.labelMedium,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
-          // Fora do InkWell: salvar não abre o detalhe. Local fora do
-          // catálogo não pode ser salvo (as Rules exigem o doc em places).
-          if (place.inCatalog)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: SaveButton(
-                placeId: place.id,
-                style: SaveButtonStyle.onImage,
+          if (comment != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '“${comment.comment!.trim()}”',
+                      key: ValueKey('feed-comment-${place.id}'),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '— ${comment.authorName}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              spacing: 8,
+              children: [
+                if (place.inCatalog)
+                  Expanded(
+                    child: SaveButton(placeId: place.id, showLabel: true),
+                  ),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    key: ValueKey('feed-rate-${place.id}'),
+                    onPressed: () =>
+                        context.push(Routes.reviewFor(place.id), extra: place),
+                    icon: const Icon(Icons.star_outline),
+                    label: const Text('Avaliar'),
+                  ),
+                ),
+                IconButton.filledTonal(
+                  tooltip: 'Ver ficha de ${place.name}',
+                  onPressed: onTap,
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

@@ -34,6 +34,11 @@ Future<TestApp> _pumpSaved(
   void Function(FakeListsRepository lists)? seed,
   FakePlaceRepository? placeRepository,
 }) async {
+  if (tester.view.physicalSize.width > 1000) {
+    tester.view.physicalSize = const Size(412, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
   final s = saved ?? _saved();
   final lists = FakeListsRepository(saved: s);
   seed?.call(lists);
@@ -69,9 +74,9 @@ Future<void> _closeSheet(WidgetTester tester) async {
 
 void main() {
   group('chips e filtro', () {
-    testWidgets('sem listas: sem chips', (tester) async {
+    testWidgets('sem listas: mantém o chip Todos os salvos', (tester) async {
       await _pumpSaved(tester);
-      expect(find.byType(ListChips), findsNothing);
+      expect(find.byType(ListChips), findsOneWidget);
       expect(find.byType(SavedCard), findsNWidgets(3));
     });
 
@@ -90,19 +95,25 @@ void main() {
             )
             ..seed('me', 'vazia', 'Vazia'),
         );
-        expect(find.text('Todos · 3'), findsOneWidget);
-        expect(find.text('🎉 Sábado com as meninas · 2'), findsOneWidget);
+        expect(find.text('Todos os salvos · 3'), findsOneWidget);
+        expect(find.text('Sábado com as meninas · 2'), findsOneWidget);
         expect(find.text('Vazia · 0'), findsOneWidget);
 
+        await tester.ensureVisible(_chip('sab'));
+        await tester.pumpAndSettle();
         await tester.tap(_chip('sab'));
         await tester.pumpAndSettle();
         expect(_cardNames(tester), ['Mangai', 'Camarões']);
 
+        await tester.ensureVisible(_chip('vazia'));
+        await tester.pumpAndSettle();
         await tester.tap(_chip('vazia'));
         await tester.pumpAndSettle();
         expect(find.byType(SavedCard), findsNothing);
         expect(find.text('Nada nesta lista ainda'), findsOneWidget);
 
+        await tester.ensureVisible(find.byKey(const Key('list-chip-all')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('list-chip-all')));
         await tester.pumpAndSettle();
         expect(find.byType(SavedCard), findsNWidgets(3));
@@ -118,7 +129,11 @@ void main() {
           ..seed('me', 'sab', 'Sábado', placeIds: ['a'])
           ..seed('me', 'bar', 'Bares'),
       );
+      await tester.ensureVisible(_chip('sab'));
+      await tester.pumpAndSettle();
       await tester.tap(_chip('sab'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(_chip('sab'));
       await tester.pumpAndSettle();
       await tester.tap(_chip('sab'));
       await tester.pumpAndSettle();
@@ -143,7 +158,7 @@ void main() {
       await tester.tap(find.byKey(const Key('list-name-submit')));
       await tester.pumpAndSettle();
 
-      expect(find.text('🎉 Sábado com as meninas · 1'), findsOneWidget);
+      expect(find.text('Sábado com as meninas · 1'), findsOneWidget);
       expect(app.lists.get('me', 'sab')!.name, 'Sábado com as meninas');
       expect(app.lists.get('me', 'sab')!.emoji, '🎉');
     });
@@ -155,7 +170,11 @@ void main() {
           tester,
           seed: (l) => l.seed('me', 'sab', 'Sábado', placeIds: ['a']),
         );
+        await tester.ensureVisible(_chip('sab'));
+        await tester.pumpAndSettle();
         await tester.tap(_chip('sab'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(_chip('sab'));
         await tester.pumpAndSettle();
         await tester.tap(_chip('sab'));
         await tester.pumpAndSettle();
@@ -182,7 +201,11 @@ void main() {
         tester,
         seed: (l) => l.seed('me', 'sab', 'Sábado'),
       );
+      await tester.ensureVisible(_chip('sab'));
+      await tester.pumpAndSettle();
       await tester.tap(_chip('sab'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(_chip('sab'));
       await tester.pumpAndSettle();
       await tester.tap(_chip('sab'));
       await tester.pumpAndSettle();
@@ -276,7 +299,6 @@ void main() {
       expect(tile('l1').value, isTrue);
       expect(tile('l2').value, isFalse);
 
-      // Desmarcar: sai só daquela lista, continua no Quero ir.
       await tester.tap(find.byKey(const Key('list-check-l1')));
       await tester.pumpAndSettle();
       expect(tile('l1').value, isFalse);
@@ -370,7 +392,7 @@ void main() {
         find.byKey(Key('list-check-${stored.id}')),
       );
       expect(tile.value, isTrue);
-      expect(find.text('🎉 Sábado com as meninas'), findsOneWidget);
+      expect(find.text('Sábado com as meninas'), findsOneWidget);
     });
 
     testWidgets('30 listas: "Nova lista" desabilitado com aviso', (
@@ -403,7 +425,6 @@ void main() {
       await openSheet(
         tester,
         seed: (l) {
-          // Salvos: membro não salvo seria limpo pela reconciliação.
           for (var i = 0; i < 200; i++) {
             l.saved!.seed('me', 'p$i', DateTime.utc(2026, 9, 1));
           }
@@ -437,7 +458,7 @@ void main() {
         find.byKey(const Key('list-check-l1')),
       );
       expect(tile.value, isFalse);
-      // O local já estava salvo: continua.
+
       expect(app.saved.byUser['me']!.containsKey('a'), isTrue);
     });
   });
@@ -453,7 +474,7 @@ void main() {
         seed: (l) => l.seed('me', 'l', 'Lista', placeIds: ['a', 'z']),
       );
       expect(find.byType(SavedCard), findsNWidgets(3));
-      expect(find.text('Todos · 3'), findsOneWidget);
+      expect(find.text('Todos os salvos · 3'), findsOneWidget);
       expect(find.text('Lista · 1'), findsOneWidget);
     });
 
@@ -471,10 +492,11 @@ void main() {
           seed: (l) => l.seed('me', 'l', 'Lista'),
         );
         places.getGate = Completer();
-        // Salvar confirma o local no catálogo antes de gravar (G2), e essa
-        // leitura também espera o portão: não dá para esperar o salvo aqui.
+
         final adding = app.listsStore(tester).setMembership('l', 'd', true);
         await tester.pump();
+        await tester.ensureVisible(_chip('l'));
+        await tester.pumpAndSettle();
         await tester.tap(_chip('l'));
         await tester.pump();
         expect(find.text('Nada nesta lista ainda'), findsNothing);
@@ -497,7 +519,7 @@ void main() {
             ..seed('me', 'l', 'Lista', placeIds: ['a'])
             ..listError = Exception('network'),
         );
-        expect(find.byType(ListChips), findsNothing);
+        expect(find.byType(ListChips), findsOneWidget);
         expect(
           find.text('Não foi possível carregar suas listas'),
           findsOneWidget,
@@ -546,7 +568,11 @@ void main() {
         seed: (l) => l.seed('me', 'l', 'Lista'),
       );
       app.lists.writeError = Exception('permission-denied');
+      await tester.ensureVisible(_chip('l'));
+      await tester.pumpAndSettle();
       await tester.tap(_chip('l'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(_chip('l'));
       await tester.pumpAndSettle();
       await tester.tap(_chip('l'));
       await tester.pumpAndSettle();
@@ -569,7 +595,11 @@ void main() {
         seed: (l) => l.seed('me', 'l', 'Lista', placeIds: ['a']),
       );
       app.lists.writeError = Exception('permission-denied');
+      await tester.ensureVisible(_chip('l'));
+      await tester.pumpAndSettle();
       await tester.tap(_chip('l'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(_chip('l'));
       await tester.pumpAndSettle();
       await tester.tap(_chip('l'));
       await tester.pumpAndSettle();
@@ -589,6 +619,8 @@ void main() {
     testWidgets('chip ativo é um botão de menu acessível', (tester) async {
       final handle = tester.ensureSemantics();
       await _pumpSaved(tester, seed: (l) => l.seed('me', 'l', 'Lista'));
+      await tester.ensureVisible(_chip('l'));
+      await tester.pumpAndSettle();
       await tester.tap(_chip('l'));
       await tester.pumpAndSettle();
       expect(

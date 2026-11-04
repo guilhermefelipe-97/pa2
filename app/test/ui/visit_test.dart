@@ -28,7 +28,6 @@ const _mangai = Place(
   city: 'Natal',
 );
 
-/// 12/10/2030 às 20h em Natal (longe do relógio real).
 final _today = DateTime.utc(2030, 10, 12, 23);
 
 const _blockedVisitText =
@@ -183,11 +182,17 @@ void main() {
       expect(find.text('Visita registrada'), findsOneWidget);
       expect(visits.created.single.authorName, 'Eu');
       expect(visits.created.single.companion, Companion.amigos);
-      // A visita aparece no detalhe, como "Você", sem notas.
+
+      await tester.scrollUntilVisible(
+        find.byType(VisitTile),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       expect(find.byType(VisitTile), findsOneWidget);
       expect(find.textContaining('$visitTileLabel · Noite · Amigos'), findsOne);
       expect(find.text('🍽️'), findsNothing);
-      // Antes de 12 h: botão desabilitado, com o horário.
+
       final button = tester.widget<ButtonStyleButton>(
         find.byKey(const Key('place-visit')),
       );
@@ -261,7 +266,7 @@ void main() {
       );
       app.router.go(Routes.placeDetail('mangai'));
       await tester.pumpAndSettle();
-      // O selo mostra o ícone 🔁 (decorativo) + o texto.
+
       final badge = find.byKey(const Key('place-recurrence'));
       expect(
         find.descendant(of: badge, matching: find.text('5 idas de 3 amigos')),
@@ -271,13 +276,22 @@ void main() {
         find.descendant(of: badge, matching: find.text('🔁')),
         findsOneWidget,
       );
-      // O ícone fica fora da semântica: o leitor de tela fala só o texto.
+
       expect(find.bySemanticsLabel('5 idas de 3 amigos'), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp('🔁')), findsNothing);
-      final averages = find.text('Média dos amigos');
-      expect(
-        tester.getTopLeft(badge).dy,
-        lessThan(tester.getTopLeft(averages).dy),
+      final averages = find.text('Médias das avaliações exibidas');
+      await tester.scrollUntilVisible(
+        averages,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(averages);
+      await tester.pumpAndSettle();
+      expect(find.byType(AxisScores), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.text('2 avaliações de amigos · 3 visitas de amigos'),
+        -200,
+        scrollable: find.byType(Scrollable).first,
       );
       expect(
         find.text('2 avaliações de amigos · 3 visitas de amigos'),
@@ -315,11 +329,17 @@ void main() {
       );
       app.router.go(Routes.placeDetail('mangai'));
       await tester.pumpAndSettle();
-      expect(find.text('Ana foi aqui'), findsOneWidget);
+      expect(find.bySemanticsLabel('Abrir perfil de Ana'), findsWidgets);
       expect(find.text('Média dos amigos'), findsNothing);
       expect(find.text('1 visita de amigo'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.byType(VisitTile),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       expect(find.byType(VisitTile), findsOneWidget);
-      // Ninguém voltou (1 ida): sem selo.
+
       expect(find.text('🔁'), findsNothing);
     });
   });
@@ -378,8 +398,7 @@ void main() {
       );
       expect(confirm.onPressed, isNull);
       expect(visits.created, isEmpty);
-      // Sem envio, o toque fora fecha (e o temporizador de liberação vai
-      // junto com o ViewModel).
+
       await tester.tapAt(const Offset(20, 20));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('visit-confirm')), findsNothing);
@@ -413,14 +432,14 @@ void main() {
       final row = find.byKey(const ValueKey('trust-source-ana'));
       expect(row, findsOneWidget);
       expect(
-        find.descendant(of: row, matching: find.text('foi aqui à noite')),
+        find.descendant(of: row, matching: find.text('Ana')),
         findsOneWidget,
       );
       expect(
         find.descendant(of: row, matching: find.byType(AxisScores)),
         findsNothing,
       );
-      // O feed usa o relógio real: o tempo relativo varia.
+
       expect(
         tester.getSemantics(row).label,
         startsWith('Ana, você segue, foi aqui à noite, '),
@@ -445,7 +464,7 @@ void main() {
           ),
         );
       final visits = FakeVisitRepository()..clock = () => _today;
-      // Toni, no aparelho dele, toca "Voltei aqui".
+
       final toni = VisitViewModel(
         place: _mangai,
         authRepository: FakeAuthRepository(uid: 'toni'),
@@ -465,22 +484,12 @@ void main() {
         clock: () => _today.add(const Duration(minutes: 5)),
       );
       await tester.pumpAndSettle();
-      final badge = find.byKey(const Key('trust-recurrence'));
-      expect(
-        find.descendant(of: badge, matching: find.text('Toni voltou 2 vezes')),
-        findsOneWidget,
-      );
-      expect(find.descendant(of: badge, matching: find.text('🔁')), findsOne);
       final row = find.byKey(const ValueKey('trust-source-toni'));
-      // Eixos da avaliação dele e "foi 2 vezes".
-      expect(
-        find.descendant(of: row, matching: find.textContaining('foi 2 vezes')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: row, matching: find.byType(AxisScores)),
-        findsOneWidget,
-      );
+      final label = tester.widget<Semantics>(row).properties.label!;
+      expect(label, contains('foi 2 vezes'));
+      expect(label, contains('comida 5'));
+      expect(label, contains('ambiente 4'));
+      expect(label, contains('atendimento 5'));
     });
 
     testWidgets('aceite: visita há 2 h, tenta de novo: vê até quando está '

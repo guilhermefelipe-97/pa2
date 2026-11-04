@@ -1,3 +1,16 @@
+import 'package:naarea/data/repositories/owner_repository.dart';
+import 'package:naarea/data/repositories/owner_workspace_repository.dart';
+import 'package:naarea/data/repositories/profile_editor_repository.dart';
+import 'package:naarea/data/repositories/profile_media_repository.dart';
+import 'package:naarea/data/repositories/account_repository.dart';
+import 'package:naarea/data/repositories/reputation_repository.dart';
+import 'package:naarea/data/repositories/profile_stats_repository.dart';
+import 'package:naarea/data/repositories/place_photo_repository.dart';
+import 'package:naarea/data/repositories/queue_repository.dart';
+import 'package:naarea/data/services/place_photo_picker.dart';
+import 'package:naarea/data/repositories/sponsorship_repository.dart';
+import 'package:naarea/data/repositories/food_tag_repository.dart';
+import 'package:naarea/ui/dietary/dietary_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -24,7 +37,6 @@ import 'package:provider/provider.dart';
 
 import 'fakes.dart';
 
-/// App inteiro (router + providers como no main.dart) com fakes.
 class TestApp {
   TestApp({
     required this.auth,
@@ -53,7 +65,6 @@ class TestApp {
   final FakeLocationService location;
   final FakeVisitRepository visits;
 
-  /// "Está aberto agora?" (F20): só existe quando o teste o fornece.
   final FakeOpenReportRepository? openReports;
 
   SavedPlacesStore store(WidgetTester tester) => Provider.of<SavedPlacesStore>(
@@ -81,7 +92,23 @@ Future<TestApp> pumpApp(
   FakeLocationService? location,
   FakeVisitRepository? visits,
   FakeOpenReportRepository? openReports,
+  FakeDietaryRepository? dietary,
+  FakeOwnerRepository? owners,
+  OwnerWorkspaceRepository? ownerWorkspace,
+  ProfileEditorRepository? profileEditor,
+  ProfileMediaRepository? profileMedia,
+  AccountRepository? account,
+  ReputationRepository? reputation,
+  ProfileStatsRepository? profileStats,
+  PlacePhotoRepository? gallery,
+  PlacePhotoPicker? galleryPicker,
+  QueueRepository? queue,
+  SponsorshipRepository? sponsors,
+  FakeFoodTagRepository? foodTags,
   DateTime Function()? clock,
+  ThemeData? theme,
+  double textScale = 1,
+  GlobalKey? captureKey,
 }) async {
   final loc = location ?? FakeLocationService();
   final u = users ?? (FakeUserRepository()..addUser('me', 'Eu'));
@@ -89,13 +116,15 @@ Future<TestApp> pumpApp(
   final r = reviews ?? FakeReviewRepository();
   final p = placeRepository ?? FakePlaceRepository(places);
   final s = saved ?? FakeSavedRepository();
-  // As Rules das listas (F13) olham quem lê e quem segue quem.
+
   final l = (lists ?? FakeListsRepository(saved: s))
     ..users ??= u
     ..auth ??= auth;
   final ph = photos ?? FakeReviewPhotoRepository(r.photos);
   final pk = picker ?? FakePhotoPicker();
   final v = visits ?? FakeVisitRepository();
+  final ownerRepo = owners ?? FakeOwnerRepository();
+  final dietaryRepo = dietary ?? FakeDietaryRepository();
   final router = buildRouter(auth);
   await tester.pumpWidget(
     MultiProvider(
@@ -103,6 +132,34 @@ Future<TestApp> pumpApp(
         Provider<AppClock>.value(value: AppClock(clock)),
         ChangeNotifierProvider<AuthRepository>.value(value: auth),
         Provider<UserRepository>.value(value: u),
+        Provider<OwnerRepository>.value(value: ownerRepo),
+        if (ownerWorkspace != null)
+          Provider<OwnerWorkspaceRepository>.value(value: ownerWorkspace),
+        if (profileEditor != null)
+          Provider<ProfileEditorRepository>.value(value: profileEditor),
+        if (profileMedia != null)
+          ChangeNotifierProvider<ProfileMediaRepository>.value(
+            value: profileMedia,
+          ),
+        if (account != null) Provider<AccountRepository>.value(value: account),
+        if (reputation != null)
+          Provider<ReputationRepository>.value(value: reputation),
+        if (profileStats != null)
+          Provider<ProfileStatsRepository>.value(value: profileStats),
+        if (gallery != null)
+          Provider<PlacePhotoRepository>.value(value: gallery),
+        if (galleryPicker != null)
+          Provider<PlacePhotoPicker>.value(value: galleryPicker),
+        if (queue != null) Provider<QueueRepository>.value(value: queue),
+        if (sponsors != null)
+          Provider<SponsorshipRepository>.value(value: sponsors),
+        Provider<FoodTagRepository>.value(
+          value: foodTags ?? FakeFoodTagRepository(r, ownerRepo),
+        ),
+        ChangeNotifierProvider<DietaryStore>(
+          create: (_) => DietaryStore(auth, dietaryRepo),
+          lazy: false,
+        ),
         Provider<PlaceRepository>.value(value: p),
         Provider<ReviewRepository>.value(value: r),
         Provider<VisitRepository>.value(value: v),
@@ -119,7 +176,7 @@ Future<TestApp> pumpApp(
             authRepository: auth,
             savedRepository: s,
             clock: clock,
-            // Igual ao main.dart (G2): local descoberto nasce antes do salvo.
+
             persistPlace: (uid, placeId) =>
                 ensurePlaceForSave(p, uid: uid, placeId: placeId),
           ),
@@ -135,7 +192,20 @@ Future<TestApp> pumpApp(
           ),
         ),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: RepaintBoundary(
+        key: captureKey,
+        child: MaterialApp.router(
+          debugShowCheckedModeBanner: false,
+          theme: theme,
+          routerConfig: router,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
+        ),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -155,8 +225,6 @@ Future<TestApp> pumpApp(
   );
 }
 
-/// ViewModel do detalhe cujos fakes têm exatamente os dados do [item]
-/// (a recarga confirma o que veio do feed).
 PlaceDetailViewModel detailVmFor(FeedItem item, {DateTime? now}) {
   final users = FakeUserRepository()
     ..followingByUser['me'] = {for (final a in item.activities) a.authorId};

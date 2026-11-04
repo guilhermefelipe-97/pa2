@@ -23,7 +23,6 @@ final _catalog = <Place>[
   place(id: 'c', name: 'Camarões', neighborhood: 'Ponta Negra'),
 ];
 
-/// Bianca ("me") segue Ana; a lista "Sábado" de Ana está visível.
 ({
   FakeUserRepository users,
   FakeSavedRepository saved,
@@ -35,7 +34,6 @@ _world({bool follows = true, bool visible = true}) {
     ..addUser('ana', 'Ana');
   if (follows) users.followingByUser['me'] = {'ana'};
   final saved = FakeSavedRepository()
-    // Bianca já tinha o Mangai.
     ..seed('me', 'a', DateTime.utc(2026, 9, 20, 15));
   final lists = FakeListsRepository(saved: saved)
     ..users = users
@@ -57,6 +55,11 @@ Future<TestApp> _pump(
   bool visible = true,
   void Function(FakeListsRepository lists)? seed,
 }) async {
+  if (tester.view.physicalSize.width > 1000) {
+    tester.view.physicalSize = const Size(412, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
   final w = _world(follows: follows, visible: visible);
   seed?.call(w.lists);
   return pumpApp(
@@ -72,6 +75,8 @@ Future<TestApp> _pump(
 Finder _chip(String id) => find.byKey(Key('list-chip-$id'));
 
 Future<void> _openChipMenu(WidgetTester tester, String listId) async {
+  await tester.ensureVisible(_chip(listId));
+  await tester.pumpAndSettle();
   await tester.tap(_chip(listId));
   await tester.pumpAndSettle();
   await tester.tap(_chip(listId));
@@ -159,12 +164,16 @@ void main() {
         app.router.push(Routes.person('ana'));
         await tester.pumpAndSettle();
 
-        // Seção "Listas": só a visível, com emoji, nome e quantos locais.
-        expect(find.byKey(const Key('profile-lists')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('profile-tab-2')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('profile-tab-2')), findsOneWidget);
         expect(find.text('Sábado'), findsOneWidget);
         expect(find.text('3 locais'), findsOneWidget);
         expect(find.text('Só minha'), findsNothing);
 
+        await tester.tap(find.byKey(const Key('profile-tab-2')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('profile-list-sab')));
         await tester.pumpAndSettle();
         expect(find.byType(PersonListView), findsOneWidget);
@@ -184,18 +193,16 @@ void main() {
         expect(copy.copiedFrom!.name, 'Ana');
         expect(app.saved.byUser['me']!.keys, containsAll(['a', 'b', 'c']));
 
-        // "Ver": abre o Quero ir com o chip da lista copiada.
         await tester.tap(find.text('Ver'));
         await tester.pumpAndSettle();
         expect(find.byType(SavedView), findsOneWidget);
-        expect(find.text('🎉 Sábado · 3'), findsOneWidget);
+        expect(find.text('Sábado · 3'), findsOneWidget);
         await tester.tap(_chip(newId));
         await tester.pumpAndSettle();
         expect(find.text('Copiada de Ana'), findsOneWidget);
         await tester.tapAt(const Offset(5, 5));
         await tester.pumpAndSettle();
 
-        // Ana entra e vê o contador no menu da lista dela.
         expect(app.lists.copies['ana/sab'], {'me'});
         app.auth.restoreSession('ana');
         await tester.pumpAndSettle();
@@ -272,7 +279,6 @@ void main() {
         expect(copyButton().onPressed, isNull);
         expect(find.text(PersonListViewModel.listsLoadingText), findsOneWidget);
 
-        // A leitura falha: motivo e "Tentar de novo".
         w.lists.listError = Exception('unavailable');
         w.lists.listGate!.complete();
         w.lists.listGate = null;
@@ -304,7 +310,7 @@ void main() {
             'sab',
             'Sábado',
             emoji: '🎉',
-            // "sumiu" não está no catálogo: a tela não mostra.
+
             placeIds: ['a', 'b', 'sumiu'],
             visible: true,
           ),
@@ -343,7 +349,7 @@ void main() {
           tester,
           seed: (l) => l.seed('me', 'minha', 'Minha', placeIds: ['a']),
         );
-        // A aba fica viva antes, com outro chip ativo.
+
         app.router.go(Routes.saved);
         await tester.pumpAndSettle();
         await tester.tap(_chip('minha'));
@@ -352,6 +358,8 @@ void main() {
         await tester.pumpAndSettle();
 
         app.router.push(Routes.person('ana'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('profile-tab-2')));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('profile-list-sab')));
         await tester.pumpAndSettle();
@@ -384,9 +392,10 @@ void main() {
       );
       app.router.go(Routes.saved);
       await tester.pumpAndSettle();
+      await tester.ensureVisible(_chip('minha'));
       await tester.tap(_chip('minha'));
       await tester.pumpAndSettle();
-      // Ex.: "Ver" de uma cópia que foi excluída nesse meio-tempo.
+
       app.listsStore(tester).focusList('fantasma');
       await tester.pumpAndSettle();
       expect(tester.widget<ChoiceChip>(_chip('minha')).selected, isTrue);
@@ -439,7 +448,7 @@ void main() {
         );
         app.router.go(Routes.saved);
         await tester.pumpAndSettle();
-        expect(find.text(SavedView.privateCaption), findsOneWidget);
+        expect(find.text(SavedView.privateCaption), findsNothing);
 
         await _openChipMenu(tester, 'minha');
         await tester.tap(find.text(visibleToFollowersLabel));
@@ -447,10 +456,9 @@ void main() {
         expect(find.text(SavedView.visibleCaption), findsOneWidget);
         expect(app.lists.get('me', 'minha')!.visible, isTrue);
 
-        // "Todos" é sempre privado.
         await tester.tap(find.byKey(const Key('list-chip-all')));
         await tester.pumpAndSettle();
-        expect(find.text(SavedView.privateCaption), findsOneWidget);
+        expect(find.text(SavedView.privateCaption), findsNothing);
 
         await _openChipMenu(tester, 'minha');
         await tester.tap(find.text(visibleToFollowersLabel));
@@ -542,8 +550,6 @@ void main() {
         await tester.tapAt(const Offset(5, 5));
         await tester.pumpAndSettle();
 
-        // "Velha" sai e "Nova" vira a ativa na MESMA posição (o estado do
-        // chip ativo é reaproveitado com outra lista).
         final store = app.listsStore(tester);
         app.lists.writeGate = Completer<void>();
         unawaited(store.delete('velha'));

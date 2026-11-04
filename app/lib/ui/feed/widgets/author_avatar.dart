@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/stable_hash.dart';
 import '../../core/theme.dart';
+import '../../profile/profile_media_image.dart';
 
-/// Avatar com a inicial do nome (sem foto de perfil ainda). A cor é estável
-/// por pessoa.
 class AuthorAvatar extends StatelessWidget {
   const AuthorAvatar({
     super.key,
@@ -20,9 +19,9 @@ class AuthorAvatar extends StatelessWidget {
   static const _colors = [
     NaAreaColors.coralEscuro,
     NaAreaColors.azulMar,
-    Color(0xFFB5651D),
-    Color(0xFF7A4EAB),
-    Color(0xFF2E8B57),
+    Color(0xFF663500),
+    Color(0xFF4D4540),
+    Color(0xFF005049),
   ];
 
   static String initial(String name) {
@@ -32,24 +31,30 @@ class AuthorAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: _colors[stableHash(id) % _colors.length],
-      child: Text(
-        initial(name),
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          fontSize: radius * 0.9,
+    return SizedBox.square(
+      dimension: radius * 2,
+      child: ClipOval(
+        child: ProfileMediaImage(
+          uid: id,
+          kind: 'avatar',
+          placeholder: CircleAvatar(
+            radius: radius,
+            backgroundColor: _colors[stableHash(id) % _colors.length],
+            child: Text(
+              initial(name),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: radius * 0.9,
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-/// Até 3 avatares sobrepostos e "+N" (no máximo "+99") para o resto. É só
-/// decorativo para leitores de tela: a frase "A e B foram aqui" já nomeia
-/// as pessoas.
 class AuthorAvatarStack extends StatelessWidget {
   const AuthorAvatarStack({
     super.key,
@@ -58,10 +63,8 @@ class AuthorAvatarStack extends StatelessWidget {
     this.radius = 14,
   });
 
-  /// (id, nome), do mais recente para o mais antigo, sem repetição.
   final List<({String id, String name})> authors;
 
-  /// Cor do anel entre avatares: a do fundo onde a pilha está desenhada.
   final Color ringColor;
   final double radius;
 

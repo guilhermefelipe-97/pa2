@@ -11,7 +11,6 @@ import '../support/app_harness.dart';
 import '../support/builders.dart';
 import '../support/fakes.dart';
 
-/// Sábado, 20h em Natal (noite).
 final _now = DateTime.utc(2026, 10, 17, 23);
 final _night = DateTime.utc(2026, 10, 10, 23);
 
@@ -28,7 +27,6 @@ DecisionCandidate _c(String id, {int hoursAgo = 24}) => (
   savedAt: _now.subtract(Duration(hours: hoursAgo)),
 );
 
-/// Bianca ("me") segue Ana e Caio, que foram ao Beco com amigos à noite.
 ({FakeUserRepository users, FakeReviewRepository reviews}) _friends() {
   final users = FakeUserRepository()
     ..addUser('me', 'Bianca')
@@ -49,7 +47,7 @@ DecisionCandidate _c(String id, {int hoursAgo = 24}) => (
         companion: Companion.amigos,
         createdAt: _night,
       ),
-      // Ninguém que ela segue: não conta.
+
       review(
         authorId: 'zé',
         placeId: 'c',
@@ -94,8 +92,56 @@ void main() {
       expect(v.phase, DecisionPhase.result);
       expect(v.current!.place.id, 'b');
       expect(v.reason, '2 pessoas que você segue foram com amigos à noite');
-      expect(reviews.fetchCalls.single.toSet(), {'ana', 'caio'});
+      expect(reviews.candidateFetches.single.authors.toSet(), {'ana', 'caio'});
+      expect(reviews.candidateFetches.single.places.toSet(), {'a', 'b', 'c'});
     });
+
+    test(
+      'avaliação antiga de candidato não some após cem avaliações recentes de outros locais',
+      () async {
+        reviews.stored.clear();
+        for (var i = 0; i < 150; i++) {
+          reviews.stored.add(
+            review(authorId: 'ana', placeId: 'fora', createdAt: _now),
+          );
+        }
+        reviews.stored.add(
+          review(
+            authorId: 'ana',
+            placeId: 'b',
+            companion: Companion.amigos,
+            createdAt: _night,
+          ),
+        );
+        final v = vm([_c('a', hoursAgo: 1), _c('b')]);
+        addTearDown(v.dispose);
+        await v.choose(Companion.amigos);
+        expect(v.current!.place.id, 'b');
+        expect(reviews.fetchCalls, isEmpty);
+      },
+    );
+
+    test(
+      'troca de conta invalida decisão e impede mostrar sinais antigos',
+      () async {
+        final auth = FakeAuthRepository(uid: 'me');
+        final v = DecisionViewModel(
+          candidates: [_c('a'), _c('b')],
+          authRepository: auth,
+          userRepository: users,
+          reviewRepository: reviews,
+          clock: () => _now,
+        );
+        addTearDown(v.dispose);
+        final choosing = v.choose(Companion.amigos);
+        auth.restoreSession('other');
+        await choosing;
+        expect(v.current, isNull);
+        expect(v.options, isEmpty);
+        expect(v.sessionChanged, isTrue);
+        expect(v.emptyText, contains('Conta alterada'));
+      },
+    );
 
     test('nunca pede localização: só a última posição já permitida', () async {
       location
@@ -213,10 +259,10 @@ void main() {
         await tester.tap(find.byKey(const Key('list-chip-sab')));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(const Key('saved-decide'))); // toque 1
+        await tester.tap(find.byKey(const Key('saved-decide')));
         await tester.pumpAndSettle();
         expect(find.text('Com quem você vai?'), findsOneWidget);
-        await tester.tap(find.byKey(const Key('decide-amigos'))); // toque 2
+        await tester.tap(find.byKey(const Key('decide-amigos')));
         await tester.pumpAndSettle();
 
         final shown = find.byKey(const Key('decide-place'));

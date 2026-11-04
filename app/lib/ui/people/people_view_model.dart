@@ -6,7 +6,6 @@ import '../core/safe_change_notifier.dart';
 
 enum PeopleInitState { loading, ready, error }
 
-/// Tela Pessoas: busca por nome e seguir/deixar de seguir.
 class PeopleViewModel extends SafeChangeNotifier {
   PeopleViewModel({
     required AuthRepository authRepository,
@@ -20,10 +19,8 @@ class PeopleViewModel extends SafeChangeNotifier {
   final UserRepository _users;
   final FollowStaleness _follow;
 
-  /// Alguém foi seguido/deixado de seguir em outra tela (ex.: perfil).
   bool get isStale => _follow.isStale;
 
-  /// Ao voltar a ficar visível: relê quem é seguido se mudou fora daqui.
   Future<void> reloadIfStale() => _follow.isStale ? init() : Future.value();
 
   static const String initErrorMessage =
@@ -33,10 +30,42 @@ class PeopleViewModel extends SafeChangeNotifier {
   List<UserProfile> get results => _results;
 
   final Set<String> _following = {};
+  int get followingCount => _following.length;
+  List<UserProfile> _followingProfiles = const [];
+  List<UserProfile> get followingProfiles => _followingProfiles;
+  bool loadingFollowing = false;
+  int _profilesSeq = 0;
+  Future<void> loadFollowingProfiles() async {
+    final uid = _auth.currentUserId;
+    if (uid == null || loadingFollowing) return;
+    final seq = ++_profilesSeq;
+    loadingFollowing = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final profiles = await Future.wait(
+        _following.take(50).map(_users.getProfile),
+      );
+      if (seq != _profilesSeq || _auth.currentUserId != uid || isDisposed) {
+        return;
+      }
+      _followingProfiles = profiles.whereType<UserProfile>().toList()
+        ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    } on Object {
+      if (seq == _profilesSeq) {
+        _errorMessage =
+            'Não foi possível carregar as pessoas. Tente novamente.';
+      }
+    } finally {
+      if (seq == _profilesSeq) {
+        loadingFollowing = false;
+        notifyListeners();
+      }
+    }
+  }
+
   bool isFollowing(String uid) => _following.contains(uid);
 
-  /// Mudanças locais (seguir = true / deixar = false) feitas depois que a
-  /// carga de `following` começou; aplicadas por cima do que veio do servidor.
   final Map<String, bool> _localChanges = {};
 
   final Set<String> _busy = {};
@@ -46,7 +75,6 @@ class PeopleViewModel extends SafeChangeNotifier {
   PeopleInitState get initState => _initState;
   bool get isReady => _initState == PeopleInitState.ready;
 
-  /// Botão Seguir só habilita depois que sabemos quem já é seguido.
   bool canToggle(String uid) => isReady && !_busy.contains(uid);
 
   bool _isSearching = false;
@@ -61,7 +89,6 @@ class PeopleViewModel extends SafeChangeNotifier {
   int _searchSeq = 0;
   int _initSeq = 0;
 
-  /// Carrega quem o usuário segue. Também serve de "Tentar de novo".
   Future<void> init() async {
     final uid = _auth.currentUserId;
     if (uid == null) return;
@@ -80,6 +107,7 @@ class PeopleViewModel extends SafeChangeNotifier {
       _initState = PeopleInitState.error;
     }
     notifyListeners();
+    if (isReady && _followingProfiles.isNotEmpty) await loadFollowingProfiles();
   }
 
   void _reconcile(Set<String> fetched) {
@@ -111,7 +139,7 @@ class PeopleViewModel extends SafeChangeNotifier {
     notifyListeners();
     try {
       final found = await _users.searchByName(_lastQuery);
-      if (seq != _searchSeq) return; // resposta de uma busca antiga
+      if (seq != _searchSeq) return;
       _results = found.where((p) => p.uid != uid).toList();
     } on Object {
       if (seq != _searchSeq) return;
@@ -140,19 +168,16 @@ class PeopleViewModel extends SafeChangeNotifier {
         _following.add(targetUid);
       }
       if (!isReady) _localChanges[targetUid] = !wasFollowing;
-      // Feed, detalhe e perfis abertos ficam desatualizados.
+
       _follow.announce();
     } on Object {
       _errorMessage = wasFollowing
           ? 'Não foi possível deixar de seguir.'
           : 'Não foi possível seguir.';
-      // O estado real pode ter mudado (ex.: escrita aplicada e resposta
-      // perdida): busca de novo e reconcilia.
+
       try {
         _reconcile(await _users.getFollowing(uid));
-      } on Object {
-        // mantém o estado local; o erro já está na tela
-      }
+      } on Object {}
     } finally {
       _busy.remove(targetUid);
       notifyListeners();

@@ -36,13 +36,10 @@ class FirestoreListsRepository implements ListsRepository {
 
   @override
   Future<List<PlaceList>> listVisibleLists(String ownerUid) async {
-    // O filtro é obrigatório: as Rules só liberam a consulta do seguidor
-    // que prova `visible == true`.
     final QuerySnapshot<Map<String, dynamic>> snap;
     try {
       snap = await _lists(ownerUid).where('visible', isEqualTo: true).get();
     } on FirebaseException catch (e, stack) {
-      // Quem não segue a dona (ou deixou de seguir): negado pelas Rules.
       if (e.code == 'permission-denied') {
         Error.throwWithStackTrace(const ListAccessDeniedException(), stack);
       }
@@ -77,12 +74,12 @@ class FirestoreListsRepository implements ListsRepository {
           for (final p in ids)
             if (p is String) p,
       ],
-      // Escrita local ainda sem o timestamp do servidor: acabou de criar.
+
       createdAt: switch (data['createdAt']) {
         final Timestamp ts => ts.toDate(),
         _ => now,
       },
-      // Listas anteriores ao F13 não têm a chave: privadas.
+
       visible: data['visible'] == true,
       copiedFrom: fromUid is String && fromName is String && fromList is String
           ? ListCredit(uid: fromUid, name: fromName, listId: fromList)
@@ -99,8 +96,6 @@ class FirestoreListsRepository implements ListsRepository {
     required List<String> placeIds,
     ListCredit? copiedFrom,
   }) {
-    // Schema exato validado pelas Rules (o trio do crédito vem junto ou não
-    // vem; `visible` ausente = privada).
     return _lists(uid).doc(listId).set({
       'name': name,
       'emoji': emoji,
@@ -137,7 +132,10 @@ class FirestoreListsRepository implements ListsRepository {
     required String ownerUid,
     required String listId,
   }) async {
-    final snap = await _copies(ownerUid, listId).count().get();
+    final snap = await _copies(
+      ownerUid,
+      listId,
+    ).where('copiedListId', isGreaterThan: '').count().get();
     return snap.count ?? 0;
   }
 
@@ -146,18 +144,34 @@ class FirestoreListsRepository implements ListsRepository {
     required String ownerUid,
     required String listId,
     required String copierUid,
+    required String copiedListId,
   }) async {
-    // Direto, sem ler antes: offline a escrita entra na fila do SDK e
-    // sincroniza depois. Já registrada (2ª cópia), o set vira update e as
-    // Rules negam: é o "uma por pessoa", não um erro.
-    try {
-      await _copies(
-        ownerUid,
-        listId,
-      ).doc(copierUid).set({'createdAt': FieldValue.serverTimestamp()});
-    } on FirebaseException catch (e) {
-      if (e.code != 'permission-denied') rethrow;
+    if (!RegExp(r'^[^/]{1,128}$').hasMatch(copiedListId) ||
+        ownerUid == copierUid) {
+      throw ArgumentError('Cópia inválida');
     }
+    final receipt = _copies(ownerUid, listId).doc(copierUid);
+    final target = _lists(copierUid).doc(copiedListId);
+    await _db
+        .runTransaction((tx) async {
+          final previous = await tx.get(receipt);
+          if (previous.data()?['copiedListId'] is String) return;
+          final copy = await tx.get(target);
+          if (!copy.exists ||
+              copy.data()?['copiedFromUid'] != ownerUid ||
+              copy.data()?['copiedFromListId'] != listId) {
+            throw StateError('A lista copiada não existe ou tem outra origem.');
+          }
+          if (previous.exists) {
+            tx.update(receipt, {'copiedListId': copiedListId});
+          } else {
+            tx.set(receipt, {
+              'createdAt': FieldValue.serverTimestamp(),
+              'copiedListId': copiedListId,
+            });
+          }
+        })
+        .timeout(const Duration(seconds: 15));
   }
 
   @override
@@ -174,13 +188,10 @@ class FirestoreListsRepository implements ListsRepository {
     });
   }
 
-  /// Máximo de escritas num batch do Firestore.
   static const int maxBatchWrites = 500;
 
   @override
   Future<void> deleteList({required String uid, required String listId}) async {
-    // O contador de cópias (F13) sai junto: no mesmo batch da lista. Com
-    // mais de 499 cópias, as excedentes saem antes, em batches próprios.
     final copies = (await _copies(uid, listId).get()).docs;
     final last = maxBatchWrites - 1;
     final early = copies.length > last ? copies.length - last : 0;
