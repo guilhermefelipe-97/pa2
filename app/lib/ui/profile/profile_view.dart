@@ -1,4 +1,8 @@
-import '../owner/reply_line.dart';
+import '../lists/list_category.dart';
+import '../core/app_shell.dart';
+import '../../data/repositories/profile_media_repository.dart';
+import 'profile_media_image.dart';
+import 'profile_review_card.dart';
 import 'package:provider/provider.dart';
 import '../core/editorial.dart';
 import '../lists/lists_store.dart';
@@ -7,10 +11,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../domain/models/place_activity.dart';
 import '../../domain/models/place_list.dart';
-import '../../domain/relative_time.dart';
 import '../../routing/routes.dart';
 import '../feed/widgets/author_avatar.dart';
-import '../feed/widgets/axis_scores.dart';
 import '../feed/widgets/visit_tile.dart' show visitMeta, visitTileLabel;
 import 'profile_view_model.dart';
 
@@ -27,6 +29,31 @@ class ProfileView extends StatefulWidget {
 
 class _ProfileViewState extends State<ProfileView> {
   int selectedTab = 0;
+  bool oldestFirst = false;
+  bool? _wasActive;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final active =
+        ActiveTab.maybeOf(context) ?? ModalRoute.isCurrentOf(context) ?? true;
+    if (active && _wasActive == false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.viewModel.load();
+      });
+    }
+    _wasActive = active;
+  }
+
+  Future<void> refresh() async {
+    context.read<ProfileMediaRepository?>()?.invalidate(widget.viewModel.uid);
+    await widget.viewModel.load();
+  }
+
+  Future<void> edit() async {
+    await context.push(Routes.editProfile);
+    if (mounted) await refresh();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -91,14 +118,15 @@ class _ProfileViewState extends State<ProfileView> {
         return Scaffold(
           appBar: AppBar(
             // Aberto por link direto: sem tela anterior, "voltar" vai ao feed.
-            leading: context.canPop() ? null : BackButton(onPressed: _back),
-            title: Text(vm.state == ProfileState.ready ? vm.title : ''),
+            automaticallyImplyLeading: false,
+            leading: GoRouterState.of(context).uri.path == '/perfil'
+                ? null
+                : BackButton(onPressed: _back),
+            title: const Text('Perfil do usuário'),
             actions: [if (vm.isSelf) const SettingsButton()],
           ),
           body: switch (vm.state) {
-            ProfileState.loading => const Center(
-              child: CircularProgressIndicator(),
-            ),
+            ProfileState.loading => const Center(child: EditorialLoading()),
             ProfileState.notFound => _Message(
               key: const Key('profile-not-found'),
               icon: Icons.person_off_outlined,
@@ -119,7 +147,10 @@ class _ProfileViewState extends State<ProfileView> {
               actionLabel: 'Entrar',
               onAction: () => context.go(Routes.login),
             ),
-            ProfileState.ready => _ready(context, vm),
+            ProfileState.ready => RefreshIndicator(
+              onRefresh: refresh,
+              child: _ready(context, vm),
+            ),
           },
         );
       },
@@ -133,11 +164,13 @@ class _ProfileViewState extends State<ProfileView> {
     final reviews = vm.activities
         .where((a) => selectedTab == 0 ? a is Review : a is Visit)
         .toList();
+    if (oldestFirst) reviews.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     if (selectedTab == 2) {
       return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
-          _Header(viewModel: vm),
+          _Header(viewModel: vm, onEdit: edit),
           _tabs(vm),
           if (vm.isSelf && ownLists?.isLoading == true)
             const Center(child: CircularProgressIndicator())
@@ -158,6 +191,7 @@ class _ProfileViewState extends State<ProfileView> {
             _ProfileListTile(
               key: ValueKey('profile-list-${list.id}'),
               list: list,
+              canCopy: !vm.isSelf,
               onTap: () {
                 if (vm.isSelf) {
                   ownLists?.focusList(list.id);
@@ -171,17 +205,19 @@ class _ProfileViewState extends State<ProfileView> {
       );
     } // Item 0: cabeçalho; depois avaliações e visitas (ou o texto de vazio).
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       itemCount: 1 + (reviews.isEmpty ? 1 : reviews.length),
       itemBuilder: (context, i) {
-        if (i == 0)
+        if (i == 0) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _Header(viewModel: vm),
+              _Header(viewModel: vm, onEdit: edit),
               _tabs(vm),
             ],
           );
+        }
         if (reviews.isEmpty) {
           final theme = Theme.of(context);
           return Padding(
@@ -201,9 +237,11 @@ class _ProfileViewState extends State<ProfileView> {
           );
         }
         return switch (reviews[i - 1]) {
-          final Review r => _ProfileReviewTile(
+          final Review r => ProfileReviewCard(
             key: ValueKey('profile-review-${r.id}'),
             review: r,
+            place: vm.places[r.placeId],
+            isOwn: vm.isSelf,
             now: now,
             onTap: () => _openPlace(r),
           ),
@@ -223,23 +261,41 @@ class _ProfileViewState extends State<ProfileView> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
+        SizedBox(
+          width: double.infinity,
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 4,
             children: [
               for (final (index, label) in [
                 (0, 'Avaliações'),
                 (1, 'Visitas'),
                 (2, 'Listas'),
               ])
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    key: Key('profile-tab-$index'),
-                    label: Text(label),
-                    selected: selectedTab == index,
-                    onSelected: (_) => setState(() => selectedTab = index),
+                ChoiceChip(
+                  key: Key('profile-tab-$index'),
+                  avatar: Icon(
+                    [
+                      Icons.rate_review_outlined,
+                      Icons.place_outlined,
+                      Icons.bookmarks_outlined,
+                    ][index],
+                    size: 16,
+                    color: selectedTab == index ? Colors.white : Colors.black87,
                   ),
+                  showCheckmark: false,
+                  selectedColor: Colors.black,
+                  shape: const StadiumBorder(),
+                  label: Text(
+                    label,
+                    style: TextStyle(
+                      color: selectedTab == index
+                          ? Colors.white
+                          : Colors.black87,
+                    ),
+                  ),
+                  selected: selectedTab == index,
+                  onSelected: (_) => setState(() => selectedTab = index),
                 ),
             ],
           ),
@@ -247,11 +303,49 @@ class _ProfileViewState extends State<ProfileView> {
         if (selectedTab != 2)
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Text(
-              selectedTab == 0
-                  ? '${vm.reviews.length} avaliações recentes'
-                  : '${vm.activities.whereType<Visit>().length} visitas recentes',
-              style: Theme.of(context).textTheme.bodySmall,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              children: [
+                Text(
+                  selectedTab == 0
+                      ? (vm.reviews.length == 1
+                            ? '1 experiência recente'
+                            : '${vm.reviews.length} experiências recentes')
+                      : '${vm.activities.whereType<Visit>().length} visitas recentes',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                PopupMenuButton<bool>(
+                  tooltip: 'Ordenar experiências',
+                  initialValue: oldestFirst,
+                  onSelected: (value) => setState(() => oldestFirst = value),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: false, child: Text('Mais recentes')),
+                    PopupMenuItem(value: true, child: Text('Mais antigas')),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.sort, size: 14),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              oldestFirst ? 'Mais antigas' : 'Mais recentes',
+                              style: Theme.of(context).textTheme.bodySmall,
+                              maxLines: 1,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
       ],
@@ -260,66 +354,249 @@ class _ProfileViewState extends State<ProfileView> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.viewModel});
-
+  const _Header({required this.viewModel, required this.onEdit});
   final ProfileViewModel viewModel;
-
+  final VoidCallback onEdit;
   @override
   Widget build(BuildContext context) {
-    final vm = viewModel;
-    final theme = Theme.of(context);
-    final name = vm.displayName;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                ExcludeSemantics(
-                  child: AuthorAvatar(id: vm.uid, name: name, radius: 32),
+    final vm = viewModel, theme = Theme.of(context);
+    final lists = context.watch<ListsStore?>();
+    return LayoutBuilder(
+      builder: (context, box) {
+        final coverHeight = (box.maxWidth / 2.4).clamp(128.0, 180.0);
+        Widget follow = Semantics(
+          container: true,
+          button: true,
+          enabled: !vm.isBusy,
+          label: vm.isFollowing
+              ? 'Seguindo ${vm.title}. Toque para deixar de seguir'
+              : 'Seguir ${vm.title}',
+          excludeSemantics: true,
+          child: vm.isFollowing
+              ? OutlinedButton(
+                  key: const Key('profile-follow'),
+                  onPressed: vm.isBusy ? null : vm.toggleFollow,
+                  child: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Seguindo', maxLines: 1),
+                  ),
+                )
+              : FilledButton(
+                  key: const Key('profile-follow'),
+                  onPressed: vm.isBusy ? null : vm.toggleFollow,
+                  child: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Seguir', maxLines: 1),
+                  ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(name, style: theme.textTheme.headlineSmall),
-                ),
-              ],
-            ),
-            if (!vm.isSelf) ...[
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: vm.isFollowing
-                    ? OutlinedButton(
-                        key: const Key('profile-follow'),
-                        onPressed: vm.isBusy ? null : vm.toggleFollow,
-                        child: Text(
-                          'Seguindo',
-                          semanticsLabel:
-                              'Seguindo $name. Toque para deixar de seguir',
+        );
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Stack(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: coverHeight,
+                    child: ProfileMediaImage(
+                      uid: vm.uid,
+                      kind: 'cover',
+                      placeholder: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              theme.colorScheme.primary,
+                              theme.colorScheme.tertiary,
+                            ],
+                          ),
                         ),
-                      )
-                    : FilledButton(
-                        key: const Key('profile-follow'),
-                        onPressed: vm.isBusy ? null : vm.toggleFollow,
-                        child: Text('Seguir', semanticsLabel: 'Seguir $name'),
                       ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 56, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(vm.displayName, style: theme.textTheme.titleLarge),
+                        const SizedBox(height: 4),
+                        if (vm.username.isNotEmpty)
+                          Text(
+                            '@${vm.username}',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontSize: 13,
+                              color: theme.colorScheme.secondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
+                        else if (vm.isSelf)
+                          TextButton(
+                            onPressed: onEdit,
+                            child: const Text('Adicionar @usuário'),
+                          )
+                        else
+                          Text(
+                            'Usuário sem @ definido',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        if (vm.bio.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            vm.bio,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              height: 1.6,
+                            ),
+                          ),
+                        ],
+                        if (vm.instagram.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          SelectableText(
+                            'instagram.com/${vm.instagram}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.secondary,
+                            ),
+                          ),
+                        ],
+                        if (vm.city.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.place_outlined,
+                                size: 16,
+                                color: theme.colorScheme.secondary,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  vm.city,
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final entry in [
+                                (
+                                  vm.totals.reviews ?? vm.reviews.length,
+                                  vm.totals.reviews == null
+                                      ? 'Avaliações recentes'
+                                      : 'Avaliações',
+                                ),
+                                (
+                                  vm.totals.visits ??
+                                      vm.activities.whereType<Visit>().length,
+                                  vm.totals.visits == null
+                                      ? 'Visitas recentes'
+                                      : 'Visitas',
+                                ),
+                                (
+                                  vm.isSelf
+                                      ? (lists?.lists.length ?? 0)
+                                      : vm.lists.length,
+                                  'Listas',
+                                ),
+                                if (vm.totals.following != null)
+                                  (vm.totals.following!, 'Seguindo'),
+                              ])
+                                Expanded(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '${entry.$1}',
+                                        style: theme.textTheme.titleMedium,
+                                      ),
+                                      Text(
+                                        entry.$2,
+                                        textAlign: TextAlign.center,
+                                        style: theme.textTheme.labelSmall,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              Positioned(
+                left: 16,
+                top: coverHeight - 40,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: ExcludeSemantics(
+                    child: AuthorAvatar(
+                      id: vm.uid,
+                      name: vm.displayName,
+                      radius: 38,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 12,
+                top: coverHeight + 8,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: box.maxWidth - 124),
+                  child: vm.isSelf
+                      ? OutlinedButton(
+                          onPressed: onEdit,
+                          child: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Editar perfil', maxLines: 1),
+                          ),
+                        )
+                      : follow,
+                ),
               ),
             ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
 
 /// Uma lista visível no perfil (F13): emoji, nome e quantos locais.
 class _ProfileListTile extends StatelessWidget {
-  const _ProfileListTile({super.key, required this.list, required this.onTap});
+  const _ProfileListTile({
+    super.key,
+    required this.list,
+    required this.onTap,
+    this.canCopy = false,
+  });
 
   final PlaceList list;
   final VoidCallback onTap;
+  final bool canCopy;
 
   @override
   Widget build(BuildContext context) {
@@ -328,13 +605,26 @@ class _ProfileListTile extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
-        backgroundColor: theme.colorScheme.primaryContainer,
-        child: list.emoji == null
-            ? Icon(Icons.list_alt, color: theme.colorScheme.primary)
-            : Text(list.emoji!, style: const TextStyle(fontSize: 20)),
+        backgroundColor: theme.colorScheme.surfaceContainer,
+        child: Icon(
+          listCategoryIcon(list.emoji),
+          color: theme.colorScheme.primary,
+        ),
       ),
       title: Text(list.name),
-      subtitle: Text(count),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(count),
+          if (canCopy)
+            Text(
+              'Abrir para copiar lista',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.secondary,
+              ),
+            ),
+        ],
+      ),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
     );
@@ -343,68 +633,6 @@ class _ProfileListTile extends StatelessWidget {
 
 /// "1 local", "12 locais".
 String placesCountLabel(int n) => n == 1 ? '1 local' : '$n locais';
-
-/// Uma avaliação no perfil: local, 3 eixos, comentário e contexto. O item
-/// inteiro é um botão "Abrir `local`".
-class _ProfileReviewTile extends StatelessWidget {
-  const _ProfileReviewTile({
-    super.key,
-    required this.review,
-    required this.now,
-    required this.onTap,
-  });
-
-  final Review review;
-  final DateTime now;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final meta = [
-      review.dayPeriod.label,
-      if (review.companion != null) review.companion!.label,
-      relativeTime(review.createdAt, now),
-    ].join(' · ');
-    return MergeSemantics(
-      child: Semantics(
-        button: true,
-        label: 'Abrir ${review.placeName}',
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: theme.colorScheme.outlineVariant),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(review.placeName, style: theme.textTheme.titleMedium),
-                Text(
-                  meta,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                AxisScores.scores(review.scores),
-                ReplyLine(reviewId: review.id),
-                if (review.comment?.trim().isNotEmpty ?? false) ...[
-                  const SizedBox(height: 8),
-                  Text(review.comment!, style: theme.textTheme.bodyMedium),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// Uma visita no perfil (F15): local e contexto, sem notas.
 class _ProfileVisitTile extends StatelessWidget {
@@ -430,11 +658,11 @@ class _ProfileVisitTile extends StatelessWidget {
           onTap: onTap,
           child: Container(
             width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: theme.colorScheme.outlineVariant),
-              ),
+              color: theme.colorScheme.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

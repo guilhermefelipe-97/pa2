@@ -244,6 +244,7 @@ void main() {
       await tester.tap(find.byType(Checkbox));
       await tester.pump();
       await tester.ensureVisible(find.text('Aprovar'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Aprovar'));
       await tester.pumpAndSettle();
       expect(find.text('Confirmar aprovação?'), findsOneWidget);
@@ -337,6 +338,7 @@ void main() {
       await tester.scrollUntilVisible(
         find.widgetWithText(ListTile, 'Administração'),
         250,
+        scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
       expect(find.text('Administração'), findsWidgets);
@@ -453,6 +455,7 @@ void main() {
         }
         final label = approve ? 'Aprovar' : 'Reprovar';
         await tester.ensureVisible(find.text(label));
+        await tester.pumpAndSettle();
         await tester.tap(find.text(label));
         await tester.pumpAndSettle();
         expect(find.textContaining('Solicitante: Alice'), findsWidgets);
@@ -510,6 +513,12 @@ void main() {
           child: const MaterialApp(home: OwnerView()),
         ),
       );
+      await tester.pumpAndSettle();
+      if (status == 'approved') {
+        await tester.tap(find.text('● Ativo'));
+      } else {
+        await tester.tap(find.byTooltip('Acompanhar pedido'));
+      }
       await tester.pumpAndSettle();
       expect(
         find.text(

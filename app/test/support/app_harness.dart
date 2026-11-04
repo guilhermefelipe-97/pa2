@@ -1,4 +1,13 @@
 import 'package:naarea/data/repositories/owner_repository.dart';
+import 'package:naarea/data/repositories/owner_workspace_repository.dart';
+import 'package:naarea/data/repositories/profile_editor_repository.dart';
+import 'package:naarea/data/repositories/profile_media_repository.dart';
+import 'package:naarea/data/repositories/account_repository.dart';
+import 'package:naarea/data/repositories/reputation_repository.dart';
+import 'package:naarea/data/repositories/profile_stats_repository.dart';
+import 'package:naarea/data/repositories/place_photo_repository.dart';
+import 'package:naarea/data/repositories/queue_repository.dart';
+import 'package:naarea/data/services/place_photo_picker.dart';
 import 'package:naarea/data/repositories/sponsorship_repository.dart';
 import 'package:naarea/data/repositories/food_tag_repository.dart';
 import 'package:naarea/ui/dietary/dietary_store.dart';
@@ -87,6 +96,15 @@ Future<TestApp> pumpApp(
   FakeOpenReportRepository? openReports,
   FakeDietaryRepository? dietary,
   FakeOwnerRepository? owners,
+  OwnerWorkspaceRepository? ownerWorkspace,
+  ProfileEditorRepository? profileEditor,
+  ProfileMediaRepository? profileMedia,
+  AccountRepository? account,
+  ReputationRepository? reputation,
+  ProfileStatsRepository? profileStats,
+  PlacePhotoRepository? gallery,
+  PlacePhotoPicker? galleryPicker,
+  QueueRepository? queue,
   SponsorshipRepository? sponsors,
   FakeFoodTagRepository? foodTags,
   DateTime Function()? clock,
@@ -117,6 +135,24 @@ Future<TestApp> pumpApp(
         ChangeNotifierProvider<AuthRepository>.value(value: auth),
         Provider<UserRepository>.value(value: u),
         Provider<OwnerRepository>.value(value: ownerRepo),
+        if (ownerWorkspace != null)
+          Provider<OwnerWorkspaceRepository>.value(value: ownerWorkspace),
+        if (profileEditor != null)
+          Provider<ProfileEditorRepository>.value(value: profileEditor),
+        if (profileMedia != null)
+          ChangeNotifierProvider<ProfileMediaRepository>.value(
+            value: profileMedia,
+          ),
+        if (account != null) Provider<AccountRepository>.value(value: account),
+        if (reputation != null)
+          Provider<ReputationRepository>.value(value: reputation),
+        if (profileStats != null)
+          Provider<ProfileStatsRepository>.value(value: profileStats),
+        if (gallery != null)
+          Provider<PlacePhotoRepository>.value(value: gallery),
+        if (galleryPicker != null)
+          Provider<PlacePhotoPicker>.value(value: galleryPicker),
+        if (queue != null) Provider<QueueRepository>.value(value: queue),
         if (sponsors != null)
           Provider<SponsorshipRepository>.value(value: sponsors),
         Provider<FoodTagRepository>.value(
@@ -161,6 +197,7 @@ Future<TestApp> pumpApp(
       child: RepaintBoundary(
         key: captureKey,
         child: MaterialApp.router(
+          debugShowCheckedModeBanner: false,
           theme: theme,
           routerConfig: router,
           builder: (context, child) => MediaQuery(

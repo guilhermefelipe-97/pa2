@@ -71,6 +71,12 @@ void main() {
       );
       app.router.go(Routes.placeDetail('mangai'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('place-visit')),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('place-visit')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('visit-confirm')));
@@ -104,6 +110,12 @@ void main() {
         clock: () => _today,
       );
       app.router.go(Routes.placeDetail('mangai'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('place-visit')),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('place-visit')));
       await tester.pumpAndSettle();
@@ -567,6 +579,10 @@ void main() {
       );
       app.router.push(Routes.person('ana'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('profile-tab-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('profile-tab-1')));
+      await tester.pumpAndSettle();
       final tile = find.byKey(const ValueKey('profile-visit-v1'));
       expect(tile, findsOneWidget);
       expect(
@@ -576,7 +592,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text('Visitas'), findsOneWidget);
+      expect(find.text('Visitas'), findsWidgets);
     });
   });
 
@@ -602,6 +618,12 @@ void main() {
       await tester.tap(find.byKey(const Key('visit-confirm')));
       await tester.pumpAndSettle();
 
+      await tester.scrollUntilVisible(
+        find.byType(VisitTile),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       expect(find.byType(VisitTile), findsOneWidget);
       expect(find.text('Visita registrada'), findsOneWidget);
       final button = tester.widget<ButtonStyleButton>(

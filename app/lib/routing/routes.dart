@@ -1,5 +1,7 @@
 abstract final class Routes {
   static const settings = '/configuracoes';
+  static const editProfile = '/configuracoes/perfil';
+  static const accountSecurity = '/configuracoes/perfil/conta';
   static const admin = '/administracao';
   static const adminRequests = '/administracao/titularidade';
   static const adminRequestPattern =

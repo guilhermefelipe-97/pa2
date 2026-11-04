@@ -75,23 +75,43 @@ service cloud.firestore {
 
     // ---------- users ----------
     function validProfile(data) {
-      return data.keys().hasOnly(['displayName', 'displayNameLower'])
+      return data.keys().hasOnly(['displayName', 'displayNameLower', 'username', 'bio', 'city', 'instagram'])
         && data.keys().hasAll(['displayName', 'displayNameLower'])
         && data.displayName is string
         && data.displayName.trim().size() > 0
         && data.displayName == data.displayName.trim()
         && data.displayName.size() <= 60
-        && data.displayNameLower == data.displayName.lower();
+        && data.displayNameLower == data.displayName.lower()
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 240))
+        && (!('city' in data) || (data.city is string && data.city.size() <= 80))
+        && (!('instagram' in data) || (data.instagram is string && (data.instagram == '' || data.instagram.matches('[a-zA-Z0-9._]{1,30}'))))
+        && (!('username' in data) || (data.username is string
+          && data.username.matches('[a-z0-9][a-z0-9._]{2,23}')
+          && getAfter(/databases/$(database)/documents/usernames/$(data.username)).data.uid == request.auth.uid));
     }
 
     match /users/{uid} {
       allow read: if signedIn();
       allow create: if isOwner(uid) && validProfile(request.resource.data);
-      // Nome é imutável: reviews.authorName é desnormalizado e ficaria desatualizado.
+      // Nome atual editável. Avaliações e créditos anteriores mantêm o nome
+      // registrado naquele momento, sempre ligados ao mesmo uid.
       allow update: if isOwner(uid)
         && validProfile(request.resource.data)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['displayName', 'displayNameLower']);
+        && (!('username' in resource.data)
+          || ('username' in request.resource.data &&
+            (request.resource.data.username == resource.data.username
+            || !existsAfter(/databases/$(database)/documents/usernames/$(resource.data.username)))));
       allow delete: if false;
+
+      match /media/{kind} {
+        allow read: if signedIn() && kind in ['avatar', 'cover'];
+        allow create, update: if isOwner(uid) && kind in ['avatar', 'cover']
+          && request.resource.data.keys().hasOnly(['jpeg'])
+          && request.resource.data.keys().hasAll(['jpeg'])
+          && request.resource.data.jpeg is bytes
+          && request.resource.data.jpeg.size() > 0 && request.resource.data.jpeg.size() <= 150000;
+        allow delete: if isOwner(uid) && kind in ['avatar', 'cover'];
+      }
 
       match /ownershipRequests/{placeId} {
         allow read: if isOwner(uid);
@@ -228,23 +248,49 @@ service cloud.firestore {
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(copiedFromKeys());
         allow delete: if isOwner(uid);
 
-        // Contador de cópias (F13, N32): um doc por pessoa que copiou, id =
-        // uid dela. Só cria quem segue a dona e com a lista visível; uma por
-        // pessoa (o 2º create vira update, negado) e imutável. A dona lê
-        // todos (contagem via count()); quem copiou lê só o próprio. Só a
-        // dona apaga (junto com a lista, no mesmo batch).
+        // F13/N32: uma entrada por pessoa vinculada à lista realmente salva.
+        // A prova é imutável. Recibos legados podem receber a prova uma vez,
+        // sem mudar a data; apenas recibos com copiedListId entram na contagem.
+        // A dona lê todos e apaga junto com a lista; o copiador lê o próprio.
         match /copies/{copierUid} {
           allow read: if isOwner(uid) || isOwner(copierUid);
           allow create: if isOwner(copierUid)
-            && exists(/databases/$(database)/documents/users/$(copierUid)/following/$(uid))
-            && get(/databases/$(database)/documents/users/$(uid)/lists/$(listId)).data.visible == true
-            && request.resource.data.keys().hasOnly(['createdAt'])
-            && request.resource.data.keys().hasAll(['createdAt'])
+            && request.resource.data.keys().hasOnly(['createdAt', 'copiedListId'])
+            && request.resource.data.keys().hasAll(['createdAt', 'copiedListId'])
+            && validCopyReceipt(uid, listId, copierUid, request.resource.data)
             && request.resource.data.createdAt == request.time;
           allow delete: if isOwner(uid);
-          allow update: if false;
+          allow update: if isOwner(copierUid)
+            && resource.data.keys().hasOnly(['createdAt'])
+            && request.resource.data.keys().hasOnly(['createdAt', 'copiedListId'])
+            && request.resource.data.keys().hasAll(['createdAt', 'copiedListId'])
+            && request.resource.data.createdAt == resource.data.createdAt
+            && validCopyReceipt(uid, listId, copierUid, request.resource.data);
         }
       }
+    }
+
+    match /usernames/{handle} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn() && handle.matches('[a-z0-9][a-z0-9._]{2,23}')
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == handle;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username != handle;
+    }
+
+    function validCopyReceipt(ownerUid, listId, copierUid, data) {
+      return ownerUid != copierUid
+        && data.copiedListId is string && data.copiedListId.matches('[^/]{1,128}')
+        && exists(/databases/$(database)/documents/users/$(copierUid)/following/$(ownerUid))
+        && get(/databases/$(database)/documents/users/$(ownerUid)/lists/$(listId)).data.visible == true
+        && getAfter(/databases/$(database)/documents/users/$(copierUid)/lists/$(data.copiedListId)).data.copiedFromUid == ownerUid
+        && getAfter(/databases/$(database)/documents/users/$(copierUid)/lists/$(data.copiedListId)).data.copiedFromListId == listId
+        && getAfter(/databases/$(database)/documents/users/$(copierUid)/lists/$(data.copiedListId)).data.createdAt is timestamp
+        && getAfter(/databases/$(database)/documents/users/$(copierUid)/lists/$(data.copiedListId)).data.createdAt <= request.time;
     }
 
     function lockKeys() {
@@ -446,6 +492,21 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && validNewPlace(request.resource.data, placeId);
       allow update, delete: if false;
+      match /photos/{photoId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && exists(/databases/$(database)/documents/places/$(placeId))
+          && request.resource.data.keys().hasOnly(['authorId', 'authorName', 'createdAt', 'jpeg'])
+          && request.resource.data.keys().hasAll(['authorId', 'authorName', 'createdAt', 'jpeg'])
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.authorName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.jpeg is bytes
+          && request.resource.data.jpeg.size() > 0
+          && request.resource.data.jpeg.size() <= 150000;
+        allow delete: if signedIn() && resource.data.authorId == request.auth.uid;
+        allow update: if false;
+      }
     }
 
     // ---------- reviews ----------
@@ -682,6 +743,22 @@ service cloud.firestore {
     }
 
     // F24: resposta única, imutável e identificada; titular conferido no commit.
+    match /placePresentations/{placeId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && exists(/databases/$(database)/documents/places/$(placeId))
+        && get(/databases/$(database)/documents/placeOwners/$(placeId)).data.uid == request.auth.uid
+        && request.resource.data.keys().hasAll(['description', 'hours', 'updatedBy', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['description', 'hours', 'updatedBy', 'updatedAt'])
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 1000
+        && request.resource.data.hours is string
+        && request.resource.data.hours.size() <= 500
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
     match /ownerReplies/{reviewId} {
       allow read: if signedIn();
       allow create: if signedIn()

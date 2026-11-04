@@ -94,8 +94,56 @@ void main() {
       expect(v.phase, DecisionPhase.result);
       expect(v.current!.place.id, 'b');
       expect(v.reason, '2 pessoas que você segue foram com amigos à noite');
-      expect(reviews.fetchCalls.single.toSet(), {'ana', 'caio'});
+      expect(reviews.candidateFetches.single.authors.toSet(), {'ana', 'caio'});
+      expect(reviews.candidateFetches.single.places.toSet(), {'a', 'b', 'c'});
     });
+
+    test(
+      'avaliação antiga de candidato não some após cem avaliações recentes de outros locais',
+      () async {
+        reviews.stored.clear();
+        for (var i = 0; i < 150; i++) {
+          reviews.stored.add(
+            review(authorId: 'ana', placeId: 'fora', createdAt: _now),
+          );
+        }
+        reviews.stored.add(
+          review(
+            authorId: 'ana',
+            placeId: 'b',
+            companion: Companion.amigos,
+            createdAt: _night,
+          ),
+        );
+        final v = vm([_c('a', hoursAgo: 1), _c('b')]);
+        addTearDown(v.dispose);
+        await v.choose(Companion.amigos);
+        expect(v.current!.place.id, 'b');
+        expect(reviews.fetchCalls, isEmpty);
+      },
+    );
+
+    test(
+      'troca de conta invalida decisão e impede mostrar sinais antigos',
+      () async {
+        final auth = FakeAuthRepository(uid: 'me');
+        final v = DecisionViewModel(
+          candidates: [_c('a'), _c('b')],
+          authRepository: auth,
+          userRepository: users,
+          reviewRepository: reviews,
+          clock: () => _now,
+        );
+        addTearDown(v.dispose);
+        final choosing = v.choose(Companion.amigos);
+        auth.restoreSession('other');
+        await choosing;
+        expect(v.current, isNull);
+        expect(v.options, isEmpty);
+        expect(v.sessionChanged, isTrue);
+        expect(v.emptyText, contains('Conta alterada'));
+      },
+    );
 
     test('nunca pede localização: só a última posição já permitida', () async {
       location

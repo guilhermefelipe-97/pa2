@@ -78,7 +78,7 @@ class _PersonListViewState extends State<PersonListView> {
         return Scaffold(
           appBar: AppBar(
             leading: context.canPop() ? null : BackButton(onPressed: _back),
-            title: Text(list?.label ?? ''),
+            title: Text(list?.name ?? ''),
           ),
           body: switch (vm.state) {
             PersonListState.loading => const Center(

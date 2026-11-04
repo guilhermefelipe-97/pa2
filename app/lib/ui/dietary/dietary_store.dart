@@ -1,14 +1,20 @@
+import 'dart:async';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/dietary_repository.dart';
 import '../core/safe_change_notifier.dart';
 
 class DietaryStore extends SafeChangeNotifier {
-  DietaryStore(this.auth, this.repository) {
+  DietaryStore(
+    this.auth,
+    this.repository, {
+    this.operationTimeout = const Duration(seconds: 15),
+  }) {
     auth.addListener(_session);
     _session();
   }
   final AuthRepository auth;
   final DietaryRepository repository;
+  final Duration operationTimeout;
   String? _uid;
   int _epoch = 0;
   int _operation = 0;
@@ -46,7 +52,7 @@ class DietaryStore extends SafeChangeNotifier {
       return;
     }
     try {
-      final read = await repository.load(uid);
+      final read = await repository.load(uid).timeout(operationTimeout);
       if (epoch != _epoch || operation != _operation || isDisposed) return;
       tags = Set.unmodifiable(read);
       ready = true;
@@ -73,7 +79,7 @@ class DietaryStore extends SafeChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      await repository.save(uid, saved);
+      await repository.save(uid, saved).timeout(operationTimeout);
       if (epoch != _epoch || operation != _operation || isDisposed) {
         return false;
       }
@@ -81,6 +87,12 @@ class DietaryStore extends SafeChangeNotifier {
       ready = true;
       revision++;
       return true;
+    } on TimeoutException {
+      if (epoch == _epoch && operation == _operation) {
+        error =
+            'Não recebemos a confirmação. Verifique a conexão e tente novamente.';
+      }
+      return false;
     } on Object {
       if (epoch == _epoch && operation == _operation) {
         error = 'Não foi possível salvar. Tente novamente.';

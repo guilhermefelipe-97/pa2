@@ -57,6 +57,11 @@ Future<TestApp> _pump(
   bool visible = true,
   void Function(FakeListsRepository lists)? seed,
 }) async {
+  if (tester.view.physicalSize.width > 1000) {
+    tester.view.physicalSize = const Size(412, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
   final w = _world(follows: follows, visible: visible);
   seed?.call(w.lists);
   return pumpApp(
@@ -72,6 +77,8 @@ Future<TestApp> _pump(
 Finder _chip(String id) => find.byKey(Key('list-chip-$id'));
 
 Future<void> _openChipMenu(WidgetTester tester, String listId) async {
+  await tester.ensureVisible(_chip(listId));
+  await tester.pumpAndSettle();
   await tester.tap(_chip(listId));
   await tester.pumpAndSettle();
   await tester.tap(_chip(listId));
@@ -192,7 +199,7 @@ void main() {
         await tester.tap(find.text('Ver'));
         await tester.pumpAndSettle();
         expect(find.byType(SavedView), findsOneWidget);
-        expect(find.text('🎉 Sábado · 3'), findsOneWidget);
+        expect(find.text('Sábado · 3'), findsOneWidget);
         await tester.tap(_chip(newId));
         await tester.pumpAndSettle();
         expect(find.text('Copiada de Ana'), findsOneWidget);
@@ -390,6 +397,7 @@ void main() {
       );
       app.router.go(Routes.saved);
       await tester.pumpAndSettle();
+      await tester.ensureVisible(_chip('minha'));
       await tester.tap(_chip('minha'));
       await tester.pumpAndSettle();
       // Ex.: "Ver" de uma cópia que foi excluída nesse meio-tempo.
@@ -445,7 +453,7 @@ void main() {
         );
         app.router.go(Routes.saved);
         await tester.pumpAndSettle();
-        expect(find.text(SavedView.privateCaption), findsOneWidget);
+        expect(find.text(SavedView.privateCaption), findsNothing);
 
         await _openChipMenu(tester, 'minha');
         await tester.tap(find.text(visibleToFollowersLabel));
@@ -456,7 +464,7 @@ void main() {
         // "Todos" é sempre privado.
         await tester.tap(find.byKey(const Key('list-chip-all')));
         await tester.pumpAndSettle();
-        expect(find.text(SavedView.privateCaption), findsOneWidget);
+        expect(find.text(SavedView.privateCaption), findsNothing);
 
         await _openChipMenu(tester, 'minha');
         await tester.tap(find.text(visibleToFollowersLabel));

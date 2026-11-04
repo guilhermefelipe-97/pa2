@@ -1,3 +1,4 @@
+import 'list_category.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -184,7 +185,8 @@ class _AddToListSheetState extends State<AddToListSheet> {
       key: Key('list-check-${list.id}'),
       value: member,
       onChanged: full ? null : (v) => _toggle(lists, list, v ?? false),
-      title: Text(list.label),
+      secondary: Icon(listCategoryIcon(list.emoji)),
+      title: Text(list.name),
       subtitle: Text(
         full
             ? 'Lista cheia (${PlaceList.maxPlaces} locais)'

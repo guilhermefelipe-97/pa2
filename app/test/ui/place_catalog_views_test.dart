@@ -65,7 +65,7 @@ void main() {
     tester,
   ) async {
     await _pumpPicker(tester, FakePlaceRepository(_catalog));
-    expect(find.text('Sugestões'), findsOneWidget);
+    expect(find.text('Locais sugeridos'), findsOneWidget);
     expect(find.text('Camarões Potiguar'), findsOneWidget);
     expect(
       find.text('Camarada Bar'),
@@ -135,7 +135,7 @@ void main() {
     await tester.pump(_debounce);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilterChip, 'Bar'));
+    await tester.tap(find.widgetWithText(FilterChip, 'Bares'));
     await tester.pumpAndSettle();
     expect(find.text('Camarada Bar'), findsOneWidget);
     expect(find.text('Camarões Potiguar'), findsNothing);

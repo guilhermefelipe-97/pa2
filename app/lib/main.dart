@@ -1,4 +1,15 @@
 import 'data/repositories/privacy_repository.dart';
+import 'data/repositories/profile_stats_repository.dart';
+import 'data/firebase/firestore_profile_stats_repository.dart';
+import 'data/repositories/profile_editor_repository.dart';
+import 'data/repositories/profile_media_repository.dart';
+import 'data/repositories/account_repository.dart';
+import 'data/firebase/firestore_profile_editor_repository.dart';
+import 'data/firebase/firestore_profile_media_repository.dart';
+import 'data/firebase/firebase_account_repository.dart';
+import 'data/repositories/place_photo_repository.dart';
+import 'data/firebase/firestore_place_photo_repository.dart';
+import 'data/services/place_photo_picker.dart';
 import 'data/repositories/queue_repository.dart';
 import 'data/repositories/reputation_repository.dart';
 import 'data/repositories/sponsorship_repository.dart';
@@ -43,6 +54,8 @@ import 'firebase_config.dart';
 import 'firebase_options.dart';
 import 'routing/router.dart';
 import 'data/repositories/owner_repository.dart';
+import 'data/repositories/owner_workspace_repository.dart';
+import 'data/firebase/firestore_owner_workspace_repository.dart';
 import 'data/repositories/dietary_repository.dart';
 import 'data/repositories/food_tag_repository.dart';
 import 'data/firebase/firestore_owner_repository.dart';
@@ -119,6 +132,18 @@ Future<void> main() async {
               FirestoreSponsorshipRepository(db, emulator: useEmulator),
         ),
         Provider<AppClock>.value(value: const AppClock()),
+        Provider<ProfileStatsRepository>(
+          create: (_) => FirestoreProfileStatsRepository(db),
+        ),
+        Provider<ProfileEditorRepository>(
+          create: (_) => FirestoreProfileEditorRepository(db),
+        ),
+        ChangeNotifierProvider<ProfileMediaRepository>(
+          create: (_) => FirestoreProfileMediaRepository(db, authRepository),
+        ),
+        Provider<AccountRepository>(
+          create: (_) => FirebaseAccountRepository(FirebaseAuth.instance),
+        ),
         ChangeNotifierProvider<AuthRepository>.value(value: authRepository),
         Provider<UserRepository>.value(value: userRepository),
         // Cliente HTTP do Photon: fechado quando o app sai da árvore.
@@ -142,6 +167,9 @@ Future<void> main() async {
           create: (context) => AdminAccess(authRepository, context.read()),
         ),
         Provider<OwnerRepository>(create: (_) => FirestoreOwnerRepository(db)),
+        Provider<OwnerWorkspaceRepository>(
+          create: (_) => FirestoreOwnerWorkspaceRepository(db),
+        ),
         Provider<DietaryRepository>(
           create: (_) => FirestoreDietaryRepository(db),
         ),
@@ -171,6 +199,12 @@ Future<void> main() async {
               (repo as FirestoreReviewPhotoRepository).dispose(),
         ),
         Provider<PhotoPicker>(create: (_) => ImagePickerPhotoPicker()),
+        Provider<PlacePhotoRepository>(
+          create: (_) => FirestorePlacePhotoRepository(db),
+        ),
+        Provider<PlacePhotoPicker>(
+          create: (_) => ImagePickerPlacePhotoPicker(),
+        ),
         // Posição só em memória, para o "Perto" (F10).
         Provider<LocationService>(
           create: (_) => const GeolocatorLocationService(),

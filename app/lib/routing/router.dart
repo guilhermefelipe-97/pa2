@@ -1,6 +1,9 @@
+import '../data/repositories/profile_stats_repository.dart';
 import '../data/repositories/privacy_repository.dart';
 import '../ui/privacy/privacy_view.dart';
 import '../ui/settings/settings_view.dart';
+import '../ui/profile/profile_edit_view.dart';
+import '../ui/profile/account_security_view.dart';
 import '../ui/sponsored/sponsored_view.dart';
 import '../ui/owner/owner_reviews_view.dart';
 import '../ui/admin/admin_access_view.dart';
@@ -97,6 +100,14 @@ GoRouter buildRouter(AuthRepository auth) {
       GoRoute(
         path: Routes.settings,
         builder: (context, state) => const SettingsView(),
+      ),
+      GoRoute(
+        path: Routes.editProfile,
+        builder: (_, _) => const ProfileEditView(),
+      ),
+      GoRoute(
+        path: Routes.accountSecurity,
+        builder: (_, _) => const AccountSecurityView(),
       ),
       GoRoute(
         path: '/modo-silencioso',
@@ -259,6 +270,32 @@ GoRouter buildRouter(AuthRepository auth) {
               ),
             ],
           ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/perfil',
+                builder: (context, state) {
+                  final uid = context.watch<AuthRepository>().currentUserId;
+                  if (uid == null) return const SizedBox.shrink();
+                  return ViewModelHost<ProfileViewModel>(
+                    key: ValueKey('person-$uid'),
+                    create: (context) => ProfileViewModel(
+                      placeRepository: context.read<PlaceRepository?>(),
+                      statsRepository: context.read<ProfileStatsRepository?>(),
+                      uid: uid,
+                      authRepository: context.read(),
+                      userRepository: context.read(),
+                      reviewRepository: context.read(),
+                      followEvents: context.read<FollowEvents>(),
+                      visitRepository: context.read<VisitRepository>(),
+                      listsRepository: context.read<ListsRepository?>(),
+                    ),
+                    builder: (context, vm) => ProfileView(viewModel: vm),
+                  );
+                },
+              ),
+            ],
+          ),
         ],
       ),
       // Fora do shell: cobre a barra inferior. Abre só com o id (link direto,
@@ -319,6 +356,8 @@ GoRouter buildRouter(AuthRepository auth) {
           return ViewModelHost<ProfileViewModel>(
             key: ValueKey('person-$uid'),
             create: (context) => ProfileViewModel(
+              placeRepository: context.read<PlaceRepository?>(),
+              statsRepository: context.read<ProfileStatsRepository?>(),
               uid: uid,
               authRepository: context.read(),
               userRepository: context.read(),

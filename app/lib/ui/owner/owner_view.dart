@@ -1,188 +1,9 @@
-import '../core/editorial.dart';
+export 'owner_dashboard.dart' show OwnerView;
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/owner_repository.dart';
 import '../../data/repositories/place_repository.dart';
-import '../../routing/routes.dart';
-
-class OwnerView extends StatefulWidget {
-  const OwnerView({super.key});
-  @override
-  State<OwnerView> createState() => _OwnerViewState();
-}
-
-class _OwnerRow {
-  const _OwnerRow(this.request, this.name, this.owned, this.failed);
-  final OwnershipRequest request;
-  final String name;
-  final bool owned;
-  final bool failed;
-}
-
-class _OwnerViewState extends State<OwnerView> {
-  Future<List<_OwnerRow>>? _read;
-  String? _uid;
-  int _generation = 0;
-
-  Future<List<_OwnerRow>> _load(String uid) async {
-    final repository = context.read<OwnerRepository>();
-    final places = context.read<PlaceRepository>();
-    final requests = await repository.requestsOf(uid);
-    final names = await places.getPlaces(requests.map((r) => r.placeId));
-    return Future.wait(
-      requests.map((r) async {
-        try {
-          final owner = await repository
-              .ownerOf(r.placeId)
-              .timeout(ownerLookupTimeout);
-          return _OwnerRow(
-            r,
-            names[r.placeId]?.name ?? 'Estabelecimento',
-            owner == uid,
-            false,
-          );
-        } on Object {
-          return _OwnerRow(
-            r,
-            names[r.placeId]?.name ?? 'Estabelecimento',
-            false,
-            true,
-          );
-        }
-      }),
-    );
-  }
-
-  void _refresh() => setState(() {
-    _generation++;
-    _read = null;
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthRepository>();
-    if (_uid != auth.currentUserId || _read == null) {
-      _uid = auth.currentUserId;
-      _generation++;
-      _read = _uid == null ? Future.value([]) : _load(_uid!);
-    }
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Meus estabelecimentos'),
-        actions: [
-          IconButton(
-            tooltip: 'Atualizar titularidade',
-            icon: const Icon(Icons.refresh),
-            onPressed: _refresh,
-          ),
-        ],
-      ),
-      body: FutureBuilder<List<_OwnerRow>>(
-        key: ValueKey('$_uid-$_generation'),
-        future: _read,
-        builder: (context, snap) {
-          if (snap.hasError) {
-            return Center(
-              child: TextButton(
-                onPressed: _refresh,
-                child: const Text('Tentar novamente'),
-              ),
-            );
-          }
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final rows = snap.data!;
-          if (rows.isEmpty) {
-            return const Padding(
-              padding: EdgeInsets.all(20),
-              child: Text(
-                'Abra a ficha do seu estabelecimento para solicitar titularidade. A verificação é feita fora do app.',
-              ),
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(20),
-            itemCount: rows.length + 1,
-            itemBuilder: (context, index) {
-              if (index == 0)
-                return const EditorialHeading(
-                  eyebrow: 'Área do titular',
-                  title: 'Locais vinculados',
-                );
-              final row = rows[index - 1];
-              return Card(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  title: Text(row.name),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        row.failed
-                            ? 'Não foi possível verificar titularidade'
-                            : row.owned
-                            ? 'Titularidade verificada'
-                            : switch (row.request.status) {
-                                'pending' =>
-                                  'Pedido pendente — sem poderes até a aprovação',
-                                'approved' ||
-                                'revoked' => 'Titularidade revogada',
-                                _ => 'Pedido rejeitado',
-                              },
-                      ),
-                      if (row.owned)
-                        TextButton.icon(
-                          icon: const Icon(Icons.campaign_outlined),
-                          label: const Text('Divulgação'),
-                          onPressed: () => showDialog<void>(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: const Text('Divulgação'),
-                              content: const Text(
-                                'A contratação de divulgação está indisponível no momento.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  child: const Text('Fechar'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (row.request.reason != null)
-                        Text(
-                          '${row.request.status == 'revoked' ? 'Motivo da aprovação original' : 'Motivo'}: ${row.request.reason}',
-                        ),
-                      if (row.request.status == 'revoked' &&
-                          row.request.revocationReason != null)
-                        Text(
-                          'Motivo da revogação: ${row.request.revocationReason}',
-                        ),
-                    ],
-                  ),
-                  trailing: row.owned
-                      ? TextButton(
-                          onPressed: () => context.push(
-                            '/meus-estabelecimentos/${Uri.encodeComponent(row.request.placeId)}/avaliacoes',
-                          ),
-                          child: const Text('Avaliações e respostas'),
-                        )
-                      : null,
-                  onTap: () =>
-                      context.push(Routes.placeDetail(row.request.placeId)),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
 
 class OwnershipButton extends StatefulWidget {
   const OwnershipButton({super.key, required this.placeId});
@@ -207,10 +28,26 @@ class _OwnershipButtonState extends State<OwnershipButton> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TextButton.icon(
+        const Text('Este estabelecimento é seu?'),
+        const SizedBox(height: 8),
+        Text(
+          'Solicite o vínculo com este local. A verificação é feita fora do app.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 20),
+        FilledButton.icon(
+          key: const Key('ownership-request-submit'),
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(double.infinity, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
           icon: const Icon(Icons.storefront),
           label: const Text(
-            'Este estabelecimento é seu? Solicitar titularidade',
+            'Solicitar titularidade',
+            textAlign: TextAlign.center,
           ),
           onPressed: busy
               ? null
@@ -258,7 +95,10 @@ class _OwnershipButtonState extends State<OwnershipButton> {
                   }
                 },
         ),
-        if (message != null) Text(message!),
+        if (message != null) ...[
+          const SizedBox(height: 16),
+          Semantics(liveRegion: true, child: Text(message!)),
+        ],
       ],
     );
   }
@@ -278,9 +118,19 @@ class OwnershipAction extends StatelessWidget {
       onPressed: () => showDialog<void>(
         context: context,
         builder: (_) => AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+          contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+          titleTextStyle: Theme.of(context).textTheme.titleLarge,
           title: const Text('Titularidade do estabelecimento'),
           content: SingleChildScrollView(
-            child: OwnershipButton(placeId: placeId),
+            child: SizedBox(
+              width: 320,
+              child: OwnershipButton(placeId: placeId),
+            ),
           ),
           actions: [
             TextButton(

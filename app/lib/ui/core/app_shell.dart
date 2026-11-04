@@ -48,6 +48,11 @@ class AppShell extends StatelessWidget {
             selectedIcon: Icon(Icons.person_search),
             label: 'Pessoas',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.account_circle_outlined),
+            selectedIcon: Icon(Icons.account_circle),
+            label: 'Perfil',
+          ),
         ],
       ),
     );

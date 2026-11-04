@@ -86,7 +86,12 @@ class _DecisionSheetState extends State<DecisionSheet> {
               padding: EdgeInsets.all(32),
               child: Center(child: CircularProgressIndicator()),
             ),
-            DecisionPhase.noneOpen => _NoneOpen(onBack: widget.viewModel.back),
+            DecisionPhase.noneOpen => _NoneOpen(
+              onBack: widget.viewModel.sessionChanged
+                  ? () => Navigator.of(context).pop()
+                  : widget.viewModel.back,
+              message: widget.viewModel.emptyText,
+            ),
             DecisionPhase.result => _Result(
               viewModel: widget.viewModel,
               onOpenPlace: widget.onOpenPlace,
@@ -139,7 +144,8 @@ class _CompanionChoice extends StatelessWidget {
 }
 
 class _NoneOpen extends StatelessWidget {
-  const _NoneOpen({required this.onBack});
+  const _NoneOpen({required this.onBack, required this.message});
+  final String message;
 
   final VoidCallback onBack;
 
@@ -155,7 +161,7 @@ class _NoneOpen extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          DecisionViewModel.noneOpenText,
+          message,
           key: const Key('decide-none-open'),
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.titleMedium,

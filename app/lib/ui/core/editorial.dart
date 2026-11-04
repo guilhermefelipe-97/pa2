@@ -61,11 +61,11 @@ class EditorialLoading extends StatelessWidget {
 class EditorialHeading extends StatelessWidget {
   const EditorialHeading({
     super.key,
-    required this.eyebrow,
+    this.eyebrow,
     required this.title,
     this.description,
   });
-  final String eyebrow;
+  final String? eyebrow;
   final String title;
   final String? description;
   @override
@@ -76,15 +76,17 @@ class EditorialHeading extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            eyebrow.toUpperCase(),
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: theme.colorScheme.secondary,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
+          if (eyebrow != null) ...[
+            Text(
+              eyebrow!.toUpperCase(),
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.secondary,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
+            const SizedBox(height: 4),
+          ],
           Text(title, style: theme.textTheme.headlineSmall),
           if (description != null) ...[
             const SizedBox(height: 8),

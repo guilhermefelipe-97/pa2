@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/models/admin_ownership_request.dart';
+import '../../domain/models/place.dart';
 import '../repositories/admin_ownership_repository.dart';
 
-class FirestoreAdminOwnershipRepository implements AdminOwnershipRepository {
+class FirestoreAdminOwnershipRepository
+    implements AdminOwnershipRepository, AdminHistoryRepository {
   FirestoreAdminOwnershipRepository(
     this.db, {
     this.decisionTimeout = const Duration(seconds: 25),
@@ -51,6 +53,16 @@ class FirestoreAdminOwnershipRepository implements AdminOwnershipRepository {
       placeId: placeId,
       applicant: user.data()?['displayName'] as String? ?? uid,
       place: place.data()?['name'] as String? ?? placeId,
+      location: Place(
+        id: placeId,
+        name: place.data()?['name'] as String? ?? placeId,
+        category: place.data()?['category'] as String? ?? '',
+        neighborhood: place.data()?['neighborhood'] as String? ?? '',
+        city: place.data()?['city'] as String? ?? '',
+        photoUrl: place.data()?['photoUrl'] as String?,
+        photoAuthor: place.data()?['photoAuthor'] as String?,
+        photoLicense: place.data()?['photoLicense'] as String?,
+      ),
       createdAt: (d['createdAt'] as Timestamp).toDate(),
       status: d['status'] as String,
       reason: d['reason'] as String?,
@@ -64,10 +76,20 @@ class FirestoreAdminOwnershipRepository implements AdminOwnershipRepository {
 
   @override
   Future<AdminRequestPage> pending({Object? cursor}) async {
+    return _page(false, cursor);
+  }
+
+  @override
+  Future<AdminRequestPage> decided({Object? cursor}) => _page(true, cursor);
+
+  Future<AdminRequestPage> _page(bool history, Object? cursor) async {
     var q = db
         .collectionGroup('ownershipRequests')
-        .where('status', isEqualTo: 'pending')
-        .orderBy('createdAt')
+        .where(
+          'status',
+          whereIn: history ? ['approved', 'rejected', 'revoked'] : ['pending'],
+        )
+        .orderBy(history ? 'decidedAt' : 'createdAt', descending: history)
         .orderBy(FieldPath.documentId);
     if (cursor != null) q = q.startAfterDocument(cursor as DocumentSnapshot);
     final result = await q.limit(20).get(server);

@@ -5,8 +5,10 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../domain/models/user_profile.dart';
 import '../../routing/routes.dart';
+import '../../data/services/location_service.dart';
 import '../admin/admin_access.dart';
 import '../core/editorial.dart';
+import '../core/naarea_footer.dart';
 import '../feed/widgets/author_avatar.dart';
 
 class SettingsView extends StatelessWidget {
@@ -31,7 +33,7 @@ class _Settings extends StatefulWidget {
 }
 
 class _SettingsState extends State<_Settings> {
-  late final Future<UserProfile?> profile;
+  late Future<UserProfile?> profile;
   bool busy = false;
   String? error;
   @override
@@ -49,8 +51,9 @@ class _SettingsState extends State<_Settings> {
     try {
       await context.read<AuthRepository>().signOut();
     } on Object {
-      if (mounted)
+      if (mounted) {
         setState(() => error = 'Não foi possível sair. Tente de novo.');
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -64,7 +67,14 @@ class _SettingsState extends State<_Settings> {
   ) => Card(
     child: ListTile(
       contentPadding: const EdgeInsets.all(16),
-      leading: Icon(icon),
+      leading: CircleAvatar(
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
+        child: Icon(
+          icon,
+          size: 20,
+          color: Theme.of(context).colorScheme.secondary,
+        ),
+      ),
       title: Text(title),
       subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right),
@@ -78,6 +88,10 @@ class _SettingsState extends State<_Settings> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
+        const EditorialHeading(
+          eyebrow: 'Conta e segurança',
+          title: 'Sua conta',
+        ),
         FutureBuilder<UserProfile?>(
           future: profile,
           builder: (context, snapshot) {
@@ -91,30 +105,62 @@ class _SettingsState extends State<_Settings> {
                   radius: 24,
                 ),
                 title: Text(name == null || name.isEmpty ? 'Seu perfil' : name),
-                subtitle: const Text('Sua identidade pública'),
+                subtitle: const Text('Editar perfil, fotos, bio e conta'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: busy
                     ? null
-                    : () => context.push(Routes.person(widget.uid)),
+                    : () async {
+                        await context.push(Routes.editProfile);
+                        if (mounted) {
+                          setState(() {
+                            profile = context.read<UserRepository>().getProfile(
+                              widget.uid,
+                            );
+                          });
+                        }
+                      },
               ),
             );
           },
         ),
         const EditorialHeading(
-          eyebrow: 'Preferências',
+          eyebrow: 'Preferências do app',
           title: 'Seu jeito de explorar',
-        ),
-        destination(
-          Icons.restaurant_outlined,
-          'Perfil alimentar',
-          'Preferências para filtrar os lugares dos amigos.',
-          '/perfil-alimentar',
         ),
         destination(
           Icons.visibility_off_outlined,
           'Publicação em Amigos',
           'Modo silencioso: afeta o feed de Amigos. Avaliações e visitas continuam identificadas.',
           '/modo-silencioso',
+        ),
+        const EditorialHeading(
+          eyebrow: 'Aparelho',
+          title: 'Notificações e permissões',
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.notifications_outlined),
+            title: const Text('Abrir configurações do aparelho'),
+            subtitle: const Text(
+              'Gerencie as permissões do NaÁrea no sistema.',
+            ),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: busy
+                ? null
+                : () async {
+                    final service = context.read<LocationService?>();
+                    final opened = await service?.openAppSettings() ?? false;
+                    if (!opened && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Abra as configurações do seu aparelho para gerenciar as permissões.',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+          ),
         ),
         const EditorialHeading(
           eyebrow: 'Área do titular',
@@ -139,6 +185,28 @@ class _SettingsState extends State<_Settings> {
           ),
         ],
         const SizedBox(height: 24),
+        const EditorialHeading(
+          eyebrow: 'Ajuda e informações',
+          title: 'Sobre o NaÁrea',
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('Versão e licenças'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showAboutDialog(
+              context: context,
+              applicationName: 'NaÁrea',
+              applicationVersion: '1.4.0+7',
+              applicationLegalese: '© 2026. Todos os direitos reservados.',
+              children: const [
+                Text(
+                  'Descubra lugares pelas experiências de quem você segue. As avaliações e visitas são identificadas.',
+                ),
+              ],
+            ),
+          ),
+        ),
         OutlinedButton.icon(
           key: const Key('settings-sign-out'),
           onPressed: busy ? null : signOut,
@@ -164,10 +232,12 @@ class _SettingsState extends State<_Settings> {
           ),
         const SizedBox(height: 24),
         Text(
-          'NaÁrea · 1.3.0+6',
+          'Versão 1.4.0+7',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall,
         ),
+        const SizedBox(height: 12),
+        const NaAreaFooter(),
       ],
     );
   }

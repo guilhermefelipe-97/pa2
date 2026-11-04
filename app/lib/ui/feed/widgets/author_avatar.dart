@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/stable_hash.dart';
 import '../../core/theme.dart';
+import '../../profile/profile_media_image.dart';
 
 /// Avatar com a inicial do nome (sem foto de perfil ainda). A cor é estável
 /// por pessoa.
@@ -32,15 +33,24 @@ class AuthorAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: _colors[stableHash(id) % _colors.length],
-      child: Text(
-        initial(name),
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          fontSize: radius * 0.9,
+    return SizedBox.square(
+      dimension: radius * 2,
+      child: ClipOval(
+        child: ProfileMediaImage(
+          uid: id,
+          kind: 'avatar',
+          placeholder: CircleAvatar(
+            radius: radius,
+            backgroundColor: _colors[stableHash(id) % _colors.length],
+            child: Text(
+              initial(name),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: radius * 0.9,
+              ),
+            ),
+          ),
         ),
       ),
     );

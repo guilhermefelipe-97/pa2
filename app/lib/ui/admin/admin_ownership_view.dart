@@ -1,4 +1,4 @@
-import '../core/editorial.dart';
+import 'admin_request_card.dart';
 import 'admin_access_view.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -80,7 +80,12 @@ class _AdminOwnershipViewState extends State<AdminOwnershipView> {
           reason.text.trim().isNotEmpty && reason.text.trim().length <= 500;
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Solicitações de titularidade'),
+          title: const Text(
+            'Moderação de titularidade',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          titleTextStyle: Theme.of(context).textTheme.titleMedium,
           actions: [
             IconButton(
               onPressed: vm.busy || !vm.access.enabled ? null : vm.load,
@@ -94,10 +99,76 @@ class _AdminOwnershipViewState extends State<AdminOwnershipView> {
             : ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  const EditorialHeading(
-                    eyebrow: 'Administração',
-                    title: 'Moderação de titularidade',
+                  Row(
+                    children: [
+                      const Icon(Icons.admin_panel_settings_outlined, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Modo Admin',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 16),
+                  if (vm.uid == null) ...[
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Pendentes'),
+                          showCheckmark: false,
+                          selectedColor: Theme.of(
+                            context,
+                          ).colorScheme.tertiaryContainer,
+                          labelStyle: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: !vm.history
+                                    ? Colors.white
+                                    : Theme.of(context).colorScheme.onSurface,
+                              ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          selected: !vm.history,
+                          onSelected: vm.busy
+                              ? null
+                              : (_) => vm.selectHistory(false),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Decididas'),
+                          showCheckmark: false,
+                          selectedColor: Theme.of(
+                            context,
+                          ).colorScheme.tertiaryContainer,
+                          labelStyle: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: vm.history
+                                    ? Colors.white
+                                    : Theme.of(context).colorScheme.onSurface,
+                              ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          selected: vm.history,
+                          onSelected: vm.busy
+                              ? null
+                              : (_) => vm.selectHistory(true),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    const SizedBox(height: 12),
+                  ],
+                  if (vm.uid == null && !vm.busy)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Text(
+                        '${vm.requests.length}${vm.cursor == null ? '' : '+'} ${vm.requests.length == 1 && vm.cursor == null ? (vm.history ? 'solicitação decidida' : 'solicitação pendente') : (vm.history ? 'solicitações decididas' : 'solicitações pendentes')}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
                   if (vm.busy) const LinearProgressIndicator(),
                   if (vm.message != null) Text(vm.message!),
                   if (vm.message != null)
@@ -107,27 +178,22 @@ class _AdminOwnershipViewState extends State<AdminOwnershipView> {
                     ),
                   if (vm.uid == null) ...[
                     if (!vm.busy && vm.requests.isEmpty && vm.message == null)
-                      const Text('Nenhuma solicitação pendente'),
+                      Text(
+                        vm.history
+                            ? 'Nenhuma decisão registrada'
+                            : 'Nenhuma solicitação pendente',
+                      ),
                     for (final item in vm.requests)
-                      Card(
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(16),
-                          leading: const Icon(Icons.storefront_outlined),
-                          title: Text(item.place),
-                          subtitle: Text(
-                            item.available
-                                ? '${item.applicant} · ${_date(item.createdAt)}'
-                                : 'Pedido indisponível · Conta: ${item.uid} · Local: ${item.placeId}',
-                          ),
-                          onTap: !item.available
-                              ? null
-                              : () async {
-                                  await context.push(
-                                    Routes.adminRequest(item.uid, item.placeId),
-                                  );
-                                  if (mounted) vm.load();
-                                },
-                        ),
+                      AdminRequestCard(
+                        request: item,
+                        onOpen: !item.available
+                            ? null
+                            : () async {
+                                await context.push(
+                                  Routes.adminRequest(item.uid, item.placeId),
+                                );
+                                if (mounted) vm.load();
+                              },
                       ),
                     if (vm.cursor != null)
                       TextButton(
@@ -139,8 +205,13 @@ class _AdminOwnershipViewState extends State<AdminOwnershipView> {
                       r.place,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    Text(
-                      'Solicitante: ${r.applicant}\nIdentificador da conta: ${r.uid}\nData: ${_date(r.createdAt)}\nStatus: ${_status(r.status)}',
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          'Solicitante: ${r.applicant}\nIdentificador da conta: ${r.uid}\nData: ${_date(r.createdAt)}\nStatus: ${_status(r.status)}',
+                        ),
+                      ),
                     ),
                     TextButton(
                       onPressed: () => context.push(Routes.person(r.uid)),

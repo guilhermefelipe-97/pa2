@@ -105,7 +105,7 @@ void main() {
       _tallPhone(tester);
       await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
       await tester.pump(); // trava do F03 (checkLock)
-      expect(find.text('Foto (opcional)'), findsOneWidget);
+      expect(find.text('Foto da sua visita (opcional)'), findsOneWidget);
 
       picker.next = Uint8List.fromList([1, 2, 3]);
       await choose(tester, 'photo-add');
@@ -364,8 +364,8 @@ void main() {
       await tester.pumpAndSettle();
       await _decode(tester);
       expect(find.byKey(const Key('review-photo-tile-mine')), findsOneWidget);
-      // Capa + miniatura.
-      expect(find.text('Sua foto'), findsNWidgets(2));
+      // Capa, miniatura da galeria e foto dentro da avaliação.
+      expect(find.text('Sua foto'), findsNWidgets(3));
       expect(find.textContaining('Foto de'), findsNothing);
     },
   );

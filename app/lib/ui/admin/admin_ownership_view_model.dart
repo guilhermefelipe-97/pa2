@@ -21,12 +21,23 @@ class AdminOwnershipViewModel extends SafeChangeNotifier {
   AdminOwnershipRequest? request;
   Object? cursor;
   bool busy = false, uncertain = false;
+  bool history = false;
+  void selectHistory(bool value) {
+    if (busy || history == value || uid != null) return;
+    _epoch++;
+    history = value;
+    requests = [];
+    cursor = null;
+    load();
+  }
+
   String? message;
   int _epoch = 0;
   bool _disposed = false;
   void _accessChanged() {
     _epoch++;
     requests = [];
+    history = false;
     request = null;
     cursor = null;
     busy = false;
@@ -54,9 +65,12 @@ class AdminOwnershipViewModel extends SafeChangeNotifier {
         uncertain = false;
         if (result == null) message = 'Pedido não encontrado';
       } else {
-        final result = await repository
-            .pending(cursor: more ? cursor : null)
-            .timeout(const Duration(seconds: 15));
+        final source = history
+            ? (repository as AdminHistoryRepository).decided(
+                cursor: more ? cursor : null,
+              )
+            : repository.pending(cursor: more ? cursor : null);
+        final result = await source.timeout(const Duration(seconds: 15));
         if (!_current(epoch)) return;
         requests = more ? [...requests, ...result.requests] : result.requests;
         cursor = result.cursor;

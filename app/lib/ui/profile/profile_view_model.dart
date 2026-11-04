@@ -5,6 +5,9 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/lists_repository.dart';
 import '../../data/repositories/review_repository.dart';
 import '../../data/repositories/user_repository.dart';
+import '../../data/repositories/place_repository.dart';
+import '../../data/repositories/profile_stats_repository.dart';
+import '../../domain/models/place.dart';
 import '../../data/repositories/visit_repository.dart';
 import '../../domain/models/place_activity.dart';
 import '../../domain/models/place_list.dart';
@@ -26,8 +29,8 @@ enum ProfileNotice {
 
 /// Perfil simples de uma pessoa (F06): nome, Seguir/Deixar de seguir e as
 /// avaliações e visitas ("Voltei aqui", F15) dela, mais recentes primeiro.
-/// Sem foto, sem contagem de seguidores, sem edição. Para quem segue a
-/// pessoa, as listas que ela deixou visíveis (F13).
+/// Identidade pública, atividades e listas compartilhadas (F13). Fotos e
+/// edição usam repositórios próprios; e-mail e senha ficam no Firebase Auth.
 class ProfileViewModel extends SafeChangeNotifier {
   ProfileViewModel({
     required this.uid,
@@ -37,12 +40,16 @@ class ProfileViewModel extends SafeChangeNotifier {
     required FollowEvents followEvents,
     required VisitRepository visitRepository,
     ListsRepository? listsRepository,
+    PlaceRepository? placeRepository,
+    ProfileStatsRepository? statsRepository,
     DateTime Function()? clock,
   }) : _auth = authRepository,
        _users = userRepository,
        _reviews = reviewRepository,
        _visits = visitRepository,
        _lists = listsRepository,
+       _places = placeRepository,
+       _stats = statsRepository,
        _follow = FollowStaleness(followEvents),
        _clock = clock ?? DateTime.now;
 
@@ -65,6 +72,10 @@ class ProfileViewModel extends SafeChangeNotifier {
   final ReviewRepository _reviews;
   final VisitRepository _visits;
   final ListsRepository? _lists;
+  final PlaceRepository? _places;
+  final ProfileStatsRepository? _stats;
+  Map<String, Place> places = const {};
+  ProfileTotals totals = const ProfileTotals();
   final FollowStaleness _follow;
   final DateTime Function() _clock;
 
@@ -77,6 +88,28 @@ class ProfileViewModel extends SafeChangeNotifier {
   ProfileState get state => _state;
 
   UserProfile? _profile;
+  String get username => _profile?.username ?? '';
+  String get bio => _profile?.bio ?? '';
+  String get instagram => _profile?.instagram ?? '';
+  String get city => _profile?.city ?? '';
+
+  Future<void> _loadExtra(int seq) async {
+    try {
+      final results = await Future.wait<Object?>([
+        _places
+                ?.getPlaces(_reviewList.map((r) => r.placeId))
+                .timeout(const Duration(seconds: 10)) ??
+            Future.value(null),
+        _stats?.totals(uid) ?? Future.value(null),
+      ]);
+      if (isDisposed || seq != _seq) return;
+      places = results[0] as Map<String, Place>? ?? const {};
+      totals = results[1] as ProfileTotals? ?? const ProfileTotals();
+      notifyListeners();
+    } on Object {
+      /* O perfil continua disponível sem os dados opcionais. */
+    }
+  }
 
   /// Nome no título ("Você" no próprio perfil; "Usuário" sem nome).
   String get title {
@@ -201,6 +234,7 @@ class ProfileViewModel extends SafeChangeNotifier {
           _following = (results[3]! as Set<String>).contains(uid);
         }
         _state = ProfileState.ready;
+        _loadExtra(seq);
         // As listas chegam depois, sem atrasar o perfil.
         _loadLists();
       }

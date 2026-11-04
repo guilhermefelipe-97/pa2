@@ -1,3 +1,4 @@
+import 'package:naarea/data/repositories/candidate_reviews_repository.dart';
 import 'package:naarea/data/repositories/dietary_repository.dart';
 import 'package:naarea/data/repositories/owner_repository.dart';
 import 'package:naarea/data/repositories/food_tag_repository.dart';
@@ -357,7 +358,28 @@ class FakeLocationService implements LocationService {
   }
 }
 
-class FakeReviewRepository implements ReviewRepository {
+class FakeReviewRepository
+    implements ReviewRepository, CandidateReviewsRepository {
+  final candidateFetches = <({List<String> places, List<String> authors})>[];
+  @override
+  Future<List<Review>> reviewsForCandidates(
+    List<String> placeIds,
+    List<String> authorIds, {
+    bool Function()? cancelled,
+  }) async {
+    candidateFetches.add((
+      places: List.of(placeIds),
+      authors: List.of(authorIds),
+    ));
+    if (fetchError != null) throw fetchError!;
+    if (cancelled?.call() ?? false) return [];
+    return stored
+        .where(
+          (r) => placeIds.contains(r.placeId) && authorIds.contains(r.authorId),
+        )
+        .toList();
+  }
+
   final List<Review> stored = [];
   final List<NewReview> created = [];
 
@@ -734,13 +756,18 @@ class FakeListsRepository implements ListsRepository {
     required String ownerUid,
     required String listId,
     required String copierUid,
+    required String copiedListId,
   }) async {
     writes.add('copy:$ownerUid/$listId:$copierUid');
     if (recordCopyError != null) throw recordCopyError!;
-    // Como as Rules (segue a dona, lista visível, uma por pessoa) e o
-    // repositório real: negado (inclusive a 2ª cópia) completa sem erro.
+    // A cópia precisa existir e manter o crédito original; uma por pessoa.
     final list = byUser[ownerUid]?[listId];
     final key = '$ownerUid/$listId';
+    final target = byUser[copierUid]?[copiedListId];
+    if (target?.copiedFrom?.uid != ownerUid ||
+        target?.copiedFrom?.listId != listId) {
+      throw StateError('Cópia sem comprovação');
+    }
     if (list == null ||
         !list.visible ||
         !_follows(copierUid, ownerUid) ||

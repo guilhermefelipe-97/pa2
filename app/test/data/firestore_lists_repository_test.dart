@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mock_exceptions/mock_exceptions.dart';
 import 'package:naarea/data/firebase/firestore_lists_repository.dart';
 import 'package:naarea/domain/models/place_list.dart';
 
@@ -261,44 +260,77 @@ void main() {
       },
     );
 
-    test('recordCopy / copyCount (um doc por pessoa, sem ler antes)', () async {
-      expect(await repo.copyCount(ownerUid: 'ana', listId: 'sabado'), 0);
-      await repo.recordCopy(ownerUid: 'ana', listId: 'sabado', copierUid: 'me');
-      await repo.recordCopy(
-        ownerUid: 'ana',
-        listId: 'sabado',
-        copierUid: 'bia',
-      );
-      final doc = await db.doc('users/ana/lists/sabado/copies/me').get();
-      expect(doc.data()!.keys.toSet(), {'createdAt'});
-      expect(doc.data()!['createdAt'], isA<Timestamp>());
-      expect(await repo.copyCount(ownerUid: 'ana', listId: 'sabado'), 2);
-      expect(await repo.copyCount(ownerUid: 'ana', listId: 'outra'), 0);
-    });
+    Future<void> copy(String uid, String source, {String id = 'copy'}) =>
+        db.doc('users/$uid/lists/$id').set({
+          'copiedFromUid': 'ana',
+          'copiedFromListId': source,
+          'createdAt': Timestamp.now(),
+        });
 
-    test('recordCopy: 2ª cópia negada pelas Rules (vira update) = já '
-        'registrada, sem erro; outro erro sobe', () async {
-      final ref = db.doc('users/ana/lists/sabado/copies/me');
-      whenCalling(Invocation.method(#set, null))
-          .on(ref)
-          .thenThrow(
-            FirebaseException(
-              plugin: 'cloud_firestore',
-              code: 'permission-denied',
-            ),
+    test(
+      'conta apenas cópias reais, uma por pessoa; repetição é idempotente',
+      () async {
+        for (final uid in ['me', 'bia']) {
+          await copy(uid, 'sabado');
+          await repo.recordCopy(
+            ownerUid: 'ana',
+            listId: 'sabado',
+            copierUid: uid,
+            copiedListId: 'copy',
           );
-      await repo.recordCopy(ownerUid: 'ana', listId: 'sabado', copierUid: 'me');
-      final other = db.doc('users/ana/lists/sabado/copies/bia');
-      whenCalling(Invocation.method(#set, null))
-          .on(other)
-          .thenThrow(
-            FirebaseException(plugin: 'cloud_firestore', code: 'unavailable'),
-          );
-      await expectLater(
-        repo.recordCopy(ownerUid: 'ana', listId: 'sabado', copierUid: 'bia'),
-        throwsA(isA<FirebaseException>()),
-      );
-    });
+        }
+        final before = (await db.doc('users/ana/lists/sabado/copies/me').get())
+            .data()!;
+        await repo.recordCopy(
+          ownerUid: 'ana',
+          listId: 'sabado',
+          copierUid: 'me',
+          copiedListId: 'copy',
+        );
+        expect(
+          (await db.doc('users/ana/lists/sabado/copies/me').get()).data(),
+          before,
+        );
+        expect(before.keys.toSet(), {'createdAt', 'copiedListId'});
+        expect(await repo.copyCount(ownerUid: 'ana', listId: 'sabado'), 2);
+        expect(await repo.copyCount(ownerUid: 'ana', listId: 'outra'), 0);
+      },
+    );
+
+    test(
+      'registro sem lista real ou de outra origem falha sem aumentar contador',
+      () async {
+        Future<void> record() => repo.recordCopy(
+          ownerUid: 'ana',
+          listId: 'sabado',
+          copierUid: 'me',
+          copiedListId: 'copy',
+        );
+        await expectLater(record(), throwsStateError);
+        await copy('me', 'outra');
+        await expectLater(record(), throwsStateError);
+        expect(await repo.copyCount(ownerUid: 'ana', listId: 'sabado'), 0);
+      },
+    );
+
+    test(
+      'recibo antigo só passa a contar com prova, preservando a data',
+      () async {
+        final at = Timestamp.fromDate(DateTime.utc(2026, 1, 1));
+        final ref = db.doc('users/ana/lists/sabado/copies/me');
+        await ref.set({'createdAt': at});
+        expect(await repo.copyCount(ownerUid: 'ana', listId: 'sabado'), 0);
+        await copy('me', 'sabado');
+        await repo.recordCopy(
+          ownerUid: 'ana',
+          listId: 'sabado',
+          copierUid: 'me',
+          copiedListId: 'copy',
+        );
+        expect((await ref.get()).data()!['createdAt'], at);
+        expect(await repo.copyCount(ownerUid: 'ana', listId: 'sabado'), 1);
+      },
+    );
 
     test('deleteList apaga a lista e o contador de cópias dela', () async {
       await repo.createList(
@@ -316,9 +348,21 @@ void main() {
         placeIds: [],
       );
       for (final u in ['me', 'bia', 'caio']) {
-        await repo.recordCopy(ownerUid: 'ana', listId: 'sabado', copierUid: u);
+        await copy(u, 'sabado');
+        await repo.recordCopy(
+          ownerUid: 'ana',
+          listId: 'sabado',
+          copierUid: u,
+          copiedListId: 'copy',
+        );
       }
-      await repo.recordCopy(ownerUid: 'ana', listId: 'outra', copierUid: 'me');
+      await copy('me', 'outra', id: 'other');
+      await repo.recordCopy(
+        ownerUid: 'ana',
+        listId: 'outra',
+        copierUid: 'me',
+        copiedListId: 'other',
+      );
       await repo.deleteList(uid: 'ana', listId: 'sabado');
       expect((await db.doc('users/ana/lists/sabado').get()).exists, isFalse);
       expect(

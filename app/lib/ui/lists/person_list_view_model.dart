@@ -193,28 +193,51 @@ class PersonListViewModel extends SafeChangeNotifier {
   Future<void> copy() async {
     final store = _store;
     final list = _list;
-    final author = _author;
-    if (!canCopy || store == null || list == null || author == null) return;
-    final total = {...list.placeIds}.length;
-    final shown = list.copyWith(placeIds: [for (final p in _placesList) p.id]);
-    final creation = store.copyFrom(shown, author);
-    if (creation == null) {
-      _notice = const CopyFailed();
-      notifyListeners();
+    final me = _auth.currentUserId;
+    if (!canCopy ||
+        store == null ||
+        list == null ||
+        _author == null ||
+        me == null) {
       return;
     }
     _copying = true;
     notifyListeners();
-    final ok = await creation.done;
-    _copying = false;
-    _notice = ok
-        ? CopyDone(
-            creation.id,
-            copied: store.listById(creation.id)?.placeIds.length ?? 0,
-            total: total,
-          )
-        : const CopyFailed();
-    notifyListeners();
+    try {
+      // Nomes são editáveis: o crédito de uma nova cópia usa o nome atual.
+      // Cópias anteriores mantêm o crédito histórico e o uid da autoria.
+      final author = await _users
+          .getProfile(ownerUid)
+          .timeout(const Duration(seconds: 10));
+      if (isDisposed || _auth.currentUserId != me) return;
+      if (author == null) throw StateError('Perfil indisponível');
+      _author = author;
+      final total = {...list.placeIds}.length;
+      final shown = list.copyWith(
+        placeIds: [for (final p in _placesList) p.id],
+      );
+      final creation = store.copyFrom(shown, author);
+      if (creation == null) {
+        _notice = const CopyFailed();
+        return;
+      }
+      final ok = await creation.done;
+      if (isDisposed || _auth.currentUserId != me) return;
+      _notice = ok
+          ? CopyDone(
+              creation.id,
+              copied: store.listById(creation.id)?.placeIds.length ?? 0,
+              total: total,
+            )
+          : const CopyFailed();
+    } on Object {
+      if (!isDisposed && _auth.currentUserId == me) {
+        _notice = const CopyFailed();
+      }
+    } finally {
+      _copying = false;
+      notifyListeners();
+    }
   }
 
   /// "Ver" da SnackBar: a aba "Quero ir" abre com a lista copiada.

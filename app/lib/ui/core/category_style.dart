@@ -33,13 +33,13 @@ IconData categoryIcon(String category) {
 }
 
 const _gradientPairs = [
-  [Color(0xFF342F2B), Color(0xFF62554A)],
-  [Color(0xFF663500), Color(0xFF904D00)],
-  [Color(0xFF00201D), Color(0xFF005049)],
-  [Color(0xFF1F1B17), Color(0xFF4D4540)],
+  [Color(0xFF173C34), Color(0xFF315F4D)],
+  [Color(0xFF4B5D37), Color(0xFF718358)],
+  [Color(0xFF3C4931), Color(0xFF825522)],
+  [Color(0xFF1D2B24), Color(0xFF526A50)],
 ];
 
-/// Gradiente do fallback da foto, estável por categoria (paleta pôr-do-sol).
+/// Gradiente do fallback da foto, estável por categoria (paleta floresta).
 LinearGradient categoryGradient(String category) {
   final pair =
       _gradientPairs[stableHash(_normalize(category)) % _gradientPairs.length];

@@ -501,7 +501,7 @@ class ListsStore extends ChangeNotifier {
           if (_autoSaved[id] == saves[id]!.token) _autoSaved.remove(id);
         }
         _notify();
-        unawaited(_recordCopy(source.id, authorUid, uid));
+        unawaited(_recordCopy(source.id, authorUid, uid, list.id));
         return true;
       } on Object {
         if (generation != _generation) return false;
@@ -520,14 +520,19 @@ class ListsStore extends ChangeNotifier {
   }
 
   /// Contador de cópias da autora: só a 1ª cópia de cada pessoa conta. O
-  /// registro vai direto (sem ler antes): a 2ª cópia é negada pelas Rules e
-  /// o repositório a trata como "já registrada".
-  Future<void> _recordCopy(String listId, String ownerUid, String uid) async {
+  /// repositório valida a lista salva e preserva um recibo já verificado.
+  Future<void> _recordCopy(
+    String listId,
+    String ownerUid,
+    String uid,
+    String copiedListId,
+  ) async {
     try {
       await _repo.recordCopy(
         ownerUid: ownerUid,
         listId: listId,
         copierUid: uid,
+        copiedListId: copiedListId,
       );
     } on Object catch (e) {
       // A cópia já está feita; só o contador da autora fica sem esta.

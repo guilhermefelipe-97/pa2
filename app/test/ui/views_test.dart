@@ -66,6 +66,17 @@ class _GatedReviewRepository extends FakeReviewRepository {
   }
 }
 
+Future<void> openDetailAverages(WidgetTester tester) async {
+  final title = find.text('Médias das avaliações exibidas');
+  await tester.scrollUntilVisible(
+    title,
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(title);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   ReviewViewModel reviewVm({ReviewRepository? reviews}) => ReviewViewModel(
     place: const Place(
@@ -117,9 +128,9 @@ void main() {
       ),
     );
     // Eixo sem nota: o mesmo "sem notas" das médias.
-    expect(find.text(noScoresLabel), findsNWidgets(3));
+    expect(find.text('Sem nota'), findsNWidgets(3));
 
-    final headerBefore = tester.getSize(header('🍽️ Comida'));
+    final headerBefore = tester.getSize(header('Comida & Bebida'));
     await tester.tap(find.byKey(const Key('axis-food-4')));
     await tester.pump();
     expect(vm.food, 4);
@@ -129,7 +140,7 @@ void main() {
     expect(clearVisible(tester, 'food'), isTrue);
     expect(find.text('4 de 5'), findsOneWidget);
     // Limpar aparece sem o cabeçalho mudar de tamanho.
-    expect(tester.getSize(header('🍽️ Comida')), headerBefore);
+    expect(tester.getSize(header('Comida & Bebida')), headerBefore);
 
     // Trocar de 4 para 2.
     await tester.tap(find.byKey(const Key('axis-food-2')));
@@ -207,7 +218,7 @@ void main() {
     );
     expect(
       tester
-          .widget<TextButton>(find.byKey(const Key('axis-food-clear')))
+          .widget<IconButton>(find.byKey(const Key('axis-food-clear')))
           .onPressed,
       isNull,
     );
@@ -405,41 +416,25 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Mangai'), findsOneWidget);
-      expect(find.text('Tirol · Restaurante'), findsOneWidget);
-      expect(find.text('Quem foi'), findsOneWidget);
-      // Beto (mais recente) primeiro, com os eixos dele; depois Ana.
+      expect(find.text('Tirol · Natal'), findsOneWidget);
+      expect(find.text('Restaurante'), findsOneWidget);
       expect(find.text('Beto'), findsOneWidget);
       expect(find.text('Ana'), findsOneWidget);
-      expect(find.text('você segue'), findsNWidgets(2));
-      Finder inRow(String uid, String text) => find.descendant(
-        of: find.byKey(ValueKey('trust-source-$uid')),
-        matching: find.text(text),
-      );
-      expect(inRow('b', 'Comida 4'), findsOneWidget);
-      expect(inRow('b', 'Ambiente 3'), findsOneWidget);
-      expect(inRow('b', 'Atendimento 5'), findsOneWidget);
-      expect(inRow('b', 'com amigos de manhã'), findsOneWidget);
-      expect(inRow('a', 'Comida 5'), findsOneWidget);
-      expect(inRow('a', 'Ambiente 2'), findsOneWidget);
-      expect(inRow('a', 'Atendimento 4'), findsOneWidget);
-      expect(inRow('a', 'no almoço'), findsOneWidget);
-      expect(find.text('há 2 h'), findsOneWidget);
-      expect(find.text('ontem'), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.text('Beto')).dy,
-        lessThan(tester.getTopLeft(find.text('Ana')).dy),
-      );
-      // sem média agregada no card
-      expect(find.textContaining('4,5'), findsNothing);
-      expect(find.textContaining('Média'), findsNothing);
+      final beto = tester
+          .widget<Semantics>(find.byKey(const ValueKey('trust-source-b')))
+          .properties
+          .label!;
+      final ana = tester
+          .widget<Semantics>(find.byKey(const ValueKey('trust-source-a')))
+          .properties
+          .label!;
+      expect(beto, contains('comida 4, ambiente 3, atendimento 5'));
+      expect(ana, contains('comida 5, ambiente 2, atendimento 4'));
+      expect(beto, contains('você segue'));
+      expect(find.text('3,8'), findsOneWidget);
       expect(find.textContaining('Carne de sol perfeita'), findsOneWidget);
-      expect(
-        find.text('— Beto · há 2 h'),
-        findsOneWidget,
-        reason: 'citação traz autor e tempo próprios',
-      );
-      // avatares com a inicial de quem foi
-      expect(find.text('B'), findsNWidgets(2));
+      expect(find.text('— Beto'), findsOneWidget);
+      expect(find.text('B'), findsOneWidget);
       expect(find.text('A'), findsOneWidget);
     },
   );
@@ -513,6 +508,7 @@ void main() {
     'PlaceDetailView: foto grande e todas as avaliações dos amigos no local',
     (tester) async {
       _tallPhone(tester);
+      final handle = tester.ensureSemantics();
       final item = groupActivitiesIntoFeed(
         [
           review(
@@ -545,20 +541,22 @@ void main() {
       expect(find.byType(PlacePhoto), findsOneWidget);
       expect(find.text('Mangai'), findsWidgets);
       // eixos por avaliação
-      expect(find.text('Comida 5'), findsOneWidget);
-      expect(find.text('Ambiente 2'), findsOneWidget);
-      expect(find.text('Atendimento 1'), findsOneWidget);
+      expect(find.bySemanticsLabel('Comida 5 de 5'), findsOneWidget);
+      expect(find.bySemanticsLabel('Ambiente 2 de 5'), findsOneWidget);
+      expect(find.bySemanticsLabel('Atendimento 1 de 5'), findsOneWidget);
       expect(find.text('Atendimento demorou'), findsOneWidget);
       expect(find.text('Noite · Família · há 3 dias'), findsOneWidget);
       expect(find.textContaining('há 5 min'), findsOneWidget);
       expect(find.text('Ana'), findsOneWidget);
       expect(find.text('Beto'), findsOneWidget);
+      await openDetailAverages(tester);
       // médias dos amigos: comida (5+3)/2, ambiente (2+4)/2, atendimento (4+1)/2
       expect(find.text('Comida 4'), findsOneWidget);
       expect(find.text('Ambiente 3'), findsOneWidget);
       expect(find.text('Atendimento 2,5'), findsOneWidget);
       expect(find.text('2 avaliações de amigos'), findsOneWidget);
       expect(find.text('Tirol · Restaurante · Natal'), findsOneWidget);
+      handle.dispose();
     },
   );
 
@@ -580,6 +578,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await openDetailAverages(tester);
     expect(find.text('Comida 4,5'), findsOneWidget);
     expect(
       find.bySemanticsLabel('Comida 4,5 de 5, 2 avaliações'),
@@ -622,6 +621,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await openDetailAverages(tester);
     // Comida (2+5)/2 nas 2; ambiente e atendimento só da antiga.
     expect(find.text('Comida 3,5'), findsOneWidget);
     expect(
@@ -824,7 +824,7 @@ void main() {
         ]),
       );
       expect(find.text('A'), findsOneWidget);
-      expect(find.text('B'), findsNWidgets(2));
+      expect(find.text('B'), findsOneWidget);
       expect(find.text('C'), findsOneWidget);
       expect(find.text('D'), findsNothing);
       expect(find.text('+1'), findsOneWidget);

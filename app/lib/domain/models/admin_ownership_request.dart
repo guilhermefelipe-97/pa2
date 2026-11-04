@@ -1,3 +1,5 @@
+import 'place.dart';
+
 class AdminOwnershipRequest {
   const AdminOwnershipRequest({
     required this.uid,
@@ -11,12 +13,14 @@ class AdminOwnershipRequest {
     this.decidedAt,
     this.ownerUid,
     this.available = true,
+    this.location,
   });
   final String uid, placeId, applicant, place, status;
   final DateTime createdAt;
   final String? reason, operator, ownerUid;
   final DateTime? decidedAt;
   final bool available;
+  final Place? location;
 }
 
 class AdminRequestPage {

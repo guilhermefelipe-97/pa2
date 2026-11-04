@@ -9,11 +9,13 @@ import '../../data/services/location_service.dart';
 import '../../data/repositories/place_repository.dart';
 import '../../domain/models/place.dart';
 import '../../domain/queue_status.dart';
+import '../../domain/relative_time.dart';
 import '../core/app_clock.dart';
 
 class QueueSection extends StatelessWidget {
-  const QueueSection({super.key, required this.place});
+  const QueueSection({super.key, required this.place, this.compact = false});
   final Place place;
+  final bool compact;
   @override
   Widget build(BuildContext context) {
     final repo = context.read<QueueRepository?>();
@@ -25,6 +27,7 @@ class QueueSection extends StatelessWidget {
       repo: repo,
       uid: uid,
       place: place,
+      compact: compact,
     );
   }
 }
@@ -35,10 +38,12 @@ class _Queue extends StatefulWidget {
     required this.repo,
     required this.uid,
     required this.place,
+    required this.compact,
   });
   final QueueRepository repo;
   final String uid;
   final Place place;
+  final bool compact;
   @override
   State<_Queue> createState() => _QueueState();
 }
@@ -226,7 +231,7 @@ class _QueueState extends State<_Queue> {
     final at = now();
     final live = liveQueue(reports ?? [], at);
     final history = historicalQueue(reports ?? [], at);
-    return Column(
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 16),
@@ -273,6 +278,47 @@ class _QueueState extends State<_Queue> {
         ),
         if (notice != null) Text(notice!),
       ],
+    );
+    if (!widget.compact) return content;
+    final estimate = live ?? history;
+    String duration(double value) => value.round().toString();
+    final range = estimate == null
+        ? null
+        : estimate.p25 == estimate.p75
+        ? duration(estimate.median)
+        : '${duration(estimate.p25!)}–${duration(estimate.p75!)}';
+    return Card(
+      margin: const EdgeInsets.only(top: 16),
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      child: ExpansionTile(
+        key: const Key('place-queue-summary'),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        leading: Icon(
+          Icons.schedule,
+          color: Theme.of(context).colorScheme.secondary,
+        ),
+        title: Text(
+          range == null
+              ? 'Fila estimada: sem dados recentes'
+              : 'Fila estimada: $range min',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          error != null
+              ? 'Não foi possível atualizar a fila'
+              : loading && reports == null
+              ? 'Carregando relatos…'
+              : estimate == null
+              ? 'Toque para informar uma espera'
+              : '${live == null ? 'Histórico' : 'Atualizado'} ${relativeTime(estimate.latest, at)} · ${estimate.count} pessoa${estimate.count == 1 ? '' : 's'}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [content],
+      ),
     );
   }
 }

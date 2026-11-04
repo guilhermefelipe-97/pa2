@@ -13,6 +13,10 @@ abstract class AdminOwnershipRepository {
   });
 }
 
+abstract class AdminHistoryRepository {
+  Future<AdminRequestPage> decided({Object? cursor});
+}
+
 class AdminConflict implements Exception {
   const AdminConflict();
 }

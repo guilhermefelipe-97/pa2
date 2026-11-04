@@ -137,7 +137,10 @@ class FirestoreListsRepository implements ListsRepository {
     required String ownerUid,
     required String listId,
   }) async {
-    final snap = await _copies(ownerUid, listId).count().get();
+    final snap = await _copies(
+      ownerUid,
+      listId,
+    ).where('copiedListId', isGreaterThan: '').count().get();
     return snap.count ?? 0;
   }
 
@@ -146,18 +149,34 @@ class FirestoreListsRepository implements ListsRepository {
     required String ownerUid,
     required String listId,
     required String copierUid,
+    required String copiedListId,
   }) async {
-    // Direto, sem ler antes: offline a escrita entra na fila do SDK e
-    // sincroniza depois. Já registrada (2ª cópia), o set vira update e as
-    // Rules negam: é o "uma por pessoa", não um erro.
-    try {
-      await _copies(
-        ownerUid,
-        listId,
-      ).doc(copierUid).set({'createdAt': FieldValue.serverTimestamp()});
-    } on FirebaseException catch (e) {
-      if (e.code != 'permission-denied') rethrow;
+    if (!RegExp(r'^[^/]{1,128}$').hasMatch(copiedListId) ||
+        ownerUid == copierUid) {
+      throw ArgumentError('Cópia inválida');
     }
+    final receipt = _copies(ownerUid, listId).doc(copierUid);
+    final target = _lists(copierUid).doc(copiedListId);
+    await _db
+        .runTransaction((tx) async {
+          final previous = await tx.get(receipt);
+          if (previous.data()?['copiedListId'] is String) return;
+          final copy = await tx.get(target);
+          if (!copy.exists ||
+              copy.data()?['copiedFromUid'] != ownerUid ||
+              copy.data()?['copiedFromListId'] != listId) {
+            throw StateError('A lista copiada não existe ou tem outra origem.');
+          }
+          if (previous.exists) {
+            tx.update(receipt, {'copiedListId': copiedListId});
+          } else {
+            tx.set(receipt, {
+              'createdAt': FieldValue.serverTimestamp(),
+              'copiedListId': copiedListId,
+            });
+          }
+        })
+        .timeout(const Duration(seconds: 15));
   }
 
   @override

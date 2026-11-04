@@ -10,6 +10,7 @@ import '../../domain/photo_compression.dart';
 import '../../domain/price_band.dart';
 import '../../domain/food_tags.dart';
 import '../repositories/food_tag_repository.dart';
+import '../repositories/candidate_reviews_repository.dart';
 import 'firestore_owner_repository.dart';
 import '../activity_batch.dart';
 import '../repositories/public_activity_repository.dart';
@@ -22,6 +23,7 @@ import 'place_doc.dart';
 class FirestoreReviewRepository
     implements
         ReviewRepository,
+        CandidateReviewsRepository,
         FoodTagRepository,
         PublicActivityRepository<Review> {
   FirestoreReviewRepository(
@@ -257,6 +259,61 @@ class FirestoreReviewRepository
     String placeId,
     List<String> authorIds,
   ) => queries.fetchForPlace(_reviews, placeId, authorIds, fromDoc: fromDoc);
+
+  @override
+  Future<List<Review>> reviewsForCandidates(
+    List<String> placeIds,
+    List<String> authorIds, {
+    bool Function()? cancelled,
+  }) async {
+    final places = placeIds.toSet().toList(),
+        authors = authorIds.toSet().toList();
+    if (places.isEmpty || authors.isEmpty) return [];
+    final jobs = [
+      for (final group in chunked(authors, whereInLimit))
+        for (final ids in chunked(places, whereInLimit ~/ group.length))
+          (authors: group, places: ids),
+    ];
+    var next = 0;
+    final result = <String, Review>{};
+    var failed = false;
+    bool stopped() => failed || (cancelled?.call() ?? false);
+    Future<void> worker() async {
+      while (!stopped() && next < jobs.length) {
+        final job = jobs[next++];
+        final query = _reviews
+            .where('placeId', whereIn: job.places)
+            .where('authorId', whereIn: job.authors)
+            .orderBy('createdAt', descending: true)
+            .orderBy(FieldPath.documentId, descending: true);
+        QueryDocumentSnapshot<Map<String, dynamic>>? cursor;
+        while (!stopped()) {
+          final page =
+              await (cursor == null ? query : query.startAfterDocument(cursor))
+                  .limit(100)
+                  .get(const GetOptions(source: Source.server))
+                  .timeout(const Duration(seconds: 10));
+          if (stopped()) return;
+          for (final doc in page.docs) {
+            final review = fromDoc(doc);
+            if (review != null) result[review.id] = review;
+          }
+          if (page.docs.length < 100) break;
+          cursor = page.docs.last;
+        }
+      }
+    }
+
+    try {
+      await Future.wait([
+        for (var i = 0; i < jobs.length && i < 4; i++) worker(),
+      ], eagerError: true);
+    } on Object {
+      failed = true;
+      rethrow;
+    }
+    return stopped() ? [] : result.values.toList();
+  }
 
   @override
   Future<Map<String, Map<String, int>>> confirmedFor(

@@ -161,9 +161,16 @@ void main() {
       );
       await tester.tap(find.text('Abrir'));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('Salvar preferências'), 180);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('food-filter-vegetariano')),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(tester.takeException(), isNull);
-      await tester.tap(find.text('Salvar preferências'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('food-filter-vegetariano')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('food-filter-apply')));
       await tester.pump();
       Navigator.of(tester.element(find.byType(DietaryView))).pop();
       await tester.pumpAndSettle();
@@ -298,9 +305,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Solicitar titularidade'));
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.text('Este estabelecimento é seu? Solicitar titularidade'),
-      );
+      await tester.tap(find.byKey(const Key('ownership-request-submit')));
       await tester.pump();
       expect(places.persistCalls, ['me:osm-n42']);
       expect(owners.requests, isEmpty);
@@ -337,8 +342,10 @@ void main() {
       await tester.scrollUntilVisible(
         find.widgetWithText(FilterChip, 'vegano'),
         200,
+        scrollable: find.byType(Scrollable).first,
       );
       await tester.ensureVisible(find.widgetWithText(FilterChip, 'vegano'));
+      await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilterChip, 'vegano'));
       await tester.pump();
@@ -371,7 +378,7 @@ void main() {
         reviews: reviews,
         places: [place()],
       );
-      expect(find.text('vegano · 3 pessoas da comunidade'), findsOneWidget);
+      expect(find.text('vegano · 3 pessoas da comunidade'), findsNothing);
       app.router.go(Routes.placeDetail('p1'));
       await tester.pumpAndSettle();
       expect(find.text('vegano · 3 pessoas da comunidade'), findsOneWidget);

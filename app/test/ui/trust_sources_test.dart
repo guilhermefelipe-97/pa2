@@ -4,7 +4,7 @@ import 'package:naarea/domain/feed.dart';
 import 'package:naarea/domain/models/companion.dart';
 import 'package:naarea/domain/models/day_period.dart';
 import 'package:naarea/domain/models/scores.dart';
-import 'package:naarea/ui/feed/widgets/feed_card.dart';
+
 import 'package:naarea/ui/feed/widgets/trust_sources.dart';
 
 import '../support/builders.dart';
@@ -181,7 +181,7 @@ void main() {
     ) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
-        _host(FeedCard(item: _fourPeople(), now: _now, onTap: () {})),
+        _host(TrustSources(item: _fourPeople(), now: _now, onShowAll: () {})),
       );
       final node = tester.getSemantics(
         find.bySemanticsLabel('Ver as 2 outras pessoas'),
@@ -198,7 +198,13 @@ void main() {
       addTearDown(tester.view.reset);
       var opened = 0;
       await tester.pumpWidget(
-        _host(FeedCard(item: _fourPeople(), now: _now, onTap: () => opened++)),
+        _host(
+          TrustSources(
+            item: _fourPeople(),
+            now: _now,
+            onShowAll: () => opened++,
+          ),
+        ),
       );
       await tester.tap(find.text('+2 pessoas'));
       expect(opened, 1);
@@ -293,7 +299,7 @@ void main() {
             child: Scaffold(
               body: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
-                child: FeedCard(
+                child: TrustSources(
                   item: item,
                   now: _now,
                   isFollowing: (_) => true,
@@ -325,10 +331,10 @@ void main() {
         ).single;
         await tester.pumpWidget(
           _host(
-            FeedCard(
+            TrustSources(
               item: item,
               now: _now,
-              onTap: () {},
+              onShowAll: () {},
               isFollowing: (_) => true,
               onOpenPerson: (_) {},
             ),
@@ -341,8 +347,6 @@ void main() {
           ),
         );
         expect(node, containsSemantics(isButton: true, hasTapAction: true));
-        // O card continua um botão "Abrir Mangai" à parte.
-        expect(find.bySemanticsLabel(RegExp('^Abrir Mangai')), findsOneWidget);
         handle.dispose();
       },
     );
@@ -368,7 +372,7 @@ void main() {
       sourceSemanticsLabel(item.sources.single, following: false, now: _now),
       'Ana, comida 4, de manhã, há 2 horas',
     );
-    await tester.pumpWidget(_host(FeedCard(item: item, now: _now)));
+    await tester.pumpWidget(_host(TrustSources(item: item, now: _now)));
     final row = find.byKey(const ValueKey('trust-source-ana'));
     expect(_pill('Comida 4', within: row), findsOneWidget);
     expect(find.textContaining('✨'), findsNothing);
@@ -392,7 +396,7 @@ void main() {
         ],
         places: {'mangai': place(id: 'mangai', name: 'Mangai')},
       ).single;
-      await tester.pumpWidget(_host(FeedCard(item: item, now: _now)));
+      await tester.pumpWidget(_host(TrustSources(item: item, now: _now)));
       expect(_pill('Ambiente 5'), findsOneWidget);
       expect(find.textContaining('🍽️'), findsNothing);
       expect(find.textContaining('🤝'), findsNothing);
@@ -415,7 +419,7 @@ void main() {
     ).single;
     await tester.pumpWidget(
       _host(
-        FeedCard(item: item, now: _now, isFollowing: (uid) => uid == 'ana'),
+        TrustSources(item: item, now: _now, isFollowing: (uid) => uid == 'ana'),
       ),
     );
     final row = find.byKey(const ValueKey('trust-source-ana'));

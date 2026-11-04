@@ -204,9 +204,17 @@ void main() {
     ]);
     expect(view.viewModel.suggestion?.item.place.id, 'near');
     expect(find.byType(SponsoredCard), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('nearby-suggestion')),
+      200,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('nearby-list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
     expect(find.byKey(const Key('nearby-suggestion')), findsOneWidget);
     expect(
-      find.text(
+      find.byTooltip(
         'Os destaques não seguem o raio escolhido nem o filtro Aberto agora.',
       ),
       findsOneWidget,
@@ -215,17 +223,21 @@ void main() {
       of: find.byKey(const Key('nearby-list')),
       matching: find.byType(Scrollable),
     );
+    final tiles = <String>[];
     for (final id in ['near', 'middle', 'far']) {
       await tester.scrollUntilVisible(
         find.byKey(ValueKey('nearby-$id')),
         100,
         scrollable: scroll,
       );
+      tiles.add(
+        tester
+            .widget<NearbyTile>(find.byKey(ValueKey('nearby-$id')))
+            .item
+            .place
+            .id,
+      );
     }
-    final tiles = tester
-        .widgetList<NearbyTile>(find.byType(NearbyTile))
-        .map((tile) => tile.item.place.id)
-        .toList();
     expect(tiles, ['near', 'middle', 'far']);
     expect(find.byKey(const ValueKey('nearby-p')), findsNothing);
     await tester.pumpWidget(const SizedBox());
@@ -404,7 +416,11 @@ void main() {
         of: find.byType(SponsoredView),
         matching: find.byType(Scrollable),
       );
-      await tester.drag(catalogScroll, const Offset(0, -1300));
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('sponsored-slot-s-11')),
+        300,
+        scrollable: catalogScroll,
+      );
       await tester.pumpAndSettle();
       final visibleIds = tester
           .widgetList<SponsoredCard>(find.byType(SponsoredCard))
@@ -471,6 +487,7 @@ void main() {
       await tester.tap(find.byTooltip('Configurações'));
       await tester.pumpAndSettle();
       expect(find.text('Patrocinado'), findsNothing);
+      await tester.scrollUntilVisible(find.text('Meus estabelecimentos'), 200);
       expect(find.text('Meus estabelecimentos'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     },
@@ -569,7 +586,9 @@ void main() {
       app.router.go('/meus-estabelecimentos');
       await tester.pumpAndSettle();
       expect(find.byType(OwnerView), findsOneWidget);
-      expect(find.text('Avaliações e respostas'), findsOneWidget);
+      expect(find.text('Responder'), findsOneWidget);
+      await tester.ensureVisible(find.text('Divulgação'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Divulgação'));
       await tester.pumpAndSettle();
       expect(
@@ -590,13 +609,13 @@ void main() {
       await tester.tap(find.byTooltip('Atualizar titularidade'));
       await tester.pumpAndSettle();
       expect(find.text('Divulgação'), findsNothing);
-      expect(find.text('Avaliações e respostas'), findsNothing);
+      expect(find.text('Responder'), findsNothing);
       owners.requests['me'] = [const OwnershipRequest('p', 'pending')];
       await tester.tap(find.byTooltip('Atualizar titularidade'));
       await tester.pumpAndSettle();
       expect(find.text('Divulgação'), findsNothing);
       expect(
-        find.text('Pedido pendente — sem poderes até a aprovação'),
+        find.text('Em análise'),
         findsOneWidget,
       );
     },
@@ -804,7 +823,7 @@ void main() {
           child: const MaterialApp(
             home: Scaffold(
               body: SingleChildScrollView(
-                child: QueueSection(place: discovered),
+                child: QueueSection(place: discovered, compact: true),
               ),
             ),
           ),
@@ -821,6 +840,8 @@ void main() {
           createdAt: at,
         ),
       );
+      await tester.tap(find.byKey(const Key('place-queue-summary')));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Atualizar fila'));
       await tester.pumpAndSettle();
       expect(find.textContaining('mediana 30 min'), findsOneWidget);
@@ -858,7 +879,16 @@ void main() {
       )..setFood(4);
       await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: review)));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.byType(Switch), 200);
+      await tester.scrollUntilVisible(
+        find.byType(Switch),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(ReviewView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       expect(tester.widget<Switch>(find.byType(Switch)).value, true);
       expect(await review.submit(), true);
       expect(reviews.created.single.silent, true);

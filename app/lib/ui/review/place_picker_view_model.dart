@@ -33,6 +33,7 @@ class PlacePickerViewModel extends SafeChangeNotifier {
   /// Última posição conhecida para o viés (sem pedido do sistema). Só uma
   /// posição obtida fica guardada: sem ela, a próxima busca tenta de novo.
   LatLng? _near;
+  LatLng? get near => _near;
 
   Future<LatLng?> _bias() async {
     final known = _near;
@@ -40,7 +41,9 @@ class PlacePickerViewModel extends SafeChangeNotifier {
     final location = _location;
     if (location == null) return null;
     try {
-      return _near = await location.lastKnownPositionIfGranted();
+      _near = await location.lastKnownPositionIfGranted();
+      notifyListeners();
+      return _near;
     } on Object {
       return null;
     }
@@ -70,6 +73,7 @@ class PlacePickerViewModel extends SafeChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   String? _category;
+  static const filterOptions = ['Cafés & Padarias', 'Restaurantes', 'Bares'];
 
   /// Chip de categoria selecionado (null = todas).
   String? get selectedCategory => _category;
@@ -93,7 +97,26 @@ class PlacePickerViewModel extends SafeChangeNotifier {
     final c = _category;
     final base = _base;
     if (c == null) return base;
-    return base.where((p) => p.category == c).toList();
+    return base.where((p) {
+      final category = nameLower(p.category);
+      final cuisine = nameLower(p.cuisine ?? '');
+      return switch (c) {
+        'Cafés & Padarias' =>
+          category.contains('caf') ||
+              category.contains('padar') ||
+              category.contains('confeitar'),
+        'Restaurantes' =>
+          category.contains('restaurante') ||
+              category.contains('cozinha') ||
+              category.contains('bistro') ||
+              category.contains('bistrô'),
+        'Bares' =>
+          category.contains('bar') ||
+              category.contains('pub') ||
+              category.contains('boteco'),
+        _ => p.category == c || cuisine == c,
+      };
+    }).toList();
   }
 
   /// A busca devolveu o máximo de resultados: pode haver mais (refinar).

@@ -128,6 +128,8 @@ void main() {
 
     testWidgets('"Sair" fica na central de configurações', (tester) async {
       final app = await pumpApp(tester);
+      await tester.tap(_tab('Perfil'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Configurações'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.text('Sair'), 250);
@@ -194,6 +196,12 @@ void main() {
 
         expect(find.byType(PlaceDetailView), findsOneWidget);
         expect(find.text('Mangai'), findsWidgets);
+        await tester.scrollUntilVisible(
+          find.text('Ana'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
         expect(find.text('Ana'), findsOneWidget);
         expect(find.text('1 avaliação de amigo'), findsOneWidget);
       },
@@ -241,6 +249,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(PlaceDetailView), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Ana'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Ana'), findsOneWidget);
     });
 
@@ -262,6 +276,12 @@ void main() {
       await tester.pumpAndSettle();
       // push não reflete na URI do go_router (optionURLReflectsImperativeAPIs).
       expect(find.byType(PlaceDetailView), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Ana'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Ana'), findsOneWidget);
     });
   });
@@ -324,7 +344,7 @@ void main() {
 
         expect(find.byType(PlaceDetailView), findsOneWidget);
         expect(find.text('Você'), findsOneWidget);
-        expect(find.text('Avaliar de novo'), findsOneWidget);
+        expect(find.text('Avaliar'), findsOneWidget);
       },
     );
   });
@@ -402,6 +422,12 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(PlaceDetailView), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.text('Ana'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
         expect(find.text('Ana'), findsOneWidget);
         final marker = find.descendant(
           of: find.byType(PlaceDetailView),
@@ -493,7 +519,7 @@ void main() {
         expect(
           find.descendant(
             of: chip,
-            matching: find.text('🎉 Sábado com as meninas · 1'),
+            matching: find.text('Sábado com as meninas · 1'),
           ),
           findsOneWidget,
         );
@@ -589,8 +615,8 @@ void main() {
       (tester) async {
         await pumpAna(tester);
         expect(
-          find.descendant(of: anaCard(), matching: find.text('você segue')),
-          findsOneWidget,
+          tester.widget<Semantics>(anaCard()).properties.label,
+          contains('você segue'),
         );
 
         await tester.tap(
@@ -810,7 +836,7 @@ void main() {
         await tester.tap(_authorInTile('Você'));
         await tester.pumpAndSettle();
         expect(find.byType(ProfileView), findsOneWidget);
-        expect(find.text('Você'), findsWidgets);
+        expect(find.text('Eu'), findsWidgets);
         expect(find.byKey(const Key('profile-follow')), findsNothing);
         expect(find.text('Mangai'), findsOneWidget);
       },
@@ -836,17 +862,20 @@ void main() {
         );
         expect(find.byType(FeedView), findsOneWidget);
 
-        await tester.tap(find.byKey(const Key('feed-me')));
+        await tester.tap(_tab('Perfil'));
         await tester.pumpAndSettle();
         expect(find.byType(ProfileView), findsOneWidget);
         expect(
-          find.descendant(of: find.byType(AppBar), matching: find.text('Você')),
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text('Perfil do usuário'),
+          ),
           findsOneWidget,
         );
         expect(find.byKey(const Key('profile-follow')), findsNothing);
         expect(find.text('Mangai'), findsOneWidget);
 
-        await tester.pageBack();
+        await tester.tap(_tab('Amigos'));
         await tester.pumpAndSettle();
         expect(find.byType(FeedView), findsOneWidget);
         expect(

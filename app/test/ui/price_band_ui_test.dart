@@ -105,6 +105,7 @@ Future<void> _scrollTo(WidgetTester tester, Key key) async {
   );
   await tester.ensureVisible(target);
   await tester.pumpAndSettle();
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -309,8 +310,13 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: ReviewView(viewModel: vm)));
       await tester.pump();
       final chip = find.byKey(const Key('price-band-3'));
-      await tester.scrollUntilVisible(chip, 200);
+      await tester.scrollUntilVisible(
+        chip,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.ensureVisible(chip);
+      await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       await tester.tap(chip);
       await tester.pump();
@@ -329,6 +335,12 @@ void main() {
         clock: () => _today,
       );
       app.router.go(Routes.placeDetail('mangai'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('place-visit')),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('place-visit')));
       await tester.pumpAndSettle();
@@ -411,6 +423,7 @@ void main() {
       final visits = await openSheet(tester);
       final confirm = find.byKey(const Key('visit-confirm'));
       await tester.ensureVisible(confirm);
+      await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       final rect = tester.getRect(confirm);
       expect(rect.bottom, lessThanOrEqualTo(568));
@@ -504,6 +517,7 @@ void main() {
 
       final more = find.byKey(const Key('place-price-people-more'));
       await tester.ensureVisible(more);
+      await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       await tester.tap(more);
       await tester.pump();

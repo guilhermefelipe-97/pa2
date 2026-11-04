@@ -29,6 +29,9 @@ const {
   writeBatch,
   Bytes,
   getCountFromServer,
+  getAggregateFromServer,
+  count: aggregateCount,
+  sum: aggregateSum,
 } = require('firebase/firestore');
 
 const PROJECT_ID = 'demo-naarea';
@@ -83,6 +86,167 @@ beforeEach(async () => {
 });
 
 const alice = () => env.authenticatedContext('alice').firestore();
+
+describe('apresentação pública do estabelecimento', () => {
+  const value = (extra = {}) => ({description: 'Cozinha local.', hours: 'Terça a domingo, 12h–22h.', updatedBy: 'alice', updatedAt: serverTimestamp(), ...extra});
+  const grant = async (uid = 'alice') => env.withSecurityRulesDisabled(async ctx => {
+    await setDoc(doc(ctx.firestore(), 'placeOwners/camaroes'), {uid, verifiedAt: Timestamp.now()});
+  });
+  it('titular atual cria e atualiza; usuário autenticado lê', async () => {
+    await grant(); const ref = doc(alice(), 'placePresentations/camaroes');
+    await assertSucceeds(setDoc(ref, value()));
+    await assertSucceeds(setDoc(ref, value({description: '', hours: ''})));
+    await assertSucceeds(getDoc(doc(env.authenticatedContext('bob').firestore(), 'placePresentations/camaroes')));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'placePresentations/camaroes')));
+  });
+  it('pedido pendente e revogação não permitem editar', async () => {
+    await env.withSecurityRulesDisabled(async ctx => setDoc(doc(ctx.firestore(), 'users/alice/ownershipRequests/camaroes'), {status: 'pending'}));
+    const ref = doc(alice(), 'placePresentations/camaroes');
+    await assertFails(setDoc(ref, value()));
+    await grant(); await assertSucceeds(setDoc(ref, value()));
+    await grant('bob'); await assertFails(setDoc(ref, value({description: 'Não autorizado'})));
+  });
+  it('rejeita excesso, identidade forjada, timestamp falso, campos extras e exclusão', async () => {
+    await grant(); const ref = doc(alice(), 'placePresentations/camaroes');
+    for (const extra of [{description: 'x'.repeat(1001)}, {hours: 'x'.repeat(501)}, {description: 5}, {hours: null},
+      {updatedBy: 'bob'}, {updatedAt: Timestamp.fromMillis(0)}, {name: 'Outro nome'}, {promoted: true}]) {
+      await assertFails(setDoc(ref, value(extra)));
+    }
+    await assertSucceeds(setDoc(ref, value({description: 'x'.repeat(1000), hours: 'x'.repeat(500)})));
+    await assertFails(deleteDoc(ref));
+    await assertFails(setDoc(doc(alice(), 'placePresentations/inexistente'), value()));
+  });
+  it('agregações consideram mais de 20 avaliações, eixos parciais e respostas de titular anterior', async () => {
+    await env.withSecurityRulesDisabled(async ctx => {
+      const db = ctx.firestore(); const batch = writeBatch(db);
+      batch.delete(doc(db, 'reviews/existing'));
+      for (let i = 0; i < 27; i++) batch.set(doc(db, `reviews/painel-${i}`), {
+        placeId: 'camaroes', food: 5, ambience: i < 3 ? 3 : null, service: null,
+      });
+      for (let i = 0; i < 4; i++) batch.set(doc(db, `ownerReplies/painel-${i}`), {placeId: 'camaroes', authorId: 'titular-anterior'});
+      await batch.commit();
+    });
+    const db = alice();
+    const reviews = query(collection(db, 'reviews'), where('placeId', '==', 'camaroes'));
+    const total = (await assertSucceeds(getCountFromServer(reviews))).data().count;
+    const replies = (await assertSucceeds(getCountFromServer(query(collection(db, 'ownerReplies'), where('placeId', '==', 'camaroes'))))).data().count;
+    if (total - replies !== 23) throw new Error('Pendências incorretas');
+    let notes = 0, samples = 0;
+    for (const axis of ['food', 'ambience', 'service']) {
+      const result = (await assertSucceeds(getAggregateFromServer(query(reviews, where(axis, '>', 0)), {samples: aggregateCount(), total: aggregateSum(axis)}))).data();
+      notes += result.total; samples += result.samples;
+    }
+    if (notes !== 144 || samples !== 30 || notes / samples !== 4.8) throw new Error('Média incorreta');
+  });
+});
+
+describe('edição do perfil e @usuário',()=>{
+  const claim=async(db,uid,handle,extra={})=>{
+    const batch=writeBatch(db);
+    batch.set(doc(db,`usernames/${handle}`),{uid});
+    batch.update(doc(db,`users/${uid}`),{username:handle,bio:'Cafés e viagens.',city:'Natal',...extra});
+    return batch.commit();
+  };
+  it('reserva @ e salva bio sem expor email ou senha no perfil público',async()=>{
+    await assertSucceeds(claim(alice(),'alice','alice.cafes'));
+    await assertFails(updateDoc(doc(alice(),'users/alice'),{email:'privado@exemplo.com'}));
+    await assertFails(updateDoc(doc(alice(),'users/alice'),{password:'segredo'}));
+    await assertSucceeds(getDoc(doc(bob(),'users/alice')));
+    await assertFails(updateDoc(doc(bob(),'users/alice'),{bio:'Alterado por outro usuário'}));
+  });
+  it('não rouba @ ocupado nem grava perfil sem reserva correspondente',async()=>{
+    await assertSucceeds(claim(alice(),'alice','alice.cafes'));
+    await assertFails(claim(bob(),'bob','alice.cafes'));
+    await assertFails(updateDoc(doc(bob(),'users/bob'),{username:'sem.reserva'}));
+    await assertFails(setDoc(doc(bob(),'usernames/orfao'),{uid:'bob'}));
+  });
+  it('troca @ liberando o anterior no mesmo lote e permite editar bio depois',async()=>{
+    const db=alice();
+    await assertSucceeds(claim(db,'alice','alice.cafes'));
+    await assertFails(claim(db,'alice','alice.viagens'));
+    const batch=writeBatch(db);
+    batch.set(doc(db,'usernames/alice.viagens'),{uid:'alice'});
+    batch.update(doc(db,'users/alice'),{username:'alice.viagens'});
+    batch.delete(doc(db,'usernames/alice.cafes'));
+    await assertSucceeds(batch.commit());
+    await assertSucceeds(updateDoc(doc(db,'users/alice'),{bio:'Nova bio.'}));
+    await assertFails(deleteDoc(doc(db,'usernames/alice.viagens')));
+  });
+  it('Instagram opcional só aceita usuário válido e edição pelo dono', async () => {
+    const ref = doc(alice(), 'users/alice');
+    await assertSucceeds(updateDoc(ref, {instagram: 'alice.cafes_97'}));
+    for (const instagram of ['https://instagram.com/alice', '@alice', 'x'.repeat(31), 123, null]) {
+      await assertFails(updateDoc(ref, {instagram}));
+    }
+    await assertFails(updateDoc(doc(bob(), 'users/alice'), {instagram: 'bob'}));
+    await assertSucceeds(updateDoc(ref, {instagram: ''}));
+  });
+  it('valida formato, bio, cidade e nomes',async()=>{
+    for(const handle of ['ab','AlicE','com espaço','x'.repeat(25)])await assertFails(claim(alice(),'alice',handle));
+    await assertFails(updateDoc(doc(alice(),'users/alice'),{bio:'x'.repeat(241)}));
+    await assertFails(updateDoc(doc(alice(),'users/alice'),{city:'x'.repeat(81)}));
+    await assertFails(updateDoc(doc(alice(),'users/alice'),{username:33}));
+  });
+  it('foto e capa públicas, alteráveis somente pelo dono e sem campos arbitrários',async()=>{
+    const jpeg=Bytes.fromUint8Array(new Uint8Array([255,216,255,217]));
+    const db=alice();
+    await assertSucceeds(setDoc(doc(db,'users/alice/media/avatar'),{jpeg}));
+    await assertSucceeds(setDoc(doc(db,'users/alice/media/cover'),{jpeg}));
+    await assertSucceeds(getDoc(doc(bob(),'users/alice/media/avatar')));
+    await assertFails(setDoc(doc(bob(),'users/alice/media/cover'),{jpeg}));
+    await assertFails(setDoc(doc(db,'users/alice/media/privado'),{jpeg}));
+    await assertFails(setDoc(doc(db,'users/alice/media/cover'),{jpeg,extra:true}));
+    await assertFails(setDoc(doc(db,'users/alice/media/cover'),{jpeg:Bytes.fromUint8Array(new Uint8Array(150001))}));
+    await assertSucceeds(deleteDoc(doc(db,'users/alice/media/cover')));
+  });
+});
+
+describe('galeria de capa do estabelecimento', () => {
+  const photo = (overrides = {}) => ({
+    authorId: 'alice', authorName: 'Alice', createdAt: serverTimestamp(),
+    jpeg: Bytes.fromUint8Array(new Uint8Array([255,216,255,217])), ...overrides,
+  });
+  it('salva várias fotos e permite ler a galeria autenticada', async () => {
+    const db = alice();
+    const batch = writeBatch(db);
+    batch.set(doc(db,'places/camaroes/photos/a'),photo());
+    batch.set(doc(db,'places/camaroes/photos/b'),photo());
+    await assertSucceeds(batch.commit());
+    const other = env.authenticatedContext('bob').firestore();
+    await assertSucceeds(getDocs(query(collection(other,'places/camaroes/photos'),orderBy('createdAt','desc'),limit(20))));
+  });
+  it('nega autoria e nome forjados, campos extras, data adulterada e lugar inexistente', async () => {
+    const db=alice();
+    for (const change of [{authorId:'bob'},{authorName:'Outro'}, {extra:true}, {createdAt:Timestamp.fromMillis(1)}]) {
+      await assertFails(setDoc(doc(db,'places/camaroes/photos/bad'),photo(change)));
+    }
+    await assertFails(setDoc(doc(db,'places/inexistente/photos/a'),photo()));
+  });
+  it('nega foto vazia, tamanho acima de 150000 bytes e leitura anônima', async () => {
+    const db=alice();
+    for (const length of [0,150001]) {
+      await assertFails(setDoc(doc(db,'places/camaroes/photos/bad'),photo({jpeg:Bytes.fromUint8Array(new Uint8Array(length))})));
+    }
+    await assertFails(getDocs(collection(env.unauthenticatedContext().firestore(),'places/camaroes/photos')));
+  });
+  it('somente a autora remove a foto e nenhuma conta a altera', async () => {
+    const db=alice();
+    await assertSucceeds(setDoc(doc(db,'places/camaroes/photos/a'),photo()));
+    await assertFails(updateDoc(doc(db,'places/camaroes/photos/a'),{authorName:'Alice 2'}));
+    const other=env.authenticatedContext('bob').firestore();
+    await assertFails(deleteDoc(doc(other,'places/camaroes/photos/a')));
+    await assertSucceeds(deleteDoc(doc(db,'places/camaroes/photos/a')));
+  });
+  it('um lote com foto inválida não grava parcialmente a galeria', async () => {
+    const db=alice();
+    const batch=writeBatch(db);
+    batch.set(doc(db,'places/camaroes/photos/a'),photo());
+    batch.set(doc(db,'places/camaroes/photos/b'),photo({authorId:'bob'}));
+    await assertFails(batch.commit());
+    const snap=await getDoc(doc(db,'places/camaroes/photos/a'));
+    require('node:assert/strict').equal(snap.exists(),false);
+  });
+});
 const bob = () => env.authenticatedContext('bob').firestore();
 const anon = () => env.unauthenticatedContext().firestore();
 
@@ -257,8 +421,9 @@ describe('users/{uid}', () => {
     await assertSucceeds(getDoc(doc(bob(), 'users/alice')));
   });
 
-  it('nome é imutável: nem o dono renomeia (authorName desnormalizado ficaria desatualizado)', async () => {
-    await assertFails(updateDoc(doc(alice(), 'users/alice'), { displayName: 'Alice S', displayNameLower: 'alice s' }));
+  it('dono renomeia o perfil; nomes históricos permanecem ligados ao mesmo uid', async () => {
+    await assertSucceeds(updateDoc(doc(alice(), 'users/alice'), { displayName: 'Alice S', displayNameLower: 'alice s' }));
+    require('node:assert/strict').equal((await getDoc(doc(alice(),'reviews/existing'))).data().authorName,'Alice');
     await assertFails(updateDoc(doc(alice(), 'users/alice'), { displayNameLower: 'outra' }));
     await assertFails(updateDoc(doc(alice(), 'users/alice'), { displayName: ' ', displayNameLower: ' ' }));
   });
@@ -678,19 +843,35 @@ describe('users/{uid}/lists/{listId}/copies/{copierUid} (F13: contador de cópia
     });
   }
 
+  async function actualCopy(copier = 'bob', id = 'copy', overrides = {}) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${copier}/lists/${id}`), {
+        name: 'Cópia', emoji: null, placeIds: ['camaroes'],
+        createdAt: Timestamp.fromMillis(2000), updatedAt: Timestamp.fromMillis(2000),
+        copiedFromUid: 'alice', copiedFromName: 'Alice', copiedFromListId: 'sabado',
+        ...overrides,
+      });
+    });
+  }
+  function receipt(overrides = {}) {
+    return { createdAt: serverTimestamp(), copiedListId: 'copy', ...overrides };
+  }
+
   it('seguidor registra a própria cópia de lista visível', async () => {
     await seedList();
+    await actualCopy();
     await follow('bob', 'alice');
-    await assertSucceeds(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await assertSucceeds(setDoc(doc(bob(), copyPath('bob')), receipt()));
   });
 
   it('uma por pessoa e imutável: 2º registro, update e delete de quem copiou negados', async () => {
     await seedList();
+    await actualCopy();
     await follow('bob', 'alice');
-    await assertSucceeds(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
-    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
-    await assertFails(updateDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
-    await assertFails(updateDoc(doc(alice(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await assertSucceeds(setDoc(doc(bob(), copyPath('bob')), receipt()));
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
+    await assertFails(updateDoc(doc(bob(), copyPath('bob')), receipt()));
+    await assertFails(updateDoc(doc(alice(), copyPath('bob')), receipt()));
     await assertFails(deleteDoc(doc(bob(), copyPath('bob'))));
     await assertFails(deleteDoc(doc(anon(), copyPath('bob'))));
   });
@@ -716,26 +897,28 @@ describe('users/{uid}/lists/{listId}/copies/{copierUid} (F13: contador de cópia
 
   it('quem não segue a dona, lista privada ou inexistente: negado', async () => {
     await seedList();
-    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await actualCopy();
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
     await follow('bob', 'alice');
     await seedList({ visible: false });
-    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
     await env.withSecurityRulesDisabled(async (ctx) => {
       await deleteDoc(doc(ctx.firestore(), LIST));
     });
-    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
   });
 
   it('forja: cópia em nome de outra pessoa, da própria dona, createdAt do cliente ou chave extra', async () => {
     await seedList();
+    await actualCopy();
     await follow('bob', 'alice');
     const carol = env.authenticatedContext('carol').firestore();
-    await assertFails(setDoc(doc(carol, copyPath('bob')), { createdAt: serverTimestamp() }));
-    await assertFails(setDoc(doc(alice(), copyPath('alice')), { createdAt: serverTimestamp() }));
-    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: Timestamp.now() }));
-    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp(), n: 1 }));
+    await assertFails(setDoc(doc(carol, copyPath('bob')), receipt()));
+    await assertFails(setDoc(doc(alice(), copyPath('alice')), receipt()));
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt({ createdAt: Timestamp.fromMillis(1) })));
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt({ n: 1 })));
     await assertFails(setDoc(doc(bob(), copyPath('bob')), {}));
-    await assertFails(setDoc(doc(anon(), copyPath('bob')), { createdAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(anon(), copyPath('bob')), receipt()));
   });
 
   it('a dona lê e conta todas as cópias; quem copiou lê só a própria', async () => {
@@ -749,6 +932,80 @@ describe('users/{uid}/lists/{listId}/copies/{copierUid} (F13: contador de cópia
     await assertFails(getDocs(collection(bob(), LIST + '/copies')));
     await assertFails(getCountFromServer(collection(bob(), LIST + '/copies')));
     await assertFails(getDoc(doc(anon(), copyPath('bob'))));
+  });
+  it('não conta só o recibo, lista inexistente, crédito errado ou lista sem crédito', async () => {
+    await seedList();
+    await follow('bob', 'alice');
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
+    await actualCopy('carol'); // a cópia precisa pertencer ao próprio solicitante
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
+    await actualCopy('bob', 'copy', { copiedFromListId: 'outra' });
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
+    await actualCopy('bob', 'copy', { copiedFromUid: 'carol' });
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
+    await actualCopy('bob', 'copy', { copiedFromUid: null, copiedFromListId: null });
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt()));
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), receipt({ copiedListId: 'x/y' })));
+    await assertFails(setDoc(doc(bob(), copyPath('bob')), { createdAt: serverTimestamp() }));
+  });
+
+  it('recibo pode nascer junto da cópia real no batch', async () => {
+    await seedList();
+    await follow('bob', 'alice');
+    const db = bob(), batch = writeBatch(db);
+    batch.set(doc(db, 'users/bob/lists/copy'), {
+      name: 'Sábado', emoji: null, placeIds: ['camaroes'],
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      copiedFromUid: 'alice', copiedFromName: 'Alice', copiedFromListId: 'sabado',
+    });
+    batch.set(doc(db, copyPath('bob')), receipt());
+    await assertSucceeds(batch.commit());
+  });
+
+  it('legado só conta após comprovar cópia; mantém data e não pode trocar prova', async () => {
+    await seedList();
+    await follow('bob', 'alice');
+    await seedCopy('bob');
+    const ref = doc(bob(), copyPath('bob'));
+    const at = (await getDoc(ref)).data().createdAt;
+    const verified = () => getCountFromServer(query(collection(alice(), LIST + '/copies'), where('copiedListId', '>', '')));
+    if ((await verified()).data().count !== 0) throw new Error('Legado sem prova contado');
+    await assertFails(updateDoc(ref, { copiedListId: 'copy' }));
+    await actualCopy();
+    await assertFails(updateDoc(ref, { copiedListId: 'copy', createdAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(ref, { copiedListId: 'copy' }));
+    const after = (await getDoc(ref)).data();
+    if (!after.createdAt.isEqual(at)) throw new Error('Data alterada');
+    if ((await verified()).data().count !== 1) throw new Error('Cópia válida não contada');
+    await actualCopy('bob', 'other');
+    await assertFails(updateDoc(ref, { copiedListId: 'other' }));
+  });
+
+});
+
+describe('migração dos recibos de cópia', () => {
+  it('simula por padrão, preserva datas, deixa sem prova intacto e é idempotente', async () => {
+    const { initializeApp, deleteApp } = require('firebase-admin/app');
+    const { getFirestore, Timestamp: AdminTimestamp } = require('firebase-admin/firestore');
+    const { backfillCopyReceipts } = require('../seed/backfill-copy-receipts');
+    const app = initializeApp({ projectId: PROJECT_ID }, 'copy-migration-test');
+    try {
+      const db = getFirestore(app), at = AdminTimestamp.fromMillis(1234);
+      const valid = db.doc('users/alice/lists/sabado/copies/bob');
+      const invalid = db.doc('users/alice/lists/sabado/copies/carol');
+      await valid.set({ createdAt: at });
+      await invalid.set({ createdAt: at });
+      await db.doc('users/bob/lists/real').set({ copiedFromUid: 'alice', copiedFromListId: 'sabado', createdAt: at });
+      const options = { db, log: () => {} };
+      const dry = await backfillCopyReceipts(options);
+      if (dry.verified !== 1 || dry.unverified !== 1 || (await valid.get()).data().copiedListId) throw new Error('Simulação alterou dados');
+      await backfillCopyReceipts({ ...options, apply: true });
+      const data = (await valid.get()).data();
+      if (data.copiedListId !== 'real' || !data.createdAt.isEqual(at)) throw new Error('Prova ou data incorreta');
+      if (Object.keys((await invalid.get()).data()).length !== 1) throw new Error('Legado sem prova alterado');
+      const again = await backfillCopyReceipts({ ...options, apply: true });
+      if (again.verified !== 0 || again.unchanged !== 1) throw new Error('Não idempotente');
+    } finally { await deleteApp(app); }
   });
 });
 

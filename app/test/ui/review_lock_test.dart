@@ -384,7 +384,12 @@ void main() {
       expect(find.text('Nenhum amigo avaliou ainda'), findsNothing);
       expect(find.byKey(const Key('place-review-locked')), findsOneWidget);
       expect(find.text(_againText), findsOneWidget);
-      expect(find.byKey(const Key('place-review')), findsNothing);
+      expect(
+        tester
+            .widget<ButtonStyleButton>(find.byKey(const Key('place-review')))
+            .onPressed,
+        isNull,
+      );
     });
 
     testWidgets(
@@ -442,7 +447,12 @@ void main() {
 
         // De volta ao detalhe: o CTA "Avaliar de novo" vira texto.
         expect(find.byType(PlaceDetailView), findsOneWidget);
-        expect(find.byKey(const Key('place-review')), findsNothing);
+        expect(
+          tester
+              .widget<ButtonStyleButton>(find.byKey(const Key('place-review')))
+              .onPressed,
+          isNull,
+        );
         expect(find.text(_againText), findsOneWidget);
 
         // Mesmo abrindo a avaliação direto, não há formulário de notas.

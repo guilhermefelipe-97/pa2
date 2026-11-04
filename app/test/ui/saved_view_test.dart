@@ -99,9 +99,9 @@ void main() {
     ];
     expect(names, ['Mangai', 'Beco da Lama', 'Camarões']);
     expect(find.text('Tirol · Restaurante'), findsOneWidget);
-    expect(find.text('salvo há 2 h'), findsOneWidget);
-    expect(find.text('salvo ontem'), findsOneWidget);
-    expect(find.text('salvo em 01/09'), findsOneWidget);
+    expect(find.byTooltip('salvo há 2 h'), findsOneWidget);
+    expect(find.byTooltip('salvo ontem'), findsOneWidget);
+    expect(find.byTooltip('salvo em 01/09'), findsOneWidget);
     expect(find.byKey(const Key('place-photo-fallback')), findsNWidgets(3));
   });
 
@@ -176,7 +176,7 @@ void main() {
     await tester.pumpAndSettle();
     final first = tester.widget<SavedCard>(find.byType(SavedCard).first);
     expect(first.item.place.id, 'a');
-    expect(find.text('salvo agora'), findsOneWidget);
+    expect(find.byTooltip('salvo agora'), findsOneWidget);
     expect(s.repo.listCalls, listCalls);
   });
 
@@ -223,7 +223,7 @@ void main() {
       s.places.places.add(place(id: 'novo', name: 'Recém-importado'));
       repo.seed('me', 'a', DateTime.utc(2026, 9, 28, 13));
       await tester.fling(
-        find.byType(SingleChildScrollView),
+        find.byType(SingleChildScrollView).last,
         const Offset(0, 400),
         1000,
       );

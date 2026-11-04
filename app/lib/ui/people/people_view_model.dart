@@ -33,6 +33,40 @@ class PeopleViewModel extends SafeChangeNotifier {
   List<UserProfile> get results => _results;
 
   final Set<String> _following = {};
+  int get followingCount => _following.length;
+  List<UserProfile> _followingProfiles = const [];
+  List<UserProfile> get followingProfiles => _followingProfiles;
+  bool loadingFollowing = false;
+  int _profilesSeq = 0;
+  Future<void> loadFollowingProfiles() async {
+    final uid = _auth.currentUserId;
+    if (uid == null || loadingFollowing) return;
+    final seq = ++_profilesSeq;
+    loadingFollowing = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final profiles = await Future.wait(
+        _following.take(50).map(_users.getProfile),
+      );
+      if (seq != _profilesSeq || _auth.currentUserId != uid || isDisposed) {
+        return;
+      }
+      _followingProfiles = profiles.whereType<UserProfile>().toList()
+        ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    } on Object {
+      if (seq == _profilesSeq) {
+        _errorMessage =
+            'Não foi possível carregar as pessoas. Tente novamente.';
+      }
+    } finally {
+      if (seq == _profilesSeq) {
+        loadingFollowing = false;
+        notifyListeners();
+      }
+    }
+  }
+
   bool isFollowing(String uid) => _following.contains(uid);
 
   /// Mudanças locais (seguir = true / deixar = false) feitas depois que a
@@ -80,6 +114,7 @@ class PeopleViewModel extends SafeChangeNotifier {
       _initState = PeopleInitState.error;
     }
     notifyListeners();
+    if (isReady && _followingProfiles.isNotEmpty) await loadFollowingProfiles();
   }
 
   void _reconcile(Set<String> fetched) {

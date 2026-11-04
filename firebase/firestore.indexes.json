@@ -1,6 +1,22 @@
 {
   "indexes": [
     {
+      "collectionGroup": "ownershipRequests", "queryScope": "COLLECTION_GROUP",
+      "fields": [{"fieldPath": "status", "order": "ASCENDING"}, {"fieldPath": "decidedAt", "order": "DESCENDING"}]
+    },
+    {
+      "collectionGroup": "reviews", "queryScope": "COLLECTION",
+      "fields": [{"fieldPath": "placeId", "order": "ASCENDING"}, {"fieldPath": "food", "order": "ASCENDING"}]
+    },
+    {
+      "collectionGroup": "reviews", "queryScope": "COLLECTION",
+      "fields": [{"fieldPath": "placeId", "order": "ASCENDING"}, {"fieldPath": "ambience", "order": "ASCENDING"}]
+    },
+    {
+      "collectionGroup": "reviews", "queryScope": "COLLECTION",
+      "fields": [{"fieldPath": "placeId", "order": "ASCENDING"}, {"fieldPath": "service", "order": "ASCENDING"}]
+    },
+    {
       "collectionGroup": "ownershipRequests",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

@@ -212,6 +212,9 @@ void main() {
 
   group('ProfileView', () {
     Future<ProfileViewModel> pump(WidgetTester tester, String uid) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       final vm = vmFor(uid);
       final router = GoRouter(
         initialLocation: '/p',
@@ -240,7 +243,13 @@ void main() {
       expect(find.widgetWithText(OutlinedButton, 'Seguindo'), findsOneWidget);
       expect(find.text('Mangai'), findsOneWidget);
       expect(find.text('Camarões'), findsOneWidget);
-      expect(find.text('Comida 5'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('profile-review-new')),
+          matching: find.text('5,0'),
+        ),
+        findsOneWidget,
+      );
       expect(
         tester.getTopLeft(find.text('Mangai')).dy,
         lessThan(tester.getTopLeft(find.text('Camarões')).dy),
@@ -260,7 +269,7 @@ void main() {
         find.bySemanticsLabel(RegExp('^Abrir Mangai')),
       );
       expect(tile, containsSemantics(isButton: true, hasTapAction: true));
-      expect(tile.label, contains('Comida 5 de 5'), reason: 'item inteiro');
+      expect(find.bySemanticsLabel('Comida 5 de 5'), findsOneWidget);
       handle.dispose();
     });
 
@@ -307,7 +316,7 @@ void main() {
       tester,
     ) async {
       await pump(tester, 'me');
-      expect(find.text('Você'), findsWidgets);
+      expect(find.text('Bianca'), findsOneWidget);
       expect(find.byKey(const Key('profile-follow')), findsNothing);
     });
 

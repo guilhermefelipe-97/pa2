@@ -184,7 +184,9 @@ class SavedViewModel extends SafeChangeNotifier {
 
   /// "Tentar de novo" e puxar para atualizar: relê os salvos e revalida os
   /// locais dados como ausentes.
+  int revision = 0;
   Future<void> refresh() async {
+    revision++;
     _failedIds.clear();
     _revalidate.addAll([
       for (final e in _resolved.entries)

@@ -27,11 +27,15 @@ class SaveButton extends StatelessWidget {
     required this.placeId,
     this.style = SaveButtonStyle.plain,
     this.showLabel = false,
+    this.prominent = false,
+    this.compact = false,
   });
 
   final String placeId;
   final SaveButtonStyle style;
   final bool showLabel;
+  final bool prominent;
+  final bool compact;
 
   static const savedMessage = 'Salvo em Quero ir';
   static const removedMessage = 'Removido de Quero ir';
@@ -49,12 +53,16 @@ class SaveButton extends StatelessWidget {
     final label = saved ? removeLabel : saveLabel;
     final scheme = Theme.of(context).colorScheme;
 
-    final Color color = switch (style) {
-      SaveButtonStyle.onImage => saved ? scheme.primary : scheme.onSurface,
-      SaveButtonStyle.onAppBar =>
-        IconTheme.of(context).color ?? scheme.onPrimary,
-      SaveButtonStyle.plain => saved ? scheme.primary : scheme.onSurfaceVariant,
-    };
+    final Color color = prominent
+        ? scheme.onPrimary
+        : switch (style) {
+            SaveButtonStyle.onImage =>
+              saved ? scheme.primary : scheme.onSurface,
+            SaveButtonStyle.onAppBar =>
+              IconTheme.of(context).color ?? scheme.onPrimary,
+            SaveButtonStyle.plain =>
+              saved ? scheme.primary : scheme.onSurfaceVariant,
+          };
 
     final icon = AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
@@ -66,15 +74,45 @@ class SaveButton extends StatelessWidget {
         saved ? Icons.bookmark : Icons.bookmark_border,
         key: ValueKey(saved),
         color: color,
+        size: compact ? 16 : null,
       ),
     );
 
     final button = showLabel
         ? FilledButton.tonalIcon(
+            style: compact
+                ? FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                    minimumSize: const Size(0, 44),
+                    textStyle: Theme.of(context).textTheme.labelMedium
+                        ?.copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  )
+                : prominent
+                ? FilledButton.styleFrom(
+                    backgroundColor: scheme.primary,
+                    foregroundColor: scheme.onPrimary,
+                    textStyle: Theme.of(context).textTheme.labelMedium,
+                  )
+                : null,
             key: Key('save-$placeId'),
             onPressed: enabled ? () => _onPressed(context) : null,
             icon: icon,
-            label: Text(saved ? 'Salvo' : 'Quero ir'),
+            label: compact
+                ? FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      saved ? 'Salvo' : 'Quero ir',
+                      maxLines: 1,
+                      softWrap: false,
+                    ),
+                  )
+                : Text(saved ? 'Salvo' : 'Quero ir'),
           )
         : IconButton(
             key: Key('save-$placeId'),

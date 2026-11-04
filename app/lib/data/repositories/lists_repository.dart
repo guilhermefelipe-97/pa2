@@ -45,13 +45,14 @@ abstract class ListsRepository {
   /// Quantas pessoas copiaram a lista (F13, N32). Só a dona conta.
   Future<int> copyCount({required String ownerUid, required String listId});
 
-  /// Registra que [copierUid] copiou a lista (uma vez por pessoa). Já
-  /// registrada (ou negada pelas Rules) completa sem erro: o contador é
-  /// "uma por pessoa". Outros erros (rede) sobem.
+  /// Registra uma cópia real identificada por [copiedListId], uma por pessoa.
+  /// Recibo já verificado é idempotente. Falhas sobem; a lista copiada não
+  /// é desfeita se apenas o registro do contador falhar.
   Future<void> recordCopy({
     required String ownerUid,
     required String listId,
     required String copierUid,
+    required String copiedListId,
   });
 
   /// Renomeia / troca o emoji.

@@ -11,9 +11,11 @@ class ReplyLine extends StatelessWidget {
     required this.reviewId,
     this.canReply = false,
     this.verifyOwner,
+    this.framed = false,
   });
   final String reviewId;
   final bool canReply;
+  final bool framed;
   final Future<bool> Function()? verifyOwner;
   @override
   Widget build(BuildContext context) {
@@ -27,6 +29,7 @@ class ReplyLine extends StatelessWidget {
       uid: uid,
       canReply: canReply,
       verifyOwner: verifyOwner,
+      framed: framed,
     );
   }
 }
@@ -38,12 +41,14 @@ class _Reply extends StatefulWidget {
     required this.reviewId,
     required this.uid,
     required this.canReply,
+    required this.framed,
     this.verifyOwner,
   });
   final ReputationRepository repo;
   final String reviewId;
   final String? uid;
   final bool canReply;
+  final bool framed;
   final Future<bool> Function()? verifyOwner;
   @override
   State<_Reply> createState() => _ReplyState();
@@ -149,10 +154,42 @@ class _ReplyState extends State<_Reply> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       if (reply != null) ...[
-        Text(
-          'Resposta do estabelecimento · ${reply!.authorName} · ${relativeTime(reply!.createdAt, DateTime.now())}',
+        Container(
+          width: double.infinity,
+          margin: widget.framed
+              ? const EdgeInsets.only(top: 12)
+              : EdgeInsets.zero,
+          padding: widget.framed ? const EdgeInsets.all(12) : EdgeInsets.zero,
+          decoration: widget.framed
+              ? BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(8),
+                )
+              : null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Resposta do estabelecimento · ${reply!.authorName} · ${relativeTime(reply!.createdAt, DateTime.now())}',
+                style: widget.framed
+                    ? Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      )
+                    : null,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                reply!.text,
+                style: widget.framed
+                    ? Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontStyle: FontStyle.italic,
+                        height: 1.5,
+                      )
+                    : null,
+              ),
+            ],
+          ),
         ),
-        Text(reply!.text),
       ] else if (loaded && widget.canReply && authorized) ...[
         const Text(
           'Uma resposta pública e imutável, de 1–1000 caracteres. Não altera as notas.',
@@ -173,10 +210,11 @@ class _ReplyState extends State<_Reply> {
           child: Text(busy ? 'Enviando…' : 'Responder uma vez'),
         ),
       ],
-      TextButton(
-        onPressed: busy ? null : load,
-        child: const Text('Atualizar resposta'),
-      ),
+      if (!widget.framed || !loaded || widget.canReply)
+        TextButton(
+          onPressed: busy ? null : load,
+          child: const Text('Atualizar resposta'),
+        ),
       if (error != null)
         TextButton(onPressed: busy ? null : load, child: Text(error!)),
     ],
