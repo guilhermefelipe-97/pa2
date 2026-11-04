@@ -236,9 +236,15 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
               OwnershipAction(placeId: place.id),
               const SizedBox(width: 4),
             ],
+            // A galeria começa abaixo da barra de status + barra do app e
+            // fica presa (pin) ao rolar: os botões dela nunca passam por baixo
+            // dos ícones de compartilhar/titularidade nem do título.
             flexibleSpace: FlexibleSpaceBar(
+              collapseMode: CollapseMode.pin,
               background: Padding(
-                padding: const EdgeInsets.only(top: kToolbarHeight),
+                padding: EdgeInsets.only(
+                  top: MediaQuery.paddingOf(context).top + kToolbarHeight,
+                ),
                 child: Hero(
                   tag: 'place-photo-${place.id}',
                   child: PlaceGallery(

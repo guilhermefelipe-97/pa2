@@ -11,6 +11,7 @@ import '../../data/services/photo_picker.dart';
 import '../../domain/models/user_profile.dart';
 import '../../domain/photo_compression.dart';
 import '../../routing/routes.dart';
+import '../core/photo_crop_view.dart';
 import 'profile_media_image.dart';
 import 'change_password_dialog.dart';
 
@@ -56,6 +57,7 @@ class _EditorState extends State<_Editor> {
   void dispose() {
     name.dispose();
     username.dispose();
+    usernameFocus.dispose();
     bio.dispose();
     city.dispose();
     instagram.dispose();
@@ -98,8 +100,20 @@ class _EditorState extends State<_Editor> {
     });
     try {
       final bytes = await context.read<PhotoPicker>().pick(PhotoSource.gallery);
-      if (bytes == null || !current) return;
-      final jpeg = await compute(compressPhoto, bytes);
+      if (bytes == null || !mounted || !current) return;
+      final isAvatar = kind == 'avatar';
+      final crop = await showPhotoCropView(
+        context,
+        bytes: bytes,
+        aspectRatio: isAvatar ? 1 : coverAspectRatio,
+        circle: isAvatar,
+        title: isAvatar ? 'Ajustar foto' : 'Ajustar capa',
+      );
+      if (crop == null || !current) return;
+      final jpeg = await compute(compressCroppedPhoto, (
+        bytes: bytes,
+        crop: crop,
+      ));
       if (!current) return;
       setState(() {
         if (kind == 'avatar') {
@@ -122,8 +136,41 @@ class _EditorState extends State<_Editor> {
     }
   }
 
+  /// Mesma proporção da capa no perfil (largura / 2,4).
+  static const coverAspectRatio = 2.4;
+
+  static const usernameNeededForPhotos =
+      'Para salvar a foto do perfil e a capa, é necessário ter um @usuário. '
+      'Escolha um no campo "Nome de usuário".';
+
+  final usernameFocus = FocusNode();
+
+  bool get changesPhotos =>
+      avatar != null || cover != null || removeAvatar || removeCover;
+
   Future<void> save() async {
-    if (busy || !current || !form.currentState!.validate()) return;
+    if (busy || !current) return;
+    if (!form.currentState!.validate()) {
+      final missingUsername = username.text
+          .trim()
+          .replaceFirst(RegExp(r'^@'), '')
+          .isEmpty;
+      if (missingUsername) {
+        usernameFocus.requestFocus();
+        if (changesPhotos) {
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(
+              const SnackBar(
+                key: Key('profile-username-needed'),
+                content: Text(usernameNeededForPhotos),
+                duration: Duration(seconds: 6),
+              ),
+            );
+        }
+      }
+      return;
+    }
     final repo = context.read<ProfileEditorRepository?>();
     if (repo == null) {
       setState(
@@ -226,8 +273,23 @@ class _EditorState extends State<_Editor> {
     String? prefix,
   }) => InputDecoration(
     hintText: label,
-    prefixText: prefix,
-    prefixIcon: icon == null ? null : Icon(icon, size: 18),
+    // "@" sempre visível (prefixText só aparecia com o campo em foco).
+    prefixIcon: prefix != null
+        ? Padding(
+            padding: const EdgeInsetsDirectional.only(start: 14, end: 2),
+            child: Text(
+              prefix,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          )
+        : icon == null
+        ? null
+        : Icon(icon, size: 18),
+    prefixIconConstraints: prefix != null
+        ? const BoxConstraints(minWidth: 0, minHeight: 0)
+        : null,
     filled: true,
     fillColor: Colors.white,
     isDense: true,
@@ -264,13 +326,20 @@ class _EditorState extends State<_Editor> {
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          leadingWidth: 86,
-          leading: TextButton(
+          // Ícone em vez do texto "Cancelar": com fonte grande o texto
+          // encolhia até ficar ilegível e encostava no título.
+          leading: IconButton(
+            key: const Key('profile-edit-cancel'),
+            tooltip: 'Cancelar',
+            icon: const Icon(Icons.close),
             onPressed: busy ? null : cancel,
-            child: const FittedBox(child: Text('Cancelar', maxLines: 1)),
           ),
-          centerTitle: true,
-          title: const FittedBox(child: Text('Editar perfil', maxLines: 1)),
+          titleSpacing: 0,
+          title: const Text(
+            'Editar perfil',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           titleTextStyle: theme.textTheme.titleMedium,
           actions: [
             Padding(
@@ -286,9 +355,7 @@ class _EditorState extends State<_Editor> {
                   minimumSize: const Size(64, 38),
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                 ),
-                child: FittedBox(
-                  child: Text(busy ? 'Salvando…' : 'Salvar', maxLines: 1),
-                ),
+                child: Text(busy ? 'Salvando…' : 'Salvar', maxLines: 1),
               ),
             ),
           ],
@@ -423,6 +490,7 @@ class _EditorState extends State<_Editor> {
                     TextFormField(
                       key: const Key('profile-username'),
                       controller: username,
+                      focusNode: usernameFocus,
                       enabled: !busy,
                       maxLength: 24,
                       autocorrect: false,
@@ -433,15 +501,18 @@ class _EditorState extends State<_Editor> {
                             '3–24 caracteres: letras, números, ponto ou sublinhado.',
                         helperMaxLines: 3,
                       ),
-                      validator: (s) =>
-                          UserProfile.validUsername(
-                            (s ?? '')
-                                .trim()
-                                .replaceFirst(RegExp(r'^@'), '')
-                                .toLowerCase(),
-                          )
-                          ? null
-                          : 'Escolha um @usuário válido.',
+                      validator: (s) {
+                        final value = (s ?? '')
+                            .trim()
+                            .replaceFirst(RegExp(r'^@'), '')
+                            .toLowerCase();
+                        if (value.isEmpty) {
+                          return 'Escolha um @usuário para salvar o perfil.';
+                        }
+                        return UserProfile.validUsername(value)
+                            ? null
+                            : 'Escolha um @usuário válido.';
+                      },
                     ),
                     const SizedBox(height: 16),
                     label('Biografia'),

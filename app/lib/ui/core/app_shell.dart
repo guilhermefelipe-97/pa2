@@ -18,37 +18,42 @@ class AppShell extends StatelessWidget {
     final shellIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     return Scaffold(
       body: _ShellVisibility(isCurrent: shellIsCurrent, child: navigationShell),
-      bottomNavigationBar: NavigationBar(
-        key: const Key('app-nav'),
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: _select,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Amigos',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.near_me_outlined),
-            selectedIcon: Icon(Icons.near_me),
-            label: 'Perto',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bookmark_border),
-            selectedIcon: Icon(Icons.bookmark),
-            label: 'Quero ir',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_search_outlined),
-            selectedIcon: Icon(Icons.person_search),
-            label: 'Pessoas',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.account_circle_outlined),
-            selectedIcon: Icon(Icons.account_circle),
-            label: 'Perfil',
-          ),
-        ],
+      // Com fonte do sistema muito grande, "Pessoas" quebrava em duas linhas
+      // e empurrava o ícone: a barra de abas cresce no máximo 15%.
+      bottomNavigationBar: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.15,
+        child: NavigationBar(
+          key: const Key('app-nav'),
+          selectedIndex: navigationShell.currentIndex,
+          onDestinationSelected: _select,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.people_outline),
+              selectedIcon: Icon(Icons.people),
+              label: 'Amigos',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.near_me_outlined),
+              selectedIcon: Icon(Icons.near_me),
+              label: 'Perto',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.bookmark_border),
+              selectedIcon: Icon(Icons.bookmark),
+              label: 'Quero ir',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_search_outlined),
+              selectedIcon: Icon(Icons.person_search),
+              label: 'Pessoas',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.account_circle_outlined),
+              selectedIcon: Icon(Icons.account_circle),
+              label: 'Perfil',
+            ),
+          ],
+        ),
       ),
     );
   }
