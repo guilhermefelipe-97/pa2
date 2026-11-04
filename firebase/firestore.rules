@@ -48,9 +48,10 @@ service cloud.firestore {
     }
 
     function validFoodTags(tags) {
-      return tags is list && tags.size() <= 5
+      return tags is list && tags.size() <= 8
         && tags.toSet().size() == tags.size()
-        && tags.hasOnly(['caseiro', 'vegetariano', 'vegano', 'low-carb', 'integral']);
+        && tags.hasOnly(['caseiro', 'vegetariano', 'vegano', 'low-carb', 'integral',
+                         'marmita', 'quentinha', 'self-service']);
     }
 
     function notBusinessOwner(placeId) {
@@ -548,12 +549,18 @@ service cloud.firestore {
 
 
     function reviewKeys() {
-      return reviewRequiredKeys().concat(['hasPhoto', 'priceBand', 'tags', 'silent']);
+      return reviewRequiredKeys().concat(['hasPhoto', 'priceBand', 'tags', 'silent', 'couvert', 'serviceFee']);
     }
 
 
 
 
+
+    // F28: couvert e taxa de 10%, opcionais (ausente, null ou bool).
+    function validBillExtras(data) {
+      return (!('couvert' in data) || data.couvert == null || data.couvert is bool)
+        && (!('serviceFee' in data) || data.serviceFee == null || data.serviceFee is bool);
+    }
 
     function validPriceBand(data) {
       return !('priceBand' in data)
@@ -600,6 +607,7 @@ service cloud.firestore {
         && validHasPhoto(data, reviewId)
         && (!('silent' in data) || data.silent is bool)
         && validPriceBand(data)
+        && validBillExtras(data)
 
 
 
@@ -630,7 +638,7 @@ service cloud.firestore {
 
 
     function visitAllowedKeys() {
-      return visitKeys().concat(['priceBand', 'silent']);
+      return visitKeys().concat(['priceBand', 'silent', 'couvert', 'serviceFee']);
     }
 
     function visitLockPath(uid, placeId) {
@@ -653,6 +661,7 @@ service cloud.firestore {
         && validCompanion(data.companion)
         && (!('silent' in data) || data.silent is bool)
         && validPriceBand(data)
+        && validBillExtras(data)
         && lock != null
         && lock.data.lastAt == request.time
         && lock.data.visitId == visitId

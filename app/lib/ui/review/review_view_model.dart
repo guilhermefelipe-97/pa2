@@ -234,6 +234,26 @@ class ReviewViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
+  bool? _couvert, _serviceFee;
+
+  /// F28: cobrou couvert? `null` = sem resposta.
+  bool? get couvert => _couvert;
+
+  /// F28: taxa de 10% na conta? `null` = sem resposta.
+  bool? get serviceFee => _serviceFee;
+
+  void setCouvert(bool? value) {
+    if (_isSubmitting || value == _couvert) return;
+    _couvert = value;
+    notifyListeners();
+  }
+
+  void setServiceFee(bool? value) {
+    if (_isSubmitting || value == _serviceFee) return;
+    _serviceFee = value;
+    notifyListeners();
+  }
+
   bool get photoBusy => _isSubmitting || _isPicking || _isProcessingPhoto;
 
   Future<void> pickPhoto(PhotoSource source) async {
@@ -358,6 +378,8 @@ class ReviewViewModel extends SafeChangeNotifier {
           comment: _comment,
           priceBand: _priceBand,
           tags: tags.toList(),
+          couvert: _couvert,
+          serviceFee: _serviceFee,
         ),
         photo: _photo,
         newPlace: newPlace,

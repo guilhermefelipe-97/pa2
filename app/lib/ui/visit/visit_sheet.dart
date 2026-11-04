@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../core/bill_extras_picker.dart';
 import '../../data/repositories/privacy_repository.dart';
 import '../privacy/silent_field.dart';
 import 'package:provider/provider.dart';
@@ -222,6 +223,14 @@ class _VisitSheetState extends State<VisitSheet> {
                     PriceBandPicker(
                       value: vm.priceBand,
                       onChanged: vm.setPriceBand,
+                      enabled: !vm.isSubmitting && !vm.isBlocked,
+                    ),
+                    const SizedBox(height: 16),
+                    BillExtrasPicker(
+                      couvert: vm.couvert,
+                      serviceFee: vm.serviceFee,
+                      onCouvert: vm.setCouvert,
+                      onServiceFee: vm.setServiceFee,
                       enabled: !vm.isSubmitting && !vm.isBlocked,
                     ),
                     if (vm.blockedMessage != null) ...[

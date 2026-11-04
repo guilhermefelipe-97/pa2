@@ -115,6 +115,7 @@ void main() {
               )
               .first,
         );
+        await tester.ensureVisible(find.byKey(const Key('food-filter-integral')));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('food-filter-integral')));
         await tester.pumpAndSettle();
@@ -123,7 +124,7 @@ void main() {
             of: find.byType(DietaryFilterPanel),
             matching: find.byType(ListView),
           ),
-          const Offset(0, 600),
+          const Offset(0, 2000),
         );
         await tester.pumpAndSettle();
         expect(find.text('2 tags selecionadas'), findsOneWidget);

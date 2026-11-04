@@ -141,6 +141,26 @@ class VisitViewModel extends SafeChangeNotifier {
     notifyListeners();
   }
 
+  bool? _couvert, _serviceFee;
+
+  /// F28: cobrou couvert? `null` = sem resposta.
+  bool? get couvert => _couvert;
+
+  /// F28: taxa de 10% na conta? `null` = sem resposta.
+  bool? get serviceFee => _serviceFee;
+
+  void setCouvert(bool? value) {
+    if (_isSubmitting || isBlocked || value == _couvert) return;
+    _couvert = value;
+    notifyListeners();
+  }
+
+  void setServiceFee(bool? value) {
+    if (_isSubmitting || isBlocked || value == _serviceFee) return;
+    _serviceFee = value;
+    notifyListeners();
+  }
+
   Future<void> checkLock() async {
     final uid = _auth.currentUserId;
     if (uid == null || _isCheckingLock) return;
@@ -197,6 +217,8 @@ class VisitViewModel extends SafeChangeNotifier {
           placeName: place.name,
           companion: _companion,
           priceBand: _priceBand,
+          couvert: _couvert,
+          serviceFee: _serviceFee,
         ),
         newPlace: newPlace,
       );

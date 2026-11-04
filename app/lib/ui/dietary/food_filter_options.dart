@@ -32,4 +32,27 @@ const foodFilterOptions =
         detail: 'Opções com ingredientes integrais',
         icon: Icons.grain_outlined,
       ),
+      (
+        tag: 'marmita',
+        label: 'Marmita',
+        detail: 'Refeição pronta em marmita',
+        icon: Icons.lunch_dining_outlined,
+      ),
+      (
+        tag: 'quentinha',
+        label: 'Quentinha',
+        detail: 'Quentinha para levar ou entregar',
+        icon: Icons.takeout_dining_outlined,
+      ),
+      (
+        tag: 'self-service',
+        label: 'Self-service por quilo',
+        detail: 'Bufê pago pelo peso do prato',
+        icon: Icons.scale_outlined,
+      ),
     ];
+
+/// Texto curto da tag no formulário e na ficha: a própria tag, exceto
+/// "self-service", que vira "self-service por quilo" (F30).
+String foodTagLabel(String tag) =>
+    tag == 'self-service' ? 'self-service por quilo' : tag;

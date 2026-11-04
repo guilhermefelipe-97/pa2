@@ -385,6 +385,8 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     createdAt: r.createdAt,
     hasPhoto: r.hasPhoto,
     priceBand: r.priceBand,
+    couvert: r.couvert,
+    serviceFee: r.serviceFee,
   );
 
   static Visit _visitAsYou(Visit v) => Visit(
@@ -397,6 +399,8 @@ class PlaceDetailViewModel extends SafeChangeNotifier {
     companion: v.companion,
     createdAt: v.createdAt,
     priceBand: v.priceBand,
+    couvert: v.couvert,
+    serviceFee: v.serviceFee,
   );
 
   @override

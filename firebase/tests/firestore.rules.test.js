@@ -1358,6 +1358,15 @@ describe('reviews', () => {
     }
   });
 
+  it('F28: couvert e taxa de 10% opcionais (bool ou null); forja negada', async () => {
+    for (const extras of [{ couvert: true }, { couvert: false, serviceFee: true }, { couvert: null, serviceFee: null }]) {
+      await assertSucceeds(freshReview(alice(), validReview(extras)));
+    }
+    for (const extras of [{ couvert: 'sim' }, { serviceFee: 10 }, { couvert: [true] }, { couvert: true, couvertValor: 15 }]) {
+      await assertFails(freshReview(alice(), validReview(extras)));
+    }
+  });
+
   it('comentário é imutável como a avaliação (nem o autor edita)', async () => {
     await assertFails(updateDoc(doc(alice(), 'reviews/existing'), { comment: 'editado' }));
   });
@@ -2000,6 +2009,13 @@ describe('visits + users/{uid}/visitLocks (F15: "Voltei aqui", 12 h)', () => {
     }
   });
 
+  it('F28: visita aceita couvert e taxa opcionais e nega forja', async () => {
+    await assertSucceeds(addVisit(alice(), validVisit({ couvert: true, serviceFee: false })));
+    for (const extras of [{ couvert: 'não' }, { serviceFee: 1 }, { couvert: true, taxa: 10 }]) {
+      await assertFails(addVisit(alice(), validVisit(extras)));
+    }
+  });
+
   it('corrida: dois aparelhos ao mesmo tempo, só um passa', async () => {
     const phone = env.authenticatedContext('alice').firestore();
     const tablet = env.authenticatedContext('alice').firestore();
@@ -2531,6 +2547,20 @@ describe('Onda 5 — titularidade e preferências privadas', () => {
     await unlockAll();
     await assertFails(addReview(alice(), validReview({ tags: ['vegano'], tagCounts: { vegano: 3 } })));
     await assertFails(updateDoc(doc(alice(), 'reviews/existing'), { tags: ['vegano'] }));
+  });
+  it('F30: tags de comida caseira valem na review e nas preferências, todas as 8 juntas', async () => {
+    const all = ['caseiro', 'vegetariano', 'vegano', 'low-carb', 'integral', 'marmita', 'quentinha', 'self-service'];
+    for (const tags of [['marmita'], ['quentinha', 'self-service'], all]) {
+      await unlockAll();
+      await assertSucceeds(addReview(alice(), validReview({ tags })));
+    }
+    for (const tags of [['self-service-por-quilo'], ['marmita', 'marmita'], [...all, 'sem-gluten']]) {
+      await unlockAll();
+      await assertFails(addReview(alice(), validReview({ tags })));
+    }
+    const ref = doc(alice(), 'users/alice/preferences/food');
+    await assertSucceeds(setDoc(ref, { tags: ['marmita', 'self-service'] }));
+    await assertSucceeds(setDoc(ref, { tags: all }));
   });
 });
 
