@@ -29,9 +29,18 @@ class FirestorePlaceRepository implements PlaceRepository {
   final Set<String> _absent = {};
   List<Place>? _suggestions;
 
-  /// Máximo de documentos por faixa de geohash em [nearby]. O catálogo tem
-  /// ~650 locais; a faixa mais larga (3 km) cabe folgada.
+  /// Máximo de documentos por faixa de geohash em [nearby] até 3 km. O
+  /// catálogo de Natal tem ~650 locais; essas faixas cabem folgadas.
   static const nearbyLimitPerRange = 200;
+
+  /// Limite por faixa nos raios de 5 e 10 km: aí cada faixa cobre boa parte
+  /// da Grande Natal e vem ordenada por geohash (não por distância), então
+  /// um limite baixo cortaria lugares próximos. Custo: até esse número de
+  /// leituras por faixa, uma vez por posição e raio (há cache na sessão).
+  static const wideNearbyLimitPerRange = 1500;
+
+  static int limitPerRange(double radiusMeters) =>
+      radiusMeters > 3000 ? wideNearbyLimitPerRange : nearbyLimitPerRange;
 
   /// Faixas de geohash consultadas por [nearby] (para testes).
   @visibleForTesting
@@ -97,7 +106,7 @@ class FirestorePlaceRepository implements PlaceRepository {
             .where('geohash', isGreaterThanOrEqualTo: r.start)
             .where('geohash', isLessThanOrEqualTo: r.end)
             .orderBy('geohash')
-            .limit(nearbyLimitPerRange)
+            .limit(limitPerRange(radiusMeters))
             .get(),
     ]);
     final seen = <String>{};

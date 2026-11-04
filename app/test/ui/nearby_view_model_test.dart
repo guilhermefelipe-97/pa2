@@ -185,7 +185,9 @@ void main() {
       await vm.selectRadius(vm.radius.wider!);
       expect(_ids(vm), ['longe']);
       expect(vm.suggestion!.item.place.id, 'longe');
-      expect(NearbyRadius.km3.wider, isNull);
+      expect(NearbyRadius.km3.wider, NearbyRadius.km5);
+      expect(NearbyRadius.km5.wider, NearbyRadius.km10);
+      expect(NearbyRadius.km10.wider, isNull);
     });
 
     test(

@@ -46,7 +46,7 @@ function address(tags) {
 }
 
 /** Local OSM → registro do snapshot; null se não for local de comer/beber válido. */
-function toPlace(el, neighborhoods) {
+function toPlace(el, neighborhoods, city = 'Natal') {
   const tags = el.tags ?? {};
   const name = (tags.name ?? '').trim();
   if (!name || !AMENITIES.includes(tags.amenity)) return null;
@@ -62,7 +62,7 @@ function toPlace(el, neighborhoods) {
     category: categoryFor(tags.amenity, tags.cuisine),
     cuisine: cuisineLabel(tags.cuisine),
     neighborhood,
-    city: 'Natal',
+    city,
     address: address(tags),
     openingHours: (tags.opening_hours ?? '').trim(),
     lat,
@@ -80,8 +80,11 @@ function preferred(a, b) {
   return a.id < b.id;
 }
 
-/** Resposta do Overpass → snapshot determinístico (ordenado por id). */
-function buildSnapshot(elements) {
+/**
+ * Resposta do Overpass → snapshot determinístico (ordenado por id).
+ * `city` vai em todos os locais (o padrão é o município de Natal).
+ */
+function buildSnapshot(elements, { city = 'Natal' } = {}) {
   const neighborhoods = parseNeighborhoods(elements);
   // O mesmo local às vezes está mapeado como ponto (node) e como prédio
   // (way): mesmo nome normalizado + mesma célula de geohash de 7 (~150 m)
@@ -89,7 +92,7 @@ function buildSnapshot(elements) {
   const byKey = new Map();
   for (const el of elements) {
     if (el.type === 'relation' && el.tags?.admin_level === '10') continue;
-    const p = toPlace(el, neighborhoods);
+    const p = toPlace(el, neighborhoods, city);
     if (!p) continue;
     const key = `${nameLower(p.name)}|${p.geohash.slice(0, 7)}`;
     const current = byKey.get(key);
@@ -121,4 +124,60 @@ function checkSnapshot(snapshot, previous) {
   return null;
 }
 
-module.exports = { placeId, parseNeighborhoods, toPlace, buildSnapshot, checkSnapshot };
+/**
+ * Resposta do Overpass da Grande Natal (`foreach` por município: o elemento
+ * `area` com o nome vem antes dos locais e bairros dele) → snapshot com a
+ * cidade de cada local. Determinístico: municípios e locais ordenados.
+ */
+function buildMetroSnapshot(elements) {
+  const groups = new Map();
+  let current = null;
+  for (const el of elements) {
+    if (el.type === 'area') {
+      current = (el.tags?.name ?? '').trim() || null;
+      if (current && !groups.has(current)) groups.set(current, []);
+      continue;
+    }
+    if (current) groups.get(current).push(el);
+  }
+  const cities = [];
+  const byId = new Map();
+  for (const name of [...groups.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR'))) {
+    const snap = buildSnapshot(groups.get(name), { city: name });
+    cities.push({ name, places: snap.places.length, neighborhoods: snap.neighborhoods.length });
+    for (const p of snap.places) if (!byId.has(p.id)) byId.set(p.id, p);
+  }
+  const places = [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return {
+    source: 'OpenStreetMap',
+    attribution: '© OpenStreetMap contributors',
+    license: 'ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)',
+    cities,
+    places,
+  };
+}
+
+/** Motivo para NÃO gravar o snapshot da Grande Natal, ou null se completo. */
+function checkMetroSnapshot(snapshot, previous, expectedCities) {
+  const found = new Set(snapshot.cities.map((c) => c.name));
+  const missing = expectedCities.filter((c) => !found.has(c));
+  if (missing.length) return `municípios sem resposta: ${missing.join(', ')}`;
+  const empty = snapshot.cities.filter((c) => c.places === 0).map((c) => c.name);
+  if (empty.length) return `municípios sem nenhum local: ${empty.join(', ')}`;
+  const n = snapshot.places.length;
+  const before = previous?.places?.length ?? 0;
+  if (before > 0 && n < before * MIN_RATIO) {
+    return `${n} locais contra ${before} no snapshot anterior (mínimo ${Math.ceil(before * MIN_RATIO)})`;
+  }
+  return null;
+}
+
+module.exports = {
+  placeId,
+  parseNeighborhoods,
+  toPlace,
+  buildSnapshot,
+  checkSnapshot,
+  buildMetroSnapshot,
+  checkMetroSnapshot,
+};

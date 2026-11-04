@@ -344,6 +344,46 @@ void main() {
     expect(find.text('Fora 301'), findsWidgets);
   });
 
+  testWidgets('raios de 5 km e 10 km: Parnamirim e Macaíba entram', (
+    tester,
+  ) async {
+    await _openNearby(
+      tester,
+      places: [
+        placeNear('a4k', 4200, bearingDeg: 180, name: 'Parnamirim 4,2 km'),
+        placeNear('a8k', 8600, bearingDeg: 250, name: 'Macaíba 8,6 km'),
+        placeNear('a12k', 12000, bearingDeg: 90, name: 'Fora 12 km'),
+      ],
+      location: FakeLocationService(position: pontaNegra, granted: true),
+    );
+    Finder list(String text) => find.descendant(
+      of: find.byKey(const Key('nearby-list')),
+      matching: find.text(text),
+    );
+    final chip5 = find.byKey(const Key('radius-5000'));
+    await tester.ensureVisible(chip5);
+    await tester.tap(chip5);
+    await tester.pumpAndSettle();
+    expect(list('Parnamirim 4,2 km'), findsWidgets);
+    expect(list('Macaíba 8,6 km'), findsNothing);
+
+    final chip10 = find.byKey(const Key('radius-10000'));
+    await tester.ensureVisible(chip10);
+    await tester.tap(chip10);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      list('Macaíba 8,6 km'),
+      200,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('nearby-list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(list('Macaíba 8,6 km'), findsWidgets);
+    expect(list('Fora 12 km'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('item: marcador "Quero ir" e distância falada', (tester) async {
     final handle = tester.ensureSemantics();
     await _openNearby(

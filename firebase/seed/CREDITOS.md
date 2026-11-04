@@ -9,6 +9,10 @@ disponíveis sob a [Open Database License (ODbL) 1.0](https://opendatacommons.or
 
 - Obtidos pela [Overpass API](https://overpass-api.de/) com `npm run import:osm`
   (`importar-osm.js`); o snapshot versionado é um banco de dados derivado e segue a ODbL.
+- Os locais dos demais municípios da Grande Natal (Ceará-Mirim, Extremoz, Macaíba, Nísia
+  Floresta, Parnamirim, São Gonçalo do Amarante e São José de Mipibu) vêm da mesma fonte e
+  licença, em `osm-grande-natal.json`, gerado com `npm run import:osm:grande-natal`
+  (`importar-osm-grande-natal.js`); cada local guarda a cidade em que está.
 - O app mostra "© colaboradores do OpenStreetMap" no seletor de locais e no detalhe dos
   locais com dados do OSM.
 - Os 20 locais curados de `places.json` mantêm o id; quando casam (nome normalizado + bairro

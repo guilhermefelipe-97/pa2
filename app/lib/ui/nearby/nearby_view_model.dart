@@ -21,11 +21,13 @@ import '../core/safe_change_notifier.dart';
 import '../feed/widgets/trust_sources.dart' show displayAuthorName;
 import '../saved/saved_places_store.dart';
 
-/// Raios do "Perto": 300 m · 1 km · 3 km.
+/// Raios do "Perto": 300 m · 1 km · 3 km · 5 km · 10 km.
 enum NearbyRadius {
   m300(300, '300 m'),
   km1(1000, '1 km'),
-  km3(3000, '3 km');
+  km3(3000, '3 km'),
+  km5(5000, '5 km'),
+  km10(10000, '10 km');
 
   const NearbyRadius(this.meters, this.label);
 
@@ -142,7 +144,7 @@ NearbySuggestion? pickSuggestion(
   return (item: items.first, reason: SuggestionReason.nearest);
 }
 
-/// Aba "Perto" (F10): o que está a 300 m / 1 km / 3 km de onde a pessoa
+/// Aba "Perto" (F10): o que está a 300 m / 1 km / 3 km / 5 km / 10 km de onde a pessoa
 /// está agora, com uma sugestão em 1 toque.
 ///
 /// A posição fica só em memória ([position]): ao Firestore vão apenas os
