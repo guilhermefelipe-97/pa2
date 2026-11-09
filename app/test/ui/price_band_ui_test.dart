@@ -347,6 +347,8 @@ void main() {
       expect(find.text(priceBandQuestion), findsOneWidget);
       await tester.tap(find.byKey(const Key('price-band-1')));
       await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('visit-confirm')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('visit-confirm')));
       await tester.pumpAndSettle();
       expect(visits.created.single.priceBand, PriceBand.upTo30);
@@ -362,6 +364,8 @@ void main() {
       await tester.tap(find.byKey(const Key('price-band-2')));
       await tester.pump();
       expect(_chip(tester, 2).selected, isFalse);
+      await tester.ensureVisible(find.byKey(const Key('visit-confirm')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('visit-confirm')));
       await tester.pumpAndSettle();
       expect(visits.created.single.priceBand, isNull);
@@ -374,6 +378,8 @@ void main() {
       await openSheet(tester, visits: visits);
       await tester.tap(find.byKey(const Key('price-band-3')));
       await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('visit-confirm')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('visit-confirm')));
       await tester.pump();
       expect(_chip(tester, 3).onSelected, isNull);

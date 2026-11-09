@@ -5,7 +5,15 @@ const fixtures = require('./fixtures/search-tokens.json');
 const { fold, words, searchTokens, nameLower } = require('../seed/osm/tokens');
 const { categoryFor, cuisineLabel, CATEGORIES } = require('../seed/osm/category');
 const { pointInMultipolygon, neighborhoodAt, geohash } = require('../seed/osm/geo');
-const { placeId, toPlace, buildSnapshot, parseNeighborhoods, checkSnapshot } = require('../seed/osm/places');
+const {
+  placeId,
+  toPlace,
+  buildSnapshot,
+  parseNeighborhoods,
+  checkSnapshot,
+  buildMetroSnapshot,
+  checkMetroSnapshot,
+} = require('../seed/osm/places');
 const fs = require('node:fs');
 const path = require('node:path');
 const { matchCurated, buildPlaceDocs, withGeohash } = require('../seed/osm/match');
@@ -452,5 +460,92 @@ describe('categoria: paridade com o app e com as Rules (G2)', () => {
     assert.ok(body, 'placeCategories() não encontrada em firestore.rules');
     const inRules = [...body[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     assert.deepEqual(inRules, CATEGORIES);
+  });
+});
+
+describe('Grande Natal (outros municípios)', () => {
+  const area = (name) => ({ type: 'area', id: 1, tags: { name } });
+  const bar = (id, name, lat = -5.9, lon = -35.26) => ({
+    type: 'node',
+    id,
+    lat,
+    lon,
+    tags: { amenity: 'bar', name },
+  });
+
+  it('cada local recebe a cidade do município em que veio', () => {
+    const snap = buildMetroSnapshot([
+      area('Parnamirim'),
+      bar(2, 'Bar de Parnamirim'),
+      area('Macaíba'),
+      bar(1, 'Bar de Macaíba', -5.86, -35.35),
+      bar(3, 'Outro de Macaíba', -5.861, -35.351),
+    ]);
+    assert.deepEqual(
+      snap.places.map((p) => [p.id, p.city]),
+      [
+        ['osm-n1', 'Macaíba'],
+        ['osm-n2', 'Parnamirim'],
+        ['osm-n3', 'Macaíba'],
+      ],
+    );
+    assert.deepEqual(
+      snap.cities.map((c) => [c.name, c.places]),
+      [
+        ['Macaíba', 2],
+        ['Parnamirim', 1],
+      ],
+    );
+    assert.match(snap.attribution, /OpenStreetMap/);
+  });
+
+  it('determinístico na ordem dos municípios', () => {
+    const a = [area('Parnamirim'), bar(2, 'P'), area('Macaíba'), bar(1, 'M')];
+    const b = [area('Macaíba'), bar(1, 'M'), area('Parnamirim'), bar(2, 'P')];
+    assert.deepEqual(buildMetroSnapshot(a), buildMetroSnapshot(b));
+  });
+
+  it('toPlace e buildSnapshot continuam com Natal como padrão', () => {
+    assert.equal(toPlace(bar(1, 'X'), []).city, 'Natal');
+    assert.equal(buildSnapshot([bar(1, 'X')]).places[0].city, 'Natal');
+    assert.equal(buildSnapshot([bar(1, 'X')], { city: 'Extremoz' }).places[0].city, 'Extremoz');
+  });
+
+  it('sanidade: recusa município faltando, município vazio ou queda de 20%+', () => {
+    const snap = (cities, n) => ({
+      cities: cities.map(([name, places]) => ({ name, places })),
+      places: Array.from({ length: n }, (_, i) => ({ id: `osm-n${i}` })),
+    });
+    const expected = ['Macaíba', 'Parnamirim'];
+    assert.equal(checkMetroSnapshot(snap([['Macaíba', 5], ['Parnamirim', 5]], 10), undefined, expected), null);
+    assert.match(checkMetroSnapshot(snap([['Macaíba', 5]], 5), undefined, expected), /Parnamirim/);
+    assert.match(
+      checkMetroSnapshot(snap([['Macaíba', 0], ['Parnamirim', 5]], 5), undefined, expected),
+      /sem nenhum local: Macaíba/,
+    );
+    assert.match(
+      checkMetroSnapshot(snap([['Macaíba', 3], ['Parnamirim', 4]], 7), snap([], 10), expected),
+      /7 locais contra 10/,
+    );
+  });
+
+  it('seed junta Natal e Grande Natal sem repetir id', () => {
+    const { mergeSnapshots } = require('../seed/seed');
+    const merged = mergeSnapshots(
+      { neighborhoods: ['Tirol'], places: [{ id: 'osm-n1' }, { id: 'osm-n2' }] },
+      { cities: [], places: [{ id: 'osm-n2' }, { id: 'osm-n3' }] },
+    );
+    assert.deepEqual(merged.places.map((p) => p.id), ['osm-n1', 'osm-n2', 'osm-n3']);
+    assert.deepEqual(merged.neighborhoods, ['Tirol']);
+    assert.equal(mergeSnapshots(undefined, undefined), undefined);
+  });
+
+  it('snapshot versionado: todos os municípios com locais e nenhum id de Natal repetido', () => {
+    const { CITIES } = require('../seed/importar-osm-grande-natal');
+    const metro = require('../seed/osm-grande-natal.json');
+    assert.equal(checkMetroSnapshot(metro, undefined, CITIES), null);
+    const natal = new Set(require('../seed/osm-natal.json').places.map((p) => p.id));
+    assert.equal(metro.places.filter((p) => natal.has(p.id)).length, 0);
+    assert.ok(metro.places.every((p) => CITIES.includes(p.city)));
   });
 });

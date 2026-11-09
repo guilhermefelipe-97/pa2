@@ -78,6 +78,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('place-visit')));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('visit-confirm')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('visit-confirm')));
       await tester.pump();
 
@@ -610,6 +612,8 @@ void main() {
       await tester.tap(find.byKey(const Key('place-review')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('review-register-visit')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('visit-confirm')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('visit-confirm')));
       await tester.pumpAndSettle();

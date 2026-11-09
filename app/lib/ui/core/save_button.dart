@@ -189,33 +189,50 @@ abstract final class QueroIrActions {
 
     final SnackBar bar;
     if (saved && lists != null) {
-      bar = SnackBar(
-        content: Row(
-          children: [
-            const Expanded(child: Text(SaveButton.savedMessage)),
+      void openLists() {
+        messenger.hideCurrentSnackBar();
+        if (navigator.mounted) showAddToListSheet(navigator.context, placeId);
+      }
 
-            Semantics(
-              container: true,
-              button: true,
-              label: undoLabel,
-              onTap: undoFromContent,
-              excludeSemantics: true,
-              child: TextButton(
-                key: const Key('snackbar-undo'),
-                style: TextButton.styleFrom(foregroundColor: actionColor),
-                onPressed: undoFromContent,
-                child: const Text(undoLabel),
-              ),
+      Widget action(Key key, String label, VoidCallback onTap) => Semantics(
+        container: true,
+        button: true,
+        label: label,
+        onTap: onTap,
+        excludeSemantics: true,
+        child: TextButton(
+          key: key,
+          style: TextButton.styleFrom(
+            foregroundColor: actionColor,
+            visualDensity: VisualDensity.compact,
+          ),
+          onPressed: onTap,
+          child: Text(label),
+        ),
+      );
+
+      // Texto em cima e as duas ações juntas embaixo, à direita: com só uma
+      // SnackBarAction o Flutter empurrava "Adicionar a lista" para uma linha
+      // própria, longe do "Desfazer".
+      bar = SnackBar(
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 8, 4),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(SaveButton.savedMessage),
+            Wrap(
+              alignment: WrapAlignment.end,
+              children: [
+                action(const Key('snackbar-undo'), undoLabel, undoFromContent),
+                action(
+                  const Key('snackbar-add-to-list'),
+                  addToListLabel,
+                  openLists,
+                ),
+              ],
             ),
           ],
-        ),
-        action: SnackBarAction(
-          label: addToListLabel,
-          onPressed: () {
-            if (navigator.mounted) {
-              showAddToListSheet(navigator.context, placeId);
-            }
-          },
         ),
       );
     } else {

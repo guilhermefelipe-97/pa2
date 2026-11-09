@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../core/editorial.dart';
 import '../lists/lists_store.dart';
 import 'package:flutter/material.dart';
+import '../people/taste_match_badge.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/models/place_activity.dart';
@@ -420,6 +421,11 @@ class _Header extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(vm.displayName, style: theme.textTheme.titleLarge),
+                        if (!vm.isSelf)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: TasteMatchBadge(uid: vm.uid, detailed: true),
+                          ),
                         const SizedBox(height: 4),
                         if (vm.username.isNotEmpty)
                           Text(

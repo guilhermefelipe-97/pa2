@@ -2,6 +2,8 @@ import '../feed/widgets/place_photo.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../dietary/food_filter_options.dart';
+import '../core/bill_extras_picker.dart';
 import '../privacy/silent_field.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -310,31 +312,59 @@ class _ReviewViewState extends State<ReviewView> {
                 style: theme.textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (final tag in foodTags)
-                    FilterChip(
-                      label: Text(
-                        tag,
-                        style: TextStyle(
-                          color: vm.tags.contains(tag)
-                              ? theme.colorScheme.onPrimary
-                              : theme.colorScheme.onSurface,
-                        ),
-                      ),
-                      selected: vm.tags.contains(tag),
-                      onSelected: vm.isSubmitting
-                          ? null
-                          : (_) => vm.toggleTag(tag),
+              for (final group in [
+                (
+                  title: null,
+                  tags: [
+                    for (final t in foodTags)
+                      if (!homeFoodTags.contains(t)) t,
+                  ],
+                ),
+                (title: 'Comida caseira', tags: homeFoodTags),
+              ]) ...[
+                if (group.title != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                    child: Text(
+                      group.title!,
+                      style: theme.textTheme.labelLarge,
                     ),
-                ],
-              ),
+                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final tag in group.tags)
+                      FilterChip(
+                        key: Key('review-tag-$tag'),
+                        label: Text(
+                          foodTagLabel(tag),
+                          style: TextStyle(
+                            color: vm.tags.contains(tag)
+                                ? theme.colorScheme.onPrimary
+                                : theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        selected: vm.tags.contains(tag),
+                        onSelected: vm.isSubmitting
+                            ? null
+                            : (_) => vm.toggleTag(tag),
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 24),
               PriceBandPicker(
                 value: vm.priceBand,
                 onChanged: vm.setPriceBand,
+                enabled: !vm.isSubmitting,
+              ),
+              const SizedBox(height: 24),
+              BillExtrasPicker(
+                couvert: vm.couvert,
+                serviceFee: vm.serviceFee,
+                onCouvert: vm.setCouvert,
+                onServiceFee: vm.setServiceFee,
                 enabled: !vm.isSubmitting,
               ),
               const SizedBox(height: 24),

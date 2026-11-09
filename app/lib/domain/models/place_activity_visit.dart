@@ -11,6 +11,8 @@ class Visit extends PlaceActivity {
     this.companion,
     this.silent = false,
     this.priceBand,
+    this.couvert,
+    this.serviceFee,
   });
 
   @override
@@ -31,6 +33,10 @@ class Visit extends PlaceActivity {
   final DateTime createdAt;
   @override
   final PriceBand? priceBand;
+  @override
+  final bool? couvert;
+  @override
+  final bool? serviceFee;
 }
 
 class NewVisit {
@@ -42,6 +48,8 @@ class NewVisit {
     this.companion,
     this.silent = false,
     this.priceBand,
+    this.couvert,
+    this.serviceFee,
   });
 
   final bool silent;
@@ -52,4 +60,7 @@ class NewVisit {
   final Companion? companion;
 
   final PriceBand? priceBand;
+
+  final bool? couvert;
+  final bool? serviceFee;
 }

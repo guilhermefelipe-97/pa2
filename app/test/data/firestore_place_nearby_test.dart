@@ -132,4 +132,22 @@ void main() {
     expect(noCoords!.geohash, isNull);
     expect(noCoords.hasCoordinates, isFalse);
   });
+
+  test(
+    'raio de 10 km: mais de 200 locais na mesma faixa não cortam ninguém',
+    () async {
+      final db = FakeFirebaseFirestore();
+      final repo = FirestorePlaceRepository(db);
+      // 250 locais concentrados a ~9 km (mesma faixa de geohash) + 1 perto.
+      for (var i = 0; i < 250; i++) {
+        await _place(db, 'longe$i', at: _at(9000.0 + i, 250));
+      }
+      await _place(db, 'perto', at: _at(500, 10));
+      final result = await repo.nearby(_here.lat, _here.lng, 10000);
+      expect(result.places, hasLength(251));
+      expect(result.places.first.place.id, 'perto');
+      expect(FirestorePlaceRepository.limitPerRange(3000), 200);
+      expect(FirestorePlaceRepository.limitPerRange(10000), 1500);
+    },
+  );
 }

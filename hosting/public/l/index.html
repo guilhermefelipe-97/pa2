@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Um lugar indicado no NaÁrea</title>
+  <meta name="description" content="Alguém te indicou um lugar no NaÁrea, o app de lugares pelas avaliações de quem você conhece.">
+  <meta property="og:title" content="Um lugar indicado no NaÁrea">
+  <meta property="og:description" content="Abra no app para ver as avaliações de quem você conhece.">
+  <meta property="og:image" content="/icone.png">
+  <meta name="robots" content="noindex">
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+           background: #f6f3ee; color: #1f1b16; display: flex; min-height: 100vh;
+           align-items: center; justify-content: center; }
+    main { max-width: 380px; padding: 28px 24px; text-align: center; }
+    img { width: 72px; height: 72px; border-radius: 18px; }
+    h1 { font-size: 1.4rem; margin: 16px 0 8px; }
+    p { line-height: 1.45; margin: 0 0 16px; }
+    a.botao { display: inline-block; background: #7a4a1e; color: #fff; text-decoration: none;
+              padding: 14px 22px; border-radius: 12px; font-weight: 600; }
+    small { display: block; margin-top: 20px; color: #5f564c; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/icone.png" alt="">
+    <h1>Te indicaram um lugar</h1>
+    <p>A imagem que veio junto mostra o local e as notas de quem indicou.
+       No NaÁrea você vê de quem veio cada avaliação: comida, ambiente e atendimento separados.</p>
+    <p id="acao"><a class="botao" id="abrir" href="#">Abrir no app NaÁrea</a></p>
+    <small id="aviso">Ainda não tem o app? O NaÁrea está em teste fechado: peça o convite a quem te mandou o link.</small>
+  </main>
+  <script>
+    (function () {
+      var id = location.pathname.replace(/^\/l\//, '').replace(/\/+$/, '');
+      var valido = /^[A-Za-z0-9._%-]{1,200}$/.test(id);
+      var link = document.getElementById('abrir');
+      if (!valido) {
+        document.getElementById('acao').textContent = 'Link inválido.';
+        return;
+      }
+      var android = /Android/i.test(navigator.userAgent);
+      link.href = android
+        ? 'intent://app/l/' + id + '#Intent;scheme=naarea;package=br.naarea.naarea;end'
+        : 'naarea://app/l/' + id;
+    })();
+  </script>
+</body>
+</html>

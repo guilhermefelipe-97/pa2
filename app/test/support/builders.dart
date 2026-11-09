@@ -20,6 +20,8 @@ Review review({
   bool hasPhoto = false,
   List<String> tags = const [],
   PriceBand? priceBand,
+  bool? couvert,
+  bool? serviceFee,
 }) {
   _seq++;
   return Review(
@@ -35,6 +37,8 @@ Review review({
     hasPhoto: hasPhoto,
     tags: tags,
     priceBand: priceBand,
+    couvert: couvert,
+    serviceFee: serviceFee,
   );
 }
 
@@ -47,6 +51,8 @@ Visit visit({
   DateTime? createdAt,
   Companion? companion,
   PriceBand? priceBand,
+  bool? couvert,
+  bool? serviceFee,
 }) {
   _seq++;
   return Visit(
@@ -58,6 +64,8 @@ Visit visit({
     companion: companion,
     createdAt: createdAt ?? DateTime.utc(2026, 9, 1, 15),
     priceBand: priceBand,
+    couvert: couvert,
+    serviceFee: serviceFee,
   );
 }
 

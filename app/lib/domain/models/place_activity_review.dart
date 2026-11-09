@@ -15,6 +15,8 @@ class Review extends PlaceActivity {
     this.silent = false,
     this.priceBand,
     this.tags = const [],
+    this.couvert,
+    this.serviceFee,
   });
 
   @override
@@ -44,6 +46,12 @@ class Review extends PlaceActivity {
   @override
   final PriceBand? priceBand;
 
+  @override
+  final bool? couvert;
+
+  @override
+  final bool? serviceFee;
+
   static const int maxCommentLength = 280;
 
   static String? normalizeComment(String? raw) {
@@ -67,6 +75,8 @@ class NewReview {
     this.silent = false,
     this.priceBand,
     this.tags = const [],
+    this.couvert,
+    this.serviceFee,
   }) : comment = Review.normalizeComment(comment);
 
   final bool silent;
@@ -81,4 +91,7 @@ class NewReview {
   final String? comment;
 
   final PriceBand? priceBand;
+
+  final bool? couvert;
+  final bool? serviceFee;
 }

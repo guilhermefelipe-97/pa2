@@ -6,6 +6,7 @@ import '../ui/profile/profile_edit_view.dart';
 import '../ui/profile/account_security_view.dart';
 import '../ui/sponsored/sponsored_view.dart';
 import '../ui/owner/owner_reviews_view.dart';
+import '../ui/owner/owner_timeline_view.dart';
 import '../ui/admin/admin_access_view.dart';
 import '../ui/admin/admin_ownership_view.dart';
 import '../ui/admin/admin_ownership_view_model.dart';
@@ -55,18 +56,23 @@ import '../ui/dietary/dietary_store.dart';
 import '../ui/dietary/dietary_view.dart';
 import '../ui/owner/owner_view.dart';
 
+/// [pending] é o link compartilhado (F21) que chegou antes da sessão: depois
+/// do login, o app vai para ele em vez do feed.
 String? authRedirect({
   required bool isInitialized,
   required bool isSignedIn,
   required String location,
+  String? pending,
 }) {
   final atSplash = location == Routes.splash;
   final atAuth = location == Routes.login || location == Routes.signUp;
   if (!isInitialized) return atSplash ? null : Routes.splash;
   if (!isSignedIn) return atAuth ? null : Routes.login;
-  if (atAuth || atSplash) return Routes.feed;
+  if (atAuth || atSplash) return pending ?? Routes.feed;
   return null;
 }
+
+bool isSharedLink(String location) => location.startsWith('/l/');
 
 OpenNowViewModel? _openNowFor(BuildContext context, String placeId) {
   final reports = context.read<OpenReportRepository?>();
@@ -84,15 +90,30 @@ OpenNowViewModel? _openNowFor(BuildContext context, String placeId) {
 }
 
 GoRouter buildRouter(AuthRepository auth) {
+  String? pending;
   return GoRouter(
     initialLocation: Routes.feed,
     refreshListenable: auth,
-    redirect: (context, state) => authRedirect(
-      isInitialized: auth.isInitialized,
-      isSignedIn: auth.isSignedIn,
-      location: state.matchedLocation,
-    ),
+    redirect: (context, state) {
+      final location = state.matchedLocation;
+      if (isSharedLink(location) && !(auth.isInitialized && auth.isSignedIn)) {
+        pending = location;
+      }
+      final target = authRedirect(
+        isInitialized: auth.isInitialized,
+        isSignedIn: auth.isSignedIn,
+        location: location,
+        pending: pending,
+      );
+      if (target != null && target == pending) pending = null;
+      return target;
+    },
     routes: [
+      GoRoute(
+        path: Routes.sharedPlacePattern,
+        redirect: (context, state) =>
+            Routes.placeDetail(state.pathParameters['placeId']!),
+      ),
       GoRoute(
         path: Routes.settings,
         builder: (context, state) => const SettingsView(),
@@ -112,6 +133,13 @@ GoRouter buildRouter(AuthRepository auth) {
       GoRoute(
         path: '/patrocinado',
         builder: (context, state) => const SponsoredView(),
+      ),
+      GoRoute(
+        path: Routes.ownerTimelinePattern,
+        builder: (context, state) => OwnerTimelineView(
+          placeId: state.pathParameters['placeId']!,
+          placeName: state.extra is String ? state.extra as String : null,
+        ),
       ),
       GoRoute(
         path: '/meus-estabelecimentos/:placeId/avaliacoes',

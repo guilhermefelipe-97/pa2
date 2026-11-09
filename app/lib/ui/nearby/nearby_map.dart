@@ -34,7 +34,11 @@ class _NearbyMapState extends State<NearbyMap> {
       ? 16
       : widget.radius <= 1000
       ? 14.5
-      : 13;
+      : widget.radius <= 3000
+      ? 13
+      : widget.radius <= 5000
+      ? 12
+      : 11;
   @override
   void dispose() {
     _controller.dispose();

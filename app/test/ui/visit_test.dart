@@ -176,6 +176,8 @@ void main() {
       expect(find.text('Com quem você foi? (opcional)'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('visit-companion-amigos')));
       await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('visit-confirm')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('visit-confirm')));
       await tester.pumpAndSettle();
 
@@ -215,6 +217,8 @@ void main() {
       app.router.go(Routes.placeDetail('mangai'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('place-visit')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('visit-confirm')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('visit-confirm')));
       await tester.pumpAndSettle();
@@ -363,6 +367,8 @@ void main() {
       expect(find.byKey(const Key('review-blocked')), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('review-register-visit')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('visit-confirm')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('visit-confirm')));
       await tester.pumpAndSettle();

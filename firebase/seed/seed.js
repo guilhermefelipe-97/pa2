@@ -1,5 +1,7 @@
-// Seed da coleção `places`: locais curados (`places.json`) + snapshot do
-// OpenStreetMap (`osm-natal.json`, gerado por `npm run import:osm`).
+// Seed da coleção `places`: locais curados (`places.json`) + snapshots do
+// OpenStreetMap: Natal (`osm-natal.json`, `npm run import:osm`) e os demais
+// municípios da Grande Natal (`osm-grande-natal.json`,
+// `npm run import:osm:grande-natal`).
 //
 // Emulator (sem credenciais):
 //   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-naarea npm run seed
@@ -20,13 +22,35 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { buildPlaceDocs } = require('./osm/match');
 
 const SNAPSHOT = path.join(__dirname, 'osm-natal.json');
+const METRO_SNAPSHOT = path.join(__dirname, 'osm-grande-natal.json');
+
+function readJson(file) {
+  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : undefined;
+}
+
+/**
+ * Junta o snapshot de Natal com o da Grande Natal (sem repetir id). Sem
+ * nenhum dos dois, `undefined` (só os curados).
+ */
+function mergeSnapshots(natal, metro) {
+  if (!natal && !metro) return undefined;
+  const byId = new Map();
+  for (const p of [...(natal?.places ?? []), ...(metro?.places ?? [])]) {
+    if (!byId.has(p.id)) byId.set(p.id, p);
+  }
+  return { ...(natal ?? metro), places: [...byId.values()] };
+}
 
 function loadSnapshot() {
-  if (!fs.existsSync(SNAPSHOT)) {
-    console.warn('osm-natal.json ausente: gravando só os locais curados (rode "npm run import:osm").');
-    return undefined;
+  const natal = readJson(SNAPSHOT);
+  const metro = readJson(METRO_SNAPSHOT);
+  if (!natal) {
+    console.warn('osm-natal.json ausente (rode "npm run import:osm").');
   }
-  return JSON.parse(fs.readFileSync(SNAPSHOT, 'utf8'));
+  if (!metro) {
+    console.warn('osm-grande-natal.json ausente (rode "npm run import:osm:grande-natal").');
+  }
+  return mergeSnapshots(natal, metro);
 }
 
 /** JSON com chaves ordenadas: compara documentos ignorando a ordem dos campos. */
@@ -113,7 +137,7 @@ async function seedPlaces({
   return { written: changed.map((d) => d.id), unchanged: docs.length - changed.length, stale };
 }
 
-module.exports = { seedPlaces, firestoreFromEnv };
+module.exports = { seedPlaces, firestoreFromEnv, mergeSnapshots };
 
 if (require.main === module) {
   seedPlaces().catch((err) => {

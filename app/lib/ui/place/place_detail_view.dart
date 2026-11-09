@@ -1,6 +1,10 @@
 import '../queue/queue_section.dart';
 import '../owner/reply_line.dart';
 import 'package:flutter/material.dart';
+import '../share/place_share_sheet.dart';
+import '../share/share_service.dart';
+import '../core/bill_extras_picker.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/models/place.dart';
@@ -190,10 +194,17 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
     final item = vm.item;
     final overall = item == null ? null : friendsOverallScore(item);
 
-    final priceSection = PriceSection(
-      key: const Key('place-price-section'),
-      summary: vm.price,
-      countLabel: vm.priceCountLabel,
+    final priceSection = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        PriceSection(
+          key: const Key('place-price-section'),
+          summary: vm.price,
+          countLabel: vm.priceCountLabel,
+        ),
+        if (item != null)
+          BillExtrasSection(activities: item.activities, now: at),
+      ],
     );
     final subtitle = [
       placeSubtitle(place.neighborhood, place.category),
@@ -211,12 +222,29 @@ class _PlaceDetailViewState extends State<PlaceDetailView> {
             leading: BackButton(onPressed: _back),
             title: const Text('Detalhes do local'),
             actions: [
+              if (context.read<ShareService?>() != null)
+                IconButton(
+                  key: const Key('place-share'),
+                  tooltip: 'Compartilhar',
+                  icon: const Icon(Icons.share_outlined),
+                  onPressed: () => showPlaceShareSheet(
+                    context,
+                    place: place,
+                    averages: item?.averages,
+                  ),
+                ),
               OwnershipAction(placeId: place.id),
               const SizedBox(width: 4),
             ],
+            // A galeria começa abaixo da barra de status + barra do app e
+            // fica presa (pin) ao rolar: os botões dela nunca passam por baixo
+            // dos ícones de compartilhar/titularidade nem do título.
             flexibleSpace: FlexibleSpaceBar(
+              collapseMode: CollapseMode.pin,
               background: Padding(
-                padding: const EdgeInsets.only(top: kToolbarHeight),
+                padding: EdgeInsets.only(
+                  top: MediaQuery.paddingOf(context).top + kToolbarHeight,
+                ),
                 child: Hero(
                   tag: 'place-photo-${place.id}',
                   child: PlaceGallery(

@@ -7,6 +7,7 @@
     "test:osm": "mocha tests/osm.test.js",
     "test:emulator": "firebase emulators:exec --only firestore \"npm test\"",
     "import:osm": "node seed/importar-osm.js",
+    "import:osm:grande-natal": "node seed/importar-osm-grande-natal.js",
     "seed": "node seed/seed.js",
     "backfill:locks": "node seed/backfill-review-locks.js"
   },

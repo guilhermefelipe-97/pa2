@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dietary_store.dart';
 import 'food_filter_options.dart';
+import '../../domain/food_tags.dart';
 
 Future<void> showFeedFilters(BuildContext context) async {
   FocusManager.instance.primaryFocus?.unfocus();
@@ -152,7 +153,15 @@ class _FilterState extends State<DietaryFilterPanel> {
                       ),
                     ],
                   ),
-                  for (final option in foodFilterOptions)
+                  for (final option in foodFilterOptions) ...[
+                    if (option.tag == homeFoodTags.first)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(2, 8, 0, 8),
+                        child: Text(
+                          'Comida caseira',
+                          style: theme.textTheme.titleSmall,
+                        ),
+                      ),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Semantics(
@@ -227,6 +236,7 @@ class _FilterState extends State<DietaryFilterPanel> {
                         ),
                       ),
                     ),
+                  ],
                   ExpansionTile(
                     tilePadding: EdgeInsets.zero,
                     title: const Text('Como funcionam as tags?'),

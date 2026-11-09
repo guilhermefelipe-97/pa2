@@ -17,6 +17,11 @@ import 'data/firebase/firestore_privacy_repository.dart';
 import 'data/firebase/firestore_queue_repository.dart';
 import 'data/firebase/firestore_reputation_repository.dart';
 import 'data/firebase/firestore_sponsorship_repository.dart';
+import 'data/firebase/firestore_place_history_repository.dart';
+import 'data/repositories/place_history_repository.dart';
+import 'data/sponsorship_floor_reader.dart';
+import 'ui/share/share_service.dart';
+import 'data/taste_match_service.dart';
 import 'data/repositories/admin_ownership_repository.dart';
 import 'data/firebase/firestore_admin_ownership_repository.dart';
 import 'ui/admin/admin_access.dart';
@@ -118,11 +123,21 @@ Future<void> main() async {
         Provider<ReputationRepository>(
           create: (_) => FirestoreReputationRepository(db),
         ),
+        Provider<PlaceHistoryRepository>(
+          create: (_) => FirestorePlaceHistoryRepository(db),
+        ),
+        Provider<SponsorshipFloorReader>(
+          create: (context) => SponsorshipFloorReader(context.read()),
+        ),
         Provider<SponsorshipRepository>(
-          create: (_) =>
-              FirestoreSponsorshipRepository(db, emulator: useEmulator),
+          create: (context) => FirestoreSponsorshipRepository(
+            db,
+            floor: context.read(),
+            emulator: useEmulator,
+          ),
         ),
         Provider<AppClock>.value(value: const AppClock()),
+        Provider<ShareService>.value(value: const SystemShareService()),
         Provider<ProfileStatsRepository>(
           create: (_) => FirestoreProfileStatsRepository(db),
         ),
@@ -172,6 +187,9 @@ Future<void> main() async {
         ),
         Provider<ReviewRepository>(
           create: (_) => FirestoreReviewRepository(db),
+        ),
+        Provider<TasteMatchService>(
+          create: (context) => TasteMatchService(context.read()),
         ),
 
         Provider<VisitRepository>(create: (_) => FirestoreVisitRepository(db)),

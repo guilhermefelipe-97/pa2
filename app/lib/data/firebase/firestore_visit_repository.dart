@@ -172,6 +172,8 @@ class FirestoreVisitRepository
       'placeName': placeName,
       'companion': visit.companion?.value,
       'priceBand': visit.priceBand?.value,
+      if (visit.couvert != null) 'couvert': visit.couvert,
+      if (visit.serviceFee != null) 'serviceFee': visit.serviceFee,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -219,6 +221,9 @@ class FirestoreVisitRepository
     List<String> authorIds,
   ) => queries.fetchForPlace(_visits, placeId, authorIds, fromDoc: _fromDoc);
 
+  static Visit? parse(QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+      _fromDoc(doc);
+
   static Visit? _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data();
     final ts = d['createdAt'];
@@ -252,6 +257,8 @@ class FirestoreVisitRepository
       companion: Companion.fromValue(companion as String?),
       createdAt: ts.toDate(),
       priceBand: priceBand,
+      couvert: d['couvert'] is bool ? d['couvert'] as bool : null,
+      serviceFee: d['serviceFee'] is bool ? d['serviceFee'] as bool : null,
     );
   }
 }

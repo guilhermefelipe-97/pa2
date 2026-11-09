@@ -177,6 +177,8 @@ class FirestoreReviewRepository
       'hasPhoto': photo != null,
       'priceBand': review.priceBand?.value,
       'tags': review.tags,
+      if (review.couvert != null) 'couvert': review.couvert,
+      if (review.serviceFee != null) 'serviceFee': review.serviceFee,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -355,6 +357,8 @@ class FirestoreReviewRepository
         hasPhoto: d['hasPhoto'] == true,
         priceBand: readPriceBand(d),
         tags: _readTags(d['tags']),
+        couvert: d['couvert'] is bool ? d['couvert'] as bool : null,
+        serviceFee: d['serviceFee'] is bool ? d['serviceFee'] as bool : null,
       );
     } on Object {
       return null;

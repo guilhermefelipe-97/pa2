@@ -631,7 +631,7 @@ void main() {
     });
 
     testWidgets(
-      'SnackBar de salvar com listas: "Adicionar a lista" é a action e o '
+      'SnackBar de salvar com listas: "Adicionar a lista" junto do "Desfazer" e o '
       '"Desfazer" acessível desfaz sem aviso de falha',
       (tester) async {
         final handle = tester.ensureSemantics();
@@ -646,8 +646,18 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 750));
 
-        final bar = tester.widget<SnackBar>(find.byType(SnackBar));
-        expect(bar.action!.label, 'Adicionar a lista');
+        expect(
+          tester.getSemantics(find.bySemanticsLabel('Adicionar a lista')),
+          containsSemantics(isButton: true, hasTapAction: true),
+        );
+        final message = tester.getRect(find.text('Salvo em Quero ir'));
+        for (final k in ['snackbar-undo', 'snackbar-add-to-list']) {
+          expect(
+            tester.getTopLeft(find.byKey(Key(k))).dy,
+            greaterThanOrEqualTo(message.bottom),
+            reason: '$k fica abaixo da mensagem',
+          );
+        }
         expect(
           tester.getSemantics(find.bySemanticsLabel('Desfazer')),
           containsSemantics(isButton: true, hasTapAction: true),

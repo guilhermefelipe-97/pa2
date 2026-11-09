@@ -19,6 +19,12 @@ sealed class PlaceActivity {
 
   PriceBand? get priceBand;
 
+  /// F28: cobrou couvert? `null` = sem resposta.
+  bool? get couvert;
+
+  /// F28: a taxa de serviço (10%) veio na conta? `null` = sem resposta.
+  bool? get serviceFee;
+
   DateTime get createdAt;
 
   DayPeriod get dayPeriod => DayPeriod.fromTimestamp(createdAt);

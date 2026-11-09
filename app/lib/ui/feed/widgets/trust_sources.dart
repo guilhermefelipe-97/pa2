@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart' hide DayPeriod;
+import '../../people/taste_match_badge.dart';
 
 import '../../../domain/feed.dart';
 import '../../../domain/models/companion.dart';
@@ -314,6 +315,10 @@ class TrustSourceRow extends StatelessWidget {
                                 const SizedBox(width: 6),
                                 const Flexible(child: FollowingBadge()),
                               ],
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: TasteMatchBadge(uid: source.authorId),
+                              ),
                             ],
                           ),
                         ),

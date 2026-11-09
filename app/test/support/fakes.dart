@@ -431,6 +431,8 @@ class FakeReviewRepository
         createdAt: clock(),
         hasPhoto: photo != null,
         priceBand: review.priceBand,
+        couvert: review.couvert,
+        serviceFee: review.serviceFee,
         tags: review.tags,
       ),
     );
@@ -895,6 +897,8 @@ class FakeVisitRepository implements VisitRepository {
         companion: visit.companion,
         createdAt: now,
         priceBand: visit.priceBand,
+        couvert: visit.couvert,
+        serviceFee: visit.serviceFee,
       ),
     );
     return (placeCreated: placeCreated ?? newPlace != null);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'food_filter_options.dart';
 
 class FoodTagChips extends StatelessWidget {
   const FoodTagChips({super.key, required this.tags});
@@ -9,7 +10,9 @@ class FoodTagChips extends StatelessWidget {
     children: [
       for (final entry in tags.entries)
         Chip(
-          label: Text('${entry.key} · ${entry.value} pessoas da comunidade'),
+          label: Text(
+            '${foodTagLabel(entry.key)} · ${entry.value} pessoas da comunidade',
+          ),
         ),
     ],
   );
